@@ -5,6 +5,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 use strict;
 use App::Rad;
 our $VERSION = '0.01';
+use Config;
 
 App::Rad->run();
 
@@ -28,12 +29,12 @@ perlall - Create all perls and test a module with all perls
 
 =head1 DESCRIPTION
 
-B<perlall> is a better L<perlbrew> with perls in the default F</usr/local/bin/, 
-and F< /usr/local/lib/perl5/version >, instead of locally. 
-It is preferred to have write access to the default PREFIX F</usr/local>.
-It does not use L<local::lib>, does not mangle C<PERL5LIB> and 
-builds and keeps sane global perl installations, without the need to save
-and restore internal states.
+B<perlall> is a better L<perlbrew> with perls in the default
+F</usr/local/bin/>, and F</usr/local/lib/perl5/VERSION>, instead of
+locally.  It is preferred to have write access to the default PREFIX
+F</usr/local>.  It does not use L<local::lib>, does not mangle
+C<PERL5LIB> and builds and keeps sane global perl installations,
+without the need to save and restore internal states.
 
 The currently used perl and all options are stored as alias 
 C<p> in F<~/.perlall>
@@ -48,9 +49,9 @@ Version numbers look like C<5.xx.x> and the C<suffix> can be:
   C<-nt> non-threaded
   C<-m>  multi
 
-For older perls special patches are applied to successfully build them.
-C<archname> and the archlibs are extended by C<-debug> and special 
-git suffices. The installed perl binary ditto.
+For older perls special patches are applied to successfully build
+them.  C<archname> and the archlibs are extended by C<-debug> and
+special git suffices. The installed perl binary ditto.
 
 I use perlall on cygwin, mingw (strawberry), linux (debian+centos),
 freebsd, openbsd and solaris, with bash, dash and ksh. 
@@ -86,7 +87,8 @@ sub pre_process {
 	  [ "nolog",     "skip writing to the log file" ],
 	  [ "help|h",    "commands and options" ],
 	  [ "version" ]);
-  $c->getopt( map {$_->[0]} @opts );
+  # XXX Take opts only before the command, not afterwards!
+  # $c->getopt( map {$_->[0]} @opts );
   my $cmd = $c->cmd;
   # defaults
   $c->config->{PERLALL_BINDIR} = '/usr/local/bin';
@@ -100,8 +102,7 @@ sub pre_process {
       $c->_dot_perlall($_) if -f $_;
     }
   }
-  # expand versions from $ENV{perlall} and alternatively 
-  # accept first argument
+  # expand versions from $ENV{perlall} or just version from first argument
   if ($cmd =~ /^do|make.*|init|cpan|list|uninstall$/) {
     my @p;
     if ( $c->argv->[0] =~ /^(perl)?5\./) {
@@ -210,6 +211,7 @@ sub build
 {
   my $c = shift;
   warn "perlall build @ARGV\n";
+  "unimplemented"
 }
 
 =item install  [ perl<version><suffix> [ from ]]
@@ -233,7 +235,7 @@ Uninstalls the given version.
 sub uninstall
   :Help(sudo rm /usr/local/bin/perl <arg> and its libs)
 {
-  return "unimplemented";
+  "unimplemented";
 }
 
 =item B<init> [perl-<version><suffix> [<modules>...]]
@@ -335,6 +337,7 @@ sub do
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
+  die "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     warn "$p $argv\n";
     system("$p $argv");
@@ -353,13 +356,14 @@ sub make
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
+  my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
     # XXX check MB
-    system("make -s clean");
+    system("$make -s clean");
     warn "$p Makefile.PL\n";
     system("$p Makefile.PL");
-    warn "make\n";
-    system("make");
+    warn "$make\n";
+    system("$make");
     if ($argv) {
       warn "$p $argv\n";
       system("$p $argv");
@@ -377,15 +381,21 @@ sub maketest
   :Help('make; make test') 
 {
   my $c = shift;
+  my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
     # XXX check MB
-    system("make -s clean");
+    system("$make -s clean");
     warn "$p Makefile.PL\n";
     system("$p Makefile.PL");
-    warn "make\n";
-    system("make");
-    warn "make test TEST_VERBOSE=1\n";
-    system("make test TEST_VERBOSE=1");
+    warn "$make\n";
+    system("$make");
+    if ($c->options->{quiet}) {
+      warn "$make test\n";
+      system("$make test");
+    } else {
+      warn "$make test TEST_VERBOSE=1\n";
+      system("$make test TEST_VERBOSE=1");
+    }
   }
 }
 
@@ -396,18 +406,20 @@ like C<perlall maketest>, but runs C<sudo make install> after C<make test>.
 =cut
 
 sub makeinstall
-  :Help('maketest; sudo make install') 
+  :Help('make test && sudo make install') 
 {
   my $c = shift;
+  my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
     # XXX check MB
-    system("make -s clean");
+    system("$make -s clean");
     warn "$p Makefile.PL\n";
     system("$p Makefile.PL");
-    warn "make\n";
-    system("make");
-    warn "make test && sudo make install\n";
-    system("make test && sudo make install");
+    warn "$make\n";
+    system("$make");
+    # XXX check MyCPAN.pm for sudo
+    warn "$make test && sudo $make install\n";
+    system("$make test && sudo $make install");
   }
 }
 
@@ -421,7 +433,7 @@ sub selfupgrade
   :Help(upgrade perlall to its latest version) 
 {
   my $c = shift;
-  "unimplemented"
+  "unimplemented" # see perlbrew
 }
 
 =item B<help>
@@ -434,7 +446,7 @@ sub help
   :Help('list of commands. With -v more')
 {
   my $c = shift;
-  $c->getopt( 'verbose|v' );
+  g$c->getopt( 'verbose|v' );
   require Pod::Usage;
   return Pod::Usage::pod2usage
     ( { -message => App::Rad::Help::usage() . "\n\n"

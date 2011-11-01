@@ -14,15 +14,17 @@ my %WriteMakefileArgs = (
   "EXE_FILES" => [],
   "LICENSE" => "perl",
   "NAME" => "App::perlall",
-  "PREREQ_PM" => {
-    "App::Rad" => "1.04",
-    "Devel::PatchPerl" => "0.46",
-    "File::Path" => "2.07"
+  "PREREQ_PM" =>  {
+		   App::Rad => "1.04",
+		   Pod::Usage => 0,
+		   File::Basename => 0,
+		   File::Slurp => 0,
+		   Cwd => 0,
+		   Devel::PatchPerl => "0.46",
+		   File::Path => "2.07",
+		   Getopt::Long => "2.36",
   },
-  "VERSION" => "0.01",
-  "test" => {
-    "TESTS" => "t/*.t"
-  }
+  VERSION_FROM => "scripts/perlall.pl",
 );
 
 unless ( eval { ExtUtils::MakeMaker->VERSION(6.56) } ) {

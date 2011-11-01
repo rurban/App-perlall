@@ -11,12 +11,13 @@ use File::Slurp ();
 use File::Basename ();
 
 our @opts = (
-	  [ "skip",     "skip versions (glob-style)" ],
-	  [ "newer",    "only newer versions (glob-style)" ],
-	  [ "older",    "only older versions (glob-style)" ],
+	  [ "skip=s",   "skip versions (glob-style)" ],
+	  [ "newer=s",  "only newer versions (glob-style)" ],
+	  [ "older=s",  "only older versions (glob-style)" ],
 	  [ "quiet|q",  "Make perlall command quieter" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "as=s",     "install perl under given name" ],
+	  [ "dryrun!",  "do not execute commands, only print" ],   
 	  [ "D=s",      "./configure option" ],
 	  [ "A=s",      "./configure option" ],
 	  [ "U=s",      "./configure option" ],
@@ -103,7 +104,6 @@ sub pre_process {
   my $cmd = $c->cmd;
   # defaults: for all
   $c->config->{PERLALL_PREFIX} = '/usr/local';
-  $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git';
   # build only
   $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
   if ($cmd eq 'cpan') {
@@ -116,10 +116,12 @@ sub pre_process {
   # need .perlall config
   if ($cmd =~ /^build|uninstall|init|list|do|make.*|cpan$/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
-      $c->_dot_perlall($_) if -f $_;
+      _dot_perlall($c, $_) if -f $_;
     }
     $c->config->{PERLALL_BINDIR} = $c->config->{PERLALL_PREFIX}."/bin"
       unless $c->config->{PERLALL_BINDIR};
+    $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
+      unless $c->config->{'perl-git'};
   }
   # expand versions from $ENV{perlall} or just version from first argument
   if ($cmd =~ /^do|make.*|init|cpan|list|uninstall$/) {
@@ -158,6 +160,7 @@ sub App::Rad::_get_input {
     my $parser = new Getopt::Long::Parser;
     $parser->configure( qw(bundling) );
     my @tARGV = @ARGV; # keep em
+    @ARGV = @options;
     my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
     $c->debug('received options: ' . join(' ',@options));
     $c->debug('received command: ' . $c->{'cmd'});
@@ -187,7 +190,7 @@ sub App::Rad::_expand_env {
   return [ glob "$prefix/perl$glob" ];
 }
 
-sub App::Rad::_dot_perlall {
+sub _dot_perlall {
   my ($c, $filename, $write) = (@_);
   $c->debug("loading configuration from $filename");
   open my $CONFIG, '<', $filename
@@ -211,10 +214,14 @@ sub App::Rad::_dot_perlall {
 	   ([^'"]+)     # value
 	  /x
        ) {
-      $c->config->{$1} = $2;
+      my ($k,$v) = ($1, $2); 
+      if ($k eq 'perl-git') {
+	$v =~ s/^cd //;
+      }
+      $c->config->{$k} = $v;
       if ($write) {
-	$2 = $write if $1 eq 'p';
-	print $NEW "alias p=$2\n";
+	$v = $write if $k eq 'p';
+	print $NEW "alias p=$v\n";
       }
     }
     elsif ( m/^([^\=\:\s]+)          # key
@@ -237,6 +244,18 @@ sub App::Rad::_dot_perlall {
       or Carp::croak "error writing $filename: $!\n";
   }
   scalar keys %{$c->config};  
+}
+
+sub _system {
+  my $c = shift;
+  $c->{output} .= join(" ",@_)."\n";
+  system(@_) unless $c->options->{dryrun};
+}
+
+sub _fail {
+  my $c = shift;
+  warn $c->{output} if $c->options->{verbose};
+  die "@_\n";
 }
 
 =head2 COMMANDS
@@ -274,45 +293,83 @@ sub build
   :Help(build perl<version><suffix> [ from ])
 {
   my $c = shift;
-  my $p = $c->argv->[0];
+  my @args = @{$c->argv};
+  my $p = $args[0];
   if ($p =~ /^(perl)?5\./ ) {
-    shift @{$c->argv};
+    shift @args;
   } else {
     $c->output("perlall build missing perlversion argument\n");
     $c->execute('help') and return undef;
   }
   $p =~ s/^perl//;
+  if ($p =~ /[\*\?\[]/) {
+    $c->output("perlall build invalid perlversion argument $p\n");
+    $c->execute('help') and return undef;
+  }
   my @options = keys %{$c->options};
-  warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @{$c->argv}\n";
+  warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @args\n";
   # build is allowed to take options after the cmd: as
   $c->getopt( map {$_->[0]} @opts )
     or $c->execute('usage') and return undef;
+  my $srcdir;
   my $cwd = Cwd::getcwd();
-  my $from = shift @{$c->argv}; # might be empty
+  END { chdir $cwd if $cwd; }
+
+  my $root = $c->config->{PERLALL_BUILDROOT};
+  unless ($root) {
+    _fail($c, "Empty PERLALL_BUILDROOT in .perlall");
+  }
+  unless (-d $root) {
+    mkdir($root,0755) or _fail($c, "Cannot create PERLALL_BUILDROOT $root");
+  }
+  $c->{output} .= "chdir $root\n";
+  chdir $root;
+
+  my $from = shift @args ; # might be empty
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
-    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
-      # grab it
-    } else {
-      # git it
-      chdir $c->options->{'perl-git'};
-      system("git checkout $from");
+    # XXX very very unstable
+    my $ps = $p;
+    $ps =~ s/d$//;
+    $ps =~ s/-nt$//;
+    $ps =~ s/-m$//;
+    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) { # grab it
+      if (-f $from) {
+	_system($c, "tar xfz $from");
+	$srcdir = $root."/perl-$ps";
+      } else {
+	_system($c, "wget -O perl-$ps.tgz $from");
+	_system($c, "tar xfz perl-$ps.tgz");
+	$srcdir = $root."/perl-$ps";
+      }
+    } else { # git it
+      chdir $c->config->{'perl-git'} or _fail($c, "invalid perl-git cfg");
+      $srcdir = $c->config->{'perl-git'};
+      $c->{output} .= "chdir ".$c->config->{'perl-git'}."\n";
+      undef $!;
+      _system($c,"git","checkout",$from); # git returns strange values, ignore
+      _fail($c, "git checkout $from: $!") if $!;
+      chdir $root;
     }
   }
-  my $root = $c->options->{PERLALL_BUILDROOT};
-  unless (-d $root) {
-    mkdir 0755, $root or die "Cannot create PERLALL_BUILDROOT $root\n";
-  }
-  chdir $root;
   my $builddir = "build".$p;
   my $make = $Config{make};
   if (-d $builddir) {
+    $c->{output} .= "chdir $builddir\n";
     chdir $builddir;
-    system("rm config.sh config.h Policy.sh");
-    system("$make clean");
+    _system($c, qw(rm config.h)) if -f "config.h";
+    _system($c, qw(rm config.sh)) if -f "config.sh";
+    _system($c, qw(rm Policy.sh)) if -f "Policy.sh";
+    _system($c, $make, "clean") if -f "Makefile";
   } else {
-    mkdir 0755, $builddir or die die "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall\n";
+    $c->{output} .= "mkdir $builddir\n";
+    mkdir($builddir,0755) 
+      or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
+    $c->{output} .= "chdir $builddir\n";
     chdir $builddir;
   }
+
+
+  print $c->output() if $c->options->{verbose};
   "build unimplemented"
 }
 
@@ -439,7 +496,7 @@ sub do
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
-  die "missing args" unless $argv;
+  return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     warn "$p $argv\n";
     system("$p $argv");
@@ -553,7 +610,7 @@ sub help
   return Pod::Usage::pod2usage
     ( { -message => App::Rad::Help::usage() . "\n\n"
 	. App::Rad::Help::helpstr($c),
-	-verbose => $c->options->{verbose} ? 2 : 0,
+	-verbose => $c->options->{verbose} ? 3 : 0,
       } );
 }
 

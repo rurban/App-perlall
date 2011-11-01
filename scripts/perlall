@@ -61,6 +61,119 @@ The do and make* commands always create a log file with the platform
 and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
 F<log.install-osx1068-5.15.4> for C<makeinstall>.
 
+=cut
+
+sub setup { 
+  $_[0]->register_commands( {-ignore_prefix => '_'} );
+  $_[0]->register('install', \&build);
+}
+
+sub pre_process {
+  my $c = shift;
+  my @opts = (
+	  [ "skip",     "skip versions (glob-style)" ],
+	  [ "newer",    "only newer versions (glob-style)" ],
+	  [ "older",    "only older versions (glob-style)" ],
+	  [ "as=s",     "install perl under given name" ],
+	  [ "force|f",  "force install" ],
+	  [ "j=n",      "parallel make" ],
+	  [ "D=s",      "./configure option" ],
+	  [ "A=s",      "./configure option" ],
+	  [ "U=s",      "./configure option" ],
+	  [ "notest|n",  "skip the test suite on build and makeinstall" ],
+	  [ "quiet|q",   "Make perlall command quieter" ],
+	  [ "verbose|v", "Make perlall command say more" ],
+	  [ "nolog",     "skip writing to the log file" ],
+	  [ "help|h",    "commands and options" ],
+	  [ "version" ]);
+  $c->getopt( map {$_->[0]} @opts );
+  my $cmd = $c->cmd;
+  # defaults
+  $c->config->{PERLALL_BINDIR} = '/usr/local/bin';
+  $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
+  $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git';
+  $c->config->{cpan} = 'cpan';
+  $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Task::Kensho';
+  # need .perlall
+  if ($cmd =~ /^build|uninstall|init|list|do|make.*|cpan$/) {
+    for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
+      $c->_dot_perlall($_) if -f $_;
+    }
+  }
+  # expand versions from $ENV{perlall} and alternatively 
+  # accept first argument
+  if ($cmd =~ /^do|make.*|init|cpan|list|uninstall$/) {
+    my @p;
+    if ( $c->argv->[0] =~ /^(perl)?5\./) {
+      @p = (shift @{$c->argv});
+    } else {
+      @p = @{$c->_expand_env()};
+    }
+    $c->stash->{perlall} = \@p;
+  }
+}
+
+sub App::Rad::_expand_env {
+  my ($c, $glob) = @_;
+  unless ($glob) {
+    $glob = $ENV{perlall} ? $ENV{perlall} : "5.*";
+  }
+  my $prefix = $c->config->{PERLALL_BINDIR};
+  return [ glob "$prefix/perl$glob" ];
+}
+
+sub App::Rad::_dot_perlall {
+  my ($c, $filename, $write) = (@_);
+  $c->debug("loading configuration from $filename");
+  open my $CONFIG, '<', $filename
+    or Carp::croak "error opening $filename: $!\n";
+  my ($s, $NEW);
+  if ($write) {
+    open $NEW, '>', $filename.".tmp"
+      or Carp::croak "error opening $filename.tmp: $!\n";
+  }
+  while (<$CONFIG>) {
+    $s = $_ if $write; # backup
+    chomp;
+    s/#.*//;
+    s/^\s+//;
+    s/\s+$//;
+    print $NEW $s if $s and !length;
+    next unless length;
+
+    if ( m/^alias\s([^\=\:\s]+) # alias key=value
+	   (?:=['"]?)   # ='
+	   ([^'"]+)     # value
+	  /x
+       ) {
+      $c->config->{$1} = $2;
+      if ($write) {
+	$2 = $write if $1 eq 'p';
+	print $NEW "alias p=$2\n";
+      }
+    }
+    elsif ( m/^([^\=\:\s]+)          # key
+	      (?:                    # (value is optional)
+		(?:\s*[\=\:]\s*|\s+) # separator ('=', ':' or whitespace)
+		(.+)                 # value
+	      )?
+	     /x
+	  ) {
+      $c->config->{$1} = $2;
+      print $NEW $s if $write;
+    } elsif ($write) {
+      print $NEW $s;
+    }
+  }
+  close $CONFIG;
+  if ($write) {
+    close $NEW;
+    rename $CONFIG, $NEW
+      or Carp::croak "error 2riting $filename: $!\n";
+  }
+  scalar keys %{$c->config};  
+}
+
 =head2 COMMANDS
 
 =over
@@ -105,11 +218,11 @@ alias to build
 
 =cut
 
-sub install
-  :Help(alias to build)
-{
-  build(@_);
-}
+#sub install
+#  :Help(alias to build)
+#{
+#  build(@_);
+#}
 
 =item B<uninstall> perl<version><suffix>
 
@@ -123,7 +236,9 @@ sub uninstall
   return "unimplemented";
 }
 
-=item B<init> [perl-<version><suffix> [<modules>]]
+=item B<init> [perl-<version><suffix> [<modules>...]]
+
+=item perlall="5.*" B<init> [<modules>...]
 
 Installs and updates basic CPAN modules.
 
@@ -140,7 +255,13 @@ sub init
   :Help(Installs and updates basic CPAN modules)
 {
   my $c = shift;
-  warn "perlall init @ARGV\n";
+  my @argv = @{$c->argv};
+  my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
+  for my $p (@{$c->stash->{perlall}}) {
+    # XXX if App::cpan exists -S cpan, otherwise need -MCPAN -e'install qw(mods)'
+    warn "$p -S cpan $mods\n";
+    system("$p -S cpan $mods");
+  }
 }
 
 =item B<list> [version*]
@@ -153,11 +274,12 @@ sub list
   :Help(List all installed perlall versions) 
 {
   my $c = shift;
+  return join "\n", @{$c->stash->{perlall}};
 }
 
 =item B<do> command
 
-Execute commands with all perls.
+Execute commands with all perls from $ENV{perlall}.
 
 For example, run a Hello program:
 
@@ -166,6 +288,17 @@ For example, run a Hello program:
 is expanded to something like:
 
   for perl in /usr/local/bin/perl5*; do
+    echo $perl $*
+    $perl $*
+  done
+
+Restricts perls via ENV:
+
+  perlall="5.14.*d*" perlall do -E'say "Hello from $]"'
+
+is expanded to something like:
+
+  for perl in /usr/local/bin/perl5.14.*d*; do
     echo $perl $*
     $perl $*
   done
@@ -201,6 +334,11 @@ sub do
   :Help(Execute commands with all perls) 
 {
   my $c = shift;
+  my $argv = join " ",@{$c->argv};
+  for my $p (@{$c->stash->{perlall}}) {
+    warn "$p $argv\n";
+    system("$p $argv");
+  }
 }
 
 =item B<make> args
@@ -214,6 +352,19 @@ sub make
   :Help('perl Makefile.PL; make') 
 {
   my $c = shift;
+  my $argv = join " ",@{$c->argv};
+  for my $p (@{$c->stash->{perlall}}) {
+    # XXX check MB
+    system("make -s clean");
+    warn "$p Makefile.PL\n";
+    system("$p Makefile.PL");
+    warn "make\n";
+    system("make");
+    if ($argv) {
+      warn "$p $argv\n";
+      system("$p $argv");
+    }
+  }
 }
 
 =item B<maketest>
@@ -226,6 +377,16 @@ sub maketest
   :Help('make; make test') 
 {
   my $c = shift;
+  for my $p (@{$c->stash->{perlall}}) {
+    # XXX check MB
+    system("make -s clean");
+    warn "$p Makefile.PL\n";
+    system("$p Makefile.PL");
+    warn "make\n";
+    system("make");
+    warn "make test TEST_VERBOSE=1\n";
+    system("make test TEST_VERBOSE=1");
+  }
 }
 
 =item B<makeinstall>
@@ -238,6 +399,16 @@ sub makeinstall
   :Help('maketest; sudo make install') 
 {
   my $c = shift;
+  for my $p (@{$c->stash->{perlall}}) {
+    # XXX check MB
+    system("make -s clean");
+    warn "$p Makefile.PL\n";
+    system("$p Makefile.PL");
+    warn "make\n";
+    system("make");
+    warn "make test && sudo make install\n";
+    system("make test && sudo make install");
+  }
 }
 
 =item B<selfupgrade>
@@ -250,6 +421,7 @@ sub selfupgrade
   :Help(upgrade perlall to its latest version) 
 {
   my $c = shift;
+  "unimplemented"
 }
 
 =item B<help>

@@ -1,24 +1,139 @@
 package App::perlall;
 # ABSTRACT: Test with all perls
+use App::Cmd::Setup -app;
 
-=head1 NAME
+=method build  [ perl<version><suffix> [ from ]]
 
-perlall - Create all perls and test a module with all perls
+=method install  [ perl<version><suffix> [ from ]]
+
+alias to build
 
 =cut
 
-sub build {}
-*install = *build;
+sub App::perlall::Command::build {
+  my ($self, $opts, $args) = @_;
+  warn "perlall build @$opts @$args";
+}
+*App::perlall::Command::install = *App::perlall::Command::build;
 
-sub do {}
-sub make {}
-sub maketest {}
-sub makeinstall {}
+=method do commands
 
-sub selfupgrade {}
-sub upgrade {} #blead
-sub help {}
-sub version {}
+=cut
+
+sub App::perlall::Command::do {
+  my ($self, $opts, $args) = @_;
+  warn "perlall build @$opts @$args";
+}
+
+=method init perl<version><suffix> [ modules ]
+
+=cut
+
+sub App::perlall::Command::init {
+  my ($self, $opts, $args) = @_;
+  warn "perlall init @$opts @$args";
+}
+
+=method make [ commands ]
+
+=cut
+
+sub App::perlall::Command::make {
+  my ($self, $opts, $args) = @_;
+  warn "perlall make @$opts @$args";
+}
+
+=method maketest
+
+=cut
+
+sub App::perlall::Command::maketest {
+  my ($self, $opts, $args) = @_;
+  warn "perlall maketest @$opts @$args";
+}
+
+=method makeinstall
+
+=cut
+
+sub App::perlall::Command::makeinstall {
+  my ($self, $opts, $args) = @_;
+  warn "perlall makeinstall @$opts @$args";
+}
+
+=method cpan modules...
+
+=cut
+
+sub App::perlall::Command::cpan {
+  my ($self, $opts, $args) = @_;
+  warn "perlall cpan @$opts @$args";
+}
+
+=method selfupgrade
+
+=cut
+
+sub App::perlall::Command::selfupgrade {
+  my ($self, $opts, $args) = @_;
+  warn "perlall selfupgrade @$opts @$args";
+}
+
+=method upgrade [ blead ]
+
+=cut
+
+sub App::perlall::Command::upgrade {   # blead
+  my ($self, $opts, $args) = @_;
+  warn "perlall upgrade @$opts @$args";
+}
+
+=option help
+
+=cut
+
+sub App::perlall::Option::help {
+  my ($self, $opts, $args) = @_;
+  #Pod::Usage->();
+  warn "perlall --help @$opts @$args";
+}
+
+=option version
+
+=cut
+
+sub App::perlall::Option::version {
+  die "perlapp $App::perlall::VERSION\n";
+}
+
+sub usage_desc { "perlall <command> [version...]" }
+
+sub opt_spec {
+  return (
+	  [ "skip",     "skip versions (glob-style)" ],
+	  [ "newer",    "only newer versions (glob-style)" ],
+	  [ "older",    "only older versions (glob-style)" ],
+	  [ "as=s",     "install perl under given name" ],
+	  [ "force|f",  "force install" ],
+	  [ "j=d",      "parallel make" ],
+	  [ "D=s",      "./configure option" ],
+	  [ "A=s",      "./configure option" ],
+	  [ "U=s",      "./configure option" ],
+	  [ "notest|n",  "skip the test suite on build and makeinstall" ],
+	  [ "quiet|q",   "Make perlall command quieter" ],
+	  [ "verbose|v", "Make perlall command say more" ],
+	  [ "nolog",     "skip writing to the log file" ],
+	  [ "help|h",    "commands and options" ],
+	  [ "version" ],
+	 );
+}
+
+sub validate_args {
+  my ($self, $opt, $args) = @_;
+  # we need at least one argument beyond the options; die with that message
+  # and the complete "usage" text describing switches, etc
+  $self->usage_error("missing command") unless @$args;
+}
 
 1;
 __END__

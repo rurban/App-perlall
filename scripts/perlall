@@ -31,27 +31,37 @@ perlall - Create all perls and test a module with all perls
 =head1 DESCRIPTION
 
 B<perlall> is a better L<perlbrew> with perls in the default F</usr/local/bin/, 
-and F<< /usr/local/lib/perl5/<version> >>, instead of locally, so you need 
-write access to the default PREFIX F</usr/local>.
+and F<< /usr/local/lib/perl5/<version> >>, instead of locally. 
+It is preferred to have write access to the default PREFIX F</usr/local>.
 It does not use L<local::lib>, does not mangle C<PERL5LIB> and 
 builds and keeps sane global perl installations, without the need to save
 and restore internal states.
 
-The currently used perl is stored as alias C<p>, stored in F<~/.perlall>
+The currently used perl and all options are stored as alias 
+C<p> in F<~/.perlall>
 
-  alias p=perl5.15.4d-nt
+    alias p=perl5.15.4d-nt
 
-Build perls:
+Build and init perls:
+
+Version numbers look like C<5.xx.x> and the C<suffix> can be:
+
+  C<d>   DEBUGGING
+  C<-nt> non-threaded
+  C<-m>  multi
 
 For older perls special patches are applied to successfully build them.
-C<archname> is extended by debug and special git suffices.
+C<archname> and the archlibs are extended by C<-debug> and special 
+git suffices. The installed perl binary ditto.
 
 I use perlall on cygwin, mingw (strawberry), linux (debian+centos),
 freebsd, openbsd and solaris, with bash, dash and ksh. 
 Supporting other platforms besides VMS should not be hard.
+freebsd needs sudo from ports.
 
-The make* commands always create a log file with the platform and version, 
-like F<log.test-centos5-5.10.1d-nt> for maketest.
+The do and make* commands always create a log file with the platform 
+and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
+F<log.install-osx1068-5.15.4> for C<makeinstall>.
 
 =head1 COMMANDS
 
@@ -61,18 +71,11 @@ like F<log.test-centos5-5.10.1d-nt> for maketest.
 
 Build and install the given version of perl.
 
-Version numbers look like C<5.xx.x>, 
-and the B<suffix> can be:
-
-  C<d>   DEBUGGING
-  C<-nt> non-threaded
-  C<-m>  multi
-
 Unreleased git versions, like blead or smoke-me branches 
-get a C<@xxxxxx> suffix.
-The version number can be "blead".
+get a C<@xxxxxx> suffix. The version can be "blead" which
+resolves to the current development version.
 
-The optional 2nd argument from can be a git tag/commit/branch, 
+The optional 2nd argument C<from> can be a git tag/commit/branch, 
 e.g. a smoke-me branch, or a file or url with the perl-*.tar.gz
 The branchname is added to the perl suffix, such as perl5.15.4dnt-smokeme-utf8 
 or can be overridden with --as.
@@ -165,10 +168,6 @@ like C<perlall maketest>, but runs C<sudo make install> after C<make test>.
 
 This command upgrades perlall to its latest version.
 
-=item B<version>
-
-Show the version of perlall.
-
 =back
 
 =head1 OPTIONS
@@ -231,6 +230,10 @@ pass through switches to the perl Configure script.
 
     perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
 
+=item B<--version>
+
+Show the version of perlall.
+
 =back
 
 =head1 CONFIGURATION
@@ -257,10 +260,11 @@ Valid vars:
 
 =head1 SEE ALSO
 
-The bash script, which I used for some years:
+The bash scripts, which I used for some years:
 L<http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall>
 
-L<App::perlbrew> which looks like my bash scripts but pollutes PERL5LIB
-and thus your whole environment, similar to the horrible Oracle perl.
+L<App::perlbrew> which looked like my bash scripts and B<perlall>
+but pollutes PERL5LIB and thus your whole environment, similar to
+the horrible Oracle perl.
 
 =cut

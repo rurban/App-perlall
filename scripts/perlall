@@ -6,7 +6,28 @@ use strict;
 use App::Rad;
 our $VERSION = '0.01';
 use Config;
+use Cwd ();
+use File::Slurp ();
+use File::Basename ();
 
+our @opts = (
+	  [ "skip",     "skip versions (glob-style)" ],
+	  [ "newer",    "only newer versions (glob-style)" ],
+	  [ "older",    "only older versions (glob-style)" ],
+	  [ "quiet|q",  "Make perlall command quieter" ],
+	  [ "verbose|v","Make perlall command say more" ],
+	  [ "as=s",     "install perl under given name" ],
+	  [ "D=s",      "./configure option" ],
+	  [ "A=s",      "./configure option" ],
+	  [ "U=s",      "./configure option" ],
+	  [ "j=n",      "parallel make" ],
+	  [ "notest|n", "skip the test suite on build and makeinstall" ],
+	  [ "force|f",  "force install" ],
+	  [ "log!",     "skip writing to the log file" ],
+	  [ "help|h",   "commands and options" ],
+	  [ "debug|d",  "lots of internal debugging output" ],
+	  [ "version|V" ]);
+App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
 
 =head1 NAME
@@ -22,10 +43,12 @@ perlall - Create all perls and test a module with all perls
     perlall init perl5.15.4d-nt DBI $(cat ~/Perl/B-C/t/top100)
 
     perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
-    perlall make -Mblib t/0basic.t
-    perlall=5.15.4  perlall maketest
+    perlall --older 5.12 make -Mblib t/0basic.t
+    perlall=5.15.4  perlall maketest  	# test with version as ENV
     perlall="5.14*" perlall makeinstall
     perlall cpan My::Module
+
+    perlall maketest "5.*.d*" # test with all debugging, version as option
 
 =head1 DESCRIPTION
 
@@ -66,52 +89,93 @@ F<log.install-osx1068-5.15.4> for C<makeinstall>.
 
 sub setup { 
   $_[0]->register_commands( {-ignore_prefix => '_'} );
-  $_[0]->register('install', \&build);
+  $_[0]->register('install', \&build, "alias to build");
+}
+
+sub App::Rad::Help::usage {
+    return "Usage: $0 [options] command [arguments]";
 }
 
 sub pre_process {
   my $c = shift;
-  my @opts = (
-	  [ "skip",     "skip versions (glob-style)" ],
-	  [ "newer",    "only newer versions (glob-style)" ],
-	  [ "older",    "only older versions (glob-style)" ],
-	  [ "as=s",     "install perl under given name" ],
-	  [ "force|f",  "force install" ],
-	  [ "j=n",      "parallel make" ],
-	  [ "D=s",      "./configure option" ],
-	  [ "A=s",      "./configure option" ],
-	  [ "U=s",      "./configure option" ],
-	  [ "notest|n",  "skip the test suite on build and makeinstall" ],
-	  [ "quiet|q",   "Make perlall command quieter" ],
-	  [ "verbose|v", "Make perlall command say more" ],
-	  [ "nolog",     "skip writing to the log file" ],
-	  [ "help|h",    "commands and options" ],
-	  [ "version" ]);
   # XXX Take opts only before the command, not afterwards!
   # $c->getopt( map {$_->[0]} @opts );
   my $cmd = $c->cmd;
-  # defaults
-  $c->config->{PERLALL_BINDIR} = '/usr/local/bin';
-  $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
+  # defaults: for all
+  $c->config->{PERLALL_PREFIX} = '/usr/local';
   $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git';
-  $c->config->{cpan} = 'cpan';
-  $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Task::Kensho';
-  # need .perlall
+  # build only
+  $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
+  if ($cmd eq 'cpan') {
+    $c->config->{cpan} = 'cpan';
+    $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Task::Kensho';
+    if (File::Basename::basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
+      $c->config->{'init-modules'} .= " ".join(" ",File::Slurp::read_file("t/top100"));
+    }
+  }
+  # need .perlall config
   if ($cmd =~ /^build|uninstall|init|list|do|make.*|cpan$/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
       $c->_dot_perlall($_) if -f $_;
     }
+    $c->config->{PERLALL_BINDIR} = $c->config->{PERLALL_PREFIX}."/bin"
+      unless $c->config->{PERLALL_BINDIR};
   }
   # expand versions from $ENV{perlall} or just version from first argument
   if ($cmd =~ /^do|make.*|init|cpan|list|uninstall$/) {
     my @p;
-    if ( $c->argv->[0] =~ /^(perl)?5\./) {
+    if ( $c->argv->[0] =~ /^(perl)?5\./ ) {
       @p = (shift @{$c->argv});
+      if ($p[0] =~ /[\*\?\[]/) {
+	@p = @{$c->_expand_env($p[0])};
+      }
     } else {
       @p = @{$c->_expand_env()};
     }
     $c->stash->{perlall} = \@p;
   }
+}
+
+# only process opts before the command. 
+# all other opts are passed verbatim to the subprocesses
+sub App::Rad::_get_input {
+    my $c = shift;
+    require Getopt::Long;
+    Carp::croak "Getopt::Long needs to be version 2.36 or above"
+        unless $Getopt::Long::VERSION >= 2.36;
+
+    my (@options, @params);
+    for (my $i=0; $i<@ARGV; $i++) {
+      if (defined ($ARGV[$i]) and substr($ARGV[$i], 0, 1) ne '-') {
+	$c->{'cmd'} = $ARGV[$i];
+	@params = @ARGV[$i..$#ARGV];
+	shift @params;
+	last;
+      }
+      push @options, ($ARGV[$i]);
+    }
+    @{$c->argv} = @params;
+    my $parser = new Getopt::Long::Parser;
+    $parser->configure( qw(bundling) );
+    my @tARGV = @ARGV; # keep em
+    my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
+    $c->debug('received options: ' . join(' ',@options));
+    $c->debug('received command: ' . $c->{'cmd'});
+    $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
+    @ARGV = @tARGV;
+    return $c;	      
+}
+
+# decode suffix into wanted archname. needed by build only
+# cwd is the builddir after Configure
+sub App::Rad::_suffix2arch {
+  my $c = shift;
+  my $_ = shift;
+  my $arch = "";
+  /\dd-?/ and $arch .= "-debug";
+  /\dd?-nt/ or $arch .= "-multi-thread";
+  /\dd?-m/ or $arch .= "-multi";
+  # XXX check for needed git or branch suffix
 }
 
 sub App::Rad::_expand_env {
@@ -170,7 +234,7 @@ sub App::Rad::_dot_perlall {
   if ($write) {
     close $NEW;
     rename $CONFIG, $NEW
-      or Carp::croak "error 2riting $filename: $!\n";
+      or Carp::croak "error writing $filename: $!\n";
   }
   scalar keys %{$c->config};  
 }
@@ -207,11 +271,49 @@ man3dir, pager, libpth.
 =cut
 
 sub build
-  :Help(new perl<version><suffix> [ from ])
+  :Help(build perl<version><suffix> [ from ])
 {
   my $c = shift;
-  warn "perlall build @ARGV\n";
-  "unimplemented"
+  my $p = $c->argv->[0];
+  if ($p =~ /^(perl)?5\./ ) {
+    shift @{$c->argv};
+  } else {
+    $c->output("perlall build missing perlversion argument\n");
+    $c->execute('help') and return undef;
+  }
+  $p =~ s/^perl//;
+  my @options = keys %{$c->options};
+  warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @{$c->argv}\n";
+  # build is allowed to take options after the cmd: as
+  $c->getopt( map {$_->[0]} @opts )
+    or $c->execute('usage') and return undef;
+  my $cwd = Cwd::getcwd();
+  my $from = shift @{$c->argv}; # might be empty
+  if ($from) { # looks like a file/url or more like a git branch/tag/commit
+    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
+      # grab it
+    } else {
+      # git it
+      chdir $c->options->{'perl-git'};
+      system("git checkout $from");
+    }
+  }
+  my $root = $c->options->{PERLALL_BUILDROOT};
+  unless (-d $root) {
+    mkdir 0755, $root or die "Cannot create PERLALL_BUILDROOT $root\n";
+  }
+  chdir $root;
+  my $builddir = "build".$p;
+  my $make = $Config{make};
+  if (-d $builddir) {
+    chdir $builddir;
+    system("rm config.sh config.h Policy.sh");
+    system("$make clean");
+  } else {
+    mkdir 0755, $builddir or die die "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall\n";
+    chdir $builddir;
+  }
+  "build unimplemented"
 }
 
 =item install  [ perl<version><suffix> [ from ]]
@@ -446,7 +548,7 @@ sub help
   :Help('list of commands. With -v more')
 {
   my $c = shift;
-  g$c->getopt( 'verbose|v' );
+  $c->getopt( 'verbose|v' );
   require Pod::Usage;
   return Pod::Usage::pod2usage
     ( { -message => App::Rad::Help::usage() . "\n\n"
@@ -541,8 +643,12 @@ C<perl-git> stores the perl src root, which is also a handy alias to cd into it.
 Valid vars: 
 
     PERLALL_PREFIX  - Where perls are installed into. Default: /usr/local
-    PERLBUILD_ROOT  - Where perls are built. Default: /usr/src/perl
+    PERLALL_BINDIR  - Where perl5 binaries. Default: PREFIX/bin
+    PERLALL_BUILDROOT - Where perls are built. Default: /usr/src/perl
     alias perl-git  - blead root with .git to avoid downloading perl-*.tar.gz from CPAN
+    alias p         - save current perl
+    cpan 	    - cpan or cpanm
+    init-modules    - list of CPAN module names
 
 =back
 

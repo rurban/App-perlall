@@ -1,0 +1,17 @@
+alias p=perl5.15.4d-nt
+
+PERLALL_PREFIX=/usr/local
+# PERLALL_PREFIX=~/Perl/
+PERLALL_BUILDROOT=/usr/src/perl
+# PERLALL_BUILDROOT=~/Perl
+alias perl-git='cd /usr/src/perl/blead/perl-git'
+
+cpan=cpan
+#cpan=cpanm
+
+#init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
+#   Params::Util Bundle::CPANReporter2 \
+#   B::Flags Opcodes Set::Object Math::Round Params::Classify \
+#   $(cat ~/Perl/B-C/t/top100) \
+#   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse \
+#   MouseX::Types Task::Kensho

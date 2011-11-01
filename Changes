@@ -1,0 +1,5 @@
+-*- change-log -*-
+
+0.01	2011-xx-xx rurban
+	* initial release based on 
+	http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall

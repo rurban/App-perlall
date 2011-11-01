@@ -1,0 +1,266 @@
+#!/usr/bin/env perl
+
+eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
+use strict;
+use App::perlall;
+
+my $app = App::perlall->new(@ARGV);
+$app->run();
+
+__END__
+
+=head1 NAME
+
+perlall - Create all perls and test a module with all perls
+
+=head1 SYNOPSIS
+
+    perlall build perl5.15.4d-nt
+    perlall build perl5.15.4
+    perlall build perl5.15.4-d
+
+    perlall init perl5.15.4d-nt DBI $(cat ~/Perl/B-C/t/top100)
+
+    perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
+    perlall make -Mblib t/0basic.t
+    perlall=5.15.4  perlall maketest
+    perlall="5.14*" perlall makeinstall
+    perlall cpan My::Module
+
+=head1 DESCRIPTION
+
+B<perlall> is a better L<perlbrew> with perls in the default F</usr/local/bin/, 
+and F<< /usr/local/lib/perl5/<version> >>, instead of locally, so you need 
+write access to the default PREFIX F</usr/local>.
+It does not use L<local::lib>, does not mangle C<PERL5LIB> and 
+builds and keeps sane global perl installations, without the need to save
+and restore internal states.
+
+The currently used perl is stored as alias C<p>, stored in F<~/.perlall>
+
+  alias p=perl5.15.4d-nt
+
+Build perls:
+
+For older perls special patches are applied to successfully build them.
+C<archname> is extended by debug and special git suffices.
+
+I use perlall on cygwin, mingw (strawberry), linux (debian+centos),
+freebsd, openbsd and solaris, with bash, dash and ksh. 
+Supporting other platforms besides VMS should not be hard.
+
+The make* commands always create a log file with the platform and version, 
+like F<log.test-centos5-5.10.1d-nt> for maketest.
+
+=head1 COMMANDS
+
+=over 4
+
+=item B<build> [ perl<version><suffix> [ from ]] 
+
+Build and install the given version of perl.
+
+Version numbers look like C<5.xx.x>, 
+and the B<suffix> can be:
+
+  C<d>   DEBUGGING
+  C<-nt> non-threaded
+  C<-m>  multi
+
+Unreleased git versions, like blead or smoke-me branches 
+get a C<@xxxxxx> suffix.
+The version number can be "blead".
+
+The optional 2nd argument from can be a git tag/commit/branch, 
+e.g. a smoke-me branch, or a file or url with the perl-*.tar.gz
+The branchname is added to the perl suffix, such as perl5.15.4dnt-smokeme-utf8 
+or can be overridden with --as.
+
+The specified perl is taken from a perl git repo (specified in ~/.perlall), 
+or downloaded via CPAN.
+
+C<man> files are not installed.
+
+C<-Dusedevel> is always used to install versioned executables.
+
+Special site-specific non-default config vars are taken 
+from F</usr/local/bin/perl> if different from F</usr/bin/perl>,
+such as cf_email, perladmin, ccflags, cc, ldflags, ld, man1dir, 
+man3dir, pager, libpth.
+
+=item B<uninstall> perl<version><suffix>
+
+Uninstalls the given version.
+
+=item B<init> [perl-<version><suffix> [<modules>]]
+
+Installs and updates basic CPAN modules.
+
+Default: $init-modules from ~/.perlall
+   (YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info 
+   Params::Util Bundle::CPANReporter2 
+   B::Flags Opcodes  Math::Round Params::Classify $(cat ~/Perl/B-C/t/top100)
+   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse 
+   MouseX::Types Task::Kensho)
+
+=item B<list>
+
+List all installed perlall versions.
+
+=item B<do> command
+
+Execute commands for all perls.
+
+For example, run a Hello program:
+
+    perlall do -E'say "Hello from $]"'
+
+is expanded to something like:
+
+  for perl in /usr/local/bin/perl5*; do
+    echo $perl $*
+    $perl $*
+  done
+
+The output depends on your perl installations, and looks like this:
+
+    perl5.12.2-nt -E'say "Hello from $]"'
+    Hello from perl-5.012002
+    
+    perl5.12.3-m -E'say "Hello from $]"'
+    Hello from perl-5.012003
+    
+    perl5.14.2 -E'say "Hello from $]"'
+    Hello from perl-5.014002
+
+    perl5.14.2d -E'say "Hello from $]"'
+    Hello from perl-5.014002
+
+    perl5.14.2d-nt -E'say "Hello from $]"'
+    Hello from perl-5.014002
+
+    perl5.8.9-nt -E'say "Hello from $]"'
+    Unrecognized switch: -E  (-h will show valid options).
+
+    perl5.6.2-nt -E'say "Hello from $]"'
+    Unrecognized switch: -E  (-h will show valid options).
+
+Notice that the commands are not executed in parallel.
+
+=item B<make> args
+
+like C<perlall do>, but prepends C<make clean; $perl Makefile.PL; make> 
+before executing the arguments.
+
+=item B<maketest>
+
+like C<perlall make>, but runs C<make test TEST_VERBOSE=1> after C<make>.
+
+=item B<makeinstall>
+
+like C<perlall maketest>, but runs C<sudo make install> after C<make test>.
+
+=item B<self-upgrade>
+
+This command upgrades perlall to its latest version.
+
+=item B<version>
+
+Show the version of perlall.
+
+=back
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-h| --help>
+
+prints this help.
+
+=item B<-f| --force>
+
+Force installation of a perl.
+
+=item B<-j>C<number>
+
+Enable parallel make and test (if supported by the target perl)
+
+  perlall build -j5 perl5.12.3
+
+=item B<-n| --notest>
+
+Skip the test suite
+
+=item B<--skip> C<versions>
+
+versions might be a glob-style regex.
+E.g. --skip '5.1[024]d*'
+
+=item B<--newer> C<versions>
+
+Only with newer versions than. versions might be a glob, 
+including a special arch suffix.
+E.g. perlall do --newer "5.10.?d-nt" 
+
+=item B<--older> C<versions>
+
+versions might be a regex. As in --newer.
+
+=item B<-q| --quiet>
+
+Make perlall command quieter.
+
+=item B<-v| --verbose>
+
+Make perlall command say more.
+
+For C<build> command, this prints the building whole process to STDOUT.
+
+=item B<--as>
+
+Install a given perl under the given name.
+
+    perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
+    perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
+
+=item B<-D>, B<-U>, B<-A>
+
+pass through switches to the perl Configure script.
+
+    perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
+
+=back
+
+=head1 CONFIGURATION
+
+=over 4
+
+=item ~/.perlall
+
+This is shell-script syntax with ENV vars and aliases. 
+C<alias p=$perlall> is also written by perlall.
+ 
+    alias perl-git="cd /usr/src/perl/blead/perl-git"
+    alias p=perl5.15.4d-nt
+
+C<perl-git> stores the perl src root, which is also a handy alias to cd into it.
+
+Valid vars: 
+
+    PERLALL_PREFIX  - Where perls are installed into. Default: /usr/local
+    PERLBUILD_ROOT  - Where perls are built. Default: /usr/src/perl
+    alias perl-git  - blead root with .git to avoid downloading perl-*.tar.gz from CPAN
+
+=back
+
+=head1 SEE ALSO
+
+The bash script, which I used for some years:
+L<http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall>
+
+L<App::perlbrew> which looks like my bash scripts but pollutes PERL5LIB
+and thus your whole environment, similar to the horrible Oracle perl.
+
+=cut

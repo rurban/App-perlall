@@ -1,14 +1,12 @@
 #!/usr/bin/env perl
-
 eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
+
 use strict;
-use App::perlall;
+use App::Rad;
+our $VERSION = '0.01';
 
-my $app = App::perlall->new(@ARGV);
-$app->run();
-
-__END__
+App::Rad->run();
 
 =head1 NAME
 
@@ -31,7 +29,7 @@ perlall - Create all perls and test a module with all perls
 =head1 DESCRIPTION
 
 B<perlall> is a better L<perlbrew> with perls in the default F</usr/local/bin/, 
-and F<< /usr/local/lib/perl5/<version> >>, instead of locally. 
+and F< /usr/local/lib/perl5/version >, instead of locally. 
 It is preferred to have write access to the default PREFIX F</usr/local>.
 It does not use L<local::lib>, does not mangle C<PERL5LIB> and 
 builds and keeps sane global perl installations, without the need to save
@@ -63,9 +61,9 @@ The do and make* commands always create a log file with the platform
 and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
 F<log.install-osx1068-5.15.4> for C<makeinstall>.
 
-=head1 COMMANDS
+=head2 COMMANDS
 
-=over 4
+=over
 
 =item B<build> [ perl<version><suffix> [ from ]] 
 
@@ -92,9 +90,38 @@ from F</usr/local/bin/perl> if different from F</usr/bin/perl>,
 such as cf_email, perladmin, ccflags, cc, ldflags, ld, man1dir, 
 man3dir, pager, libpth.
 
+=cut
+
+sub build
+  :Help(new perl<version><suffix> [ from ])
+{
+  my $c = shift;
+  warn "perlall build @ARGV\n";
+}
+
+=item install  [ perl<version><suffix> [ from ]]
+
+alias to build
+
+=cut
+
+sub install
+  :Help(alias to build)
+{
+  build(@_);
+}
+
 =item B<uninstall> perl<version><suffix>
 
 Uninstalls the given version.
+
+=cut
+
+sub uninstall
+  :Help(sudo rm /usr/local/bin/perl <arg> and its libs)
+{
+  return "unimplemented";
+}
 
 =item B<init> [perl-<version><suffix> [<modules>]]
 
@@ -107,13 +134,30 @@ Default: $init-modules from ~/.perlall
    Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse 
    MouseX::Types Task::Kensho)
 
-=item B<list>
+=cut
 
-List all installed perlall versions.
+sub init
+  :Help(Installs and updates basic CPAN modules)
+{
+  my $c = shift;
+  warn "perlall init @ARGV\n";
+}
+
+=item B<list> [version*]
+
+List all installed perlall versions
+
+=cut
+
+sub list
+  :Help(List all installed perlall versions) 
+{
+  my $c = shift;
+}
 
 =item B<do> command
 
-Execute commands for all perls.
+Execute commands with all perls.
 
 For example, run a Hello program:
 
@@ -151,32 +195,96 @@ The output depends on your perl installations, and looks like this:
 
 Notice that the commands are not executed in parallel.
 
+=cut
+
+sub do
+  :Help(Execute commands with all perls) 
+{
+  my $c = shift;
+}
+
 =item B<make> args
 
 like C<perlall do>, but prepends C<make clean; $perl Makefile.PL; make> 
 before executing the arguments.
 
+=cut
+
+sub make
+  :Help('perl Makefile.PL; make') 
+{
+  my $c = shift;
+}
+
 =item B<maketest>
 
 like C<perlall make>, but runs C<make test TEST_VERBOSE=1> after C<make>.
+
+=cut
+
+sub maketest
+  :Help('make; make test') 
+{
+  my $c = shift;
+}
 
 =item B<makeinstall>
 
 like C<perlall maketest>, but runs C<sudo make install> after C<make test>.
 
-=item B<self-upgrade>
+=cut
+
+sub makeinstall
+  :Help('maketest; sudo make install') 
+{
+  my $c = shift;
+}
+
+=item B<selfupgrade>
 
 This command upgrades perlall to its latest version.
 
+=cut
+
+sub selfupgrade
+  :Help(upgrade perlall to its latest version) 
+{
+  my $c = shift;
+}
+
+=item B<help>
+
+prints this help. With -v even more.
+
+=cut
+
+sub help
+  :Help('list of commands. With -v more')
+{
+  my $c = shift;
+  $c->getopt( 'verbose|v' );
+  require Pod::Usage;
+  return Pod::Usage::pod2usage
+    ( { -message => App::Rad::Help::usage() . "\n\n"
+	. App::Rad::Help::helpstr($c),
+	-verbose => $c->options->{verbose} ? 2 : 0,
+      } );
+}
+
+=item B<version>
+
+=cut
+
+sub version
+  :Help(print version)
+{
+  warn "perlapp $main::VERSION\n";
+  exit;
+}
+
 =back
 
-=head1 OPTIONS
-
-=over 4
-
-=item B<-h| --help>
-
-prints this help.
+=head2 OPTIONS
 
 =item B<-f| --force>
 
@@ -229,10 +337,6 @@ Install a given perl under the given name.
 pass through switches to the perl Configure script.
 
     perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
-
-=item B<--version>
-
-Show the version of perlall.
 
 =back
 

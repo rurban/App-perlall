@@ -3,11 +3,14 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # TODO: .lockfile
-#   trap Ctrl-Break in subprocesses
-#   properly quote do args: -e'my $a'
 #   logfiles
-#   more args (skip,newer,older,as,force,...)
-#   check opts-mix with hardlinks cmd, opts vs params
+#   build patches: <command-line> quirks below 5.8.5 or so, dbm, ...
+#   testvm (from perltestvm bash script)
+#   trap Ctrl-Break in subprocesses
+#   more args (quiet,as,force,j,...)
+#   check opts-mix with hardlinks cmd, opts vs params (if config->linked)
+#   build perlbrew and HOME friendly (not hardcoded paths)
+#   windows support, break on VMS, beos, ...
 
 use strict;
 use App::Rad;
@@ -18,9 +21,10 @@ use File::Basename 'basename';
 
 our @opts = (
 	  [ "skip=s",   "skip versions (glob-style)" ],
-	  [ "newer=s",  "only newer versions (glob-style)" ],
+	  [ "newer=s",  "only newer and same versions (glob-style)" ],
 	  [ "older=s",  "only older versions (glob-style)" ],
-	  [ "quiet|q",  "Make perlall command quieter" ],
+	  [ "nogit",    "skip @ git versions" ],
+	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "as=s",     "install perl under given name" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
@@ -30,7 +34,7 @@ our @opts = (
 	  [ "j=n",      "parallel make" ],
 	  [ "notest|n", "skip the test suite on build and makeinstall" ],
 	  [ "force|f",  "force install" ],
-	  [ "log!",     "skip writing to the log file" ],
+	  [ "nolog",    "skip writing log files" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
 	  [ "version|V" ]);
@@ -48,28 +52,56 @@ perlall - Create perls and test with all perls
     perlall build perl5.14.2-nt
     perlall -v build 5.15.4d-nt@khw-tk smoke-me/khw-tk
 
-    perlall init perl5.15.4d-nt DBI $(cat ~/Perl/B-C/t/top100)
+    perlall init perl5.15.4d-nt DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
 
     perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
     perlall --older 5.12 make -Mblib t/0basic.t
     perlall=5.15.4  perlall maketest  	# test with version as ENV
     perlall="5.14*" perlall makeinstall
     perlall cpan My::Module
+    perlall cpanm More::Modules
 
     perlall maketest "5.*.d*" # test with all debugging, version as option
 
-Planned:
+=head2 Planned Features
+
     perlall smoke blead smoke-me/*
+    perlall cpan Devel::*
+    perlall testvm centos4 centos5 centos6 solaris10 freebsd7 freebsd8 openbsd89 cygwin
+    perlall testvm --all
+    perlall selfupgrade
+    perlall uninstall perl5.15.4d-nt@khw-tk
+
+=head1 OPTIONS
+
+	  "skip=s",   "skip versions (glob-style)"
+	  "newer=s",  "only newer and same versions (glob-style)"
+	  "older=s",  "only older versions (glob-style)"
+	  "nogit",    "skip @ git versions"
+	  "quiet|q",  "Make perlall command quieter"
+	  "verbose|v","Make perlall command say more"
+	  "dryrun!",  "do not execute commands, only print"
+	  "D=s",      "./configure option"
+	  "A=s",      "./configure option"
+	  "U=s",      "./configure option"
+	  "j=n",      "parallel make" (NOT YET)
+	  "notest|n", "skip the test suite on build and makeinstall"
+	  "force|f",  "force install"
+	  "log!",     "skip writing to the log file"
+	  "help|h",   "commands and options"
+	  "debug|d",  "lots of internal debugging output"
+	  "version|V"
 
 =head1 DESCRIPTION
 
 B<perlall> is a better L<perlbrew> with perls in the default
 F</usr/local/bin/>, and F</usr/local/lib/perl5/VERSION>, instead of
-locally.  It is preferred to have write access to the default PREFIX
-F</usr/local> via C<sudo>. 
+locally. You need write access to the default PREFIX
+F</usr/local>, e.g. via C<sudo>. 
 It does not use L<local::lib>, does not mangle C<PERL5LIB> and builds 
-and keeps sane global perl installations,
+and keeps sane global perl installations with special suffices,
 without the need to save and restore internal states.
+The suffices are used in postprocessing scripts to keep arch-features together.
 
 The currently used perl together with more options is stored as alias 
 C<p> in F<~/.perlall>.
@@ -78,11 +110,11 @@ C<p> in F<~/.perlall>.
 
 Build and init perls:
 
-Version numbers look like C<5.xx.x> and the C<suffix> can be:
+Version numbers look like C<5.xx.x> and the C<suffix> can be any of:
 
-  C<d>   DEBUGGING
-  C<-nt> non-threaded
-  C<-m>  multi
+  C<d>    DEBUGGING
+  C<-nt>  non-threaded, or
+  C<-m>   multi
   C<@xxx> git ids
 
 For older perls special patches are applied to successfully build
@@ -98,11 +130,15 @@ The do and make* commands always create a log file with the platform
 and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
 F<log.install-osx1068-5.15.4> for C<makeinstall>. (NOT YET)
 
+In L<B::C> there are post-processing scripts 
+F<status_upd> and F<store_rpt> for those generated logfiles.
+
 =cut
 
 sub setup { 
   $_[0]->register_commands( {-ignore_prefix => '_'} );
   $_[0]->register('install', \&build, "alias to build");
+  $_[0]->register('smoke', \&build, "smoke [ perl<version><suffix> from ]");
   $_[0]->unregister('basename'); #imported (bug)
 }
 
@@ -143,12 +179,14 @@ sub pre_process {
     my @p;
     if ( $c->argv->[0] =~ /^(perl)?5\./ ) {
       @p = (shift @{$c->argv});
-      if ($p[0] =~ /[\*\?\[]/) {
+      if ($p[0] =~ /[\*\?\[]/) { # only glob if necessary
 	$p[0] =~ s/^perl//;
-	@p = @{_expand_env($c, $p[0])};
+	@p = _get_perlall($c, $p[0]);
+      } else {
+	$p[0] =~ s/^5\./perl5\./;
       }
     } else {
-      @p = @{_expand_env($c)};
+      @p = _get_perlall($c);
     }
     $c->stash->{perlall} = \@p;
   }
@@ -187,13 +225,12 @@ sub App::Rad::_get_input {
     @{$c->argv} = @params;
     my $parser = new Getopt::Long::Parser;
     $parser->configure( qw(bundling) );
-    my @tARGV = @ARGV; # keep em
-    @ARGV = @options;
+    @ARGV = @options; # getoptions eats @ARGV
     my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
     $c->debug('received options: ' . join(' ',@options));
     $c->debug('received command: ' . $c->{'cmd'});
     $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
-    @ARGV = @tARGV;
+    @ARGV = @{$c->argv};
     return $c;	      
 }
 
@@ -210,19 +247,51 @@ sub _suffix2arch {
   return $arch;
 }
 
-sub _expand_env {
+sub _get_perlall {
   my ($c, $glob) = @_;
   unless ($glob) {
     $glob = $ENV{perlall} ? $ENV{perlall} : "5.*";
   }
   die "invalid version $glob" if $glob !~ /^5\./ or $glob =~ /[!"';,\(\)]/;
   my $prefix = $c->config->{PERLALL_BINDIR};
-  return [ glob "$prefix/perl$glob" ];
+  my @p = glob "$prefix/perl$glob";
+  # do the filtering
+  @p = grep !/\@/,@p if $c->options->{nogit};
+  # hmm, glob-style
+  my %skip;
+  if ($c->options->{skip}) {
+    %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
+  }
+  if ($c->options->{older}) {
+    # XXX if last char is non-decimal match this suffix filter also
+    my $ver = $c->options->{older};
+    for (@p) {
+      $skip{$_}++ if _older($_, $ver);
+    }
+  }
+  if ($c->options->{newer}) { #or same
+    my $ver = $c->options->{newer};
+    # XXX if last char is non-decimal match this suffix filter also
+    for (@p) {
+      $skip{$_}++ unless _older($_, $ver);
+    }
+  }
+  %skip ? grep(!$skip{$_},@p) : @p;
+}
+
+# $p gets full path
+sub _older {
+  my ($p, $ver) = @_;
+  $p =~ s/^.*perl5\.//;
+  $p =~ s/(\.\d+)\D.*$//;
+  # perl5.14.2d-nt@345aef vs 5.12 => 14.2 vs 12
+  $ver =~ s/^5\.//;
+  return $p < $ver;
 }
 
 sub _dot_perlall {
   my ($c, $filename, $write) = (@_);
-  $c->debug("loading configuration from $filename");
+  $c->debug(($write?"writing":"loading")." configuration from $filename");
   open my $CONFIG, '<', $filename
     or Carp::croak "error opening $filename: $!\n";
   my ($s, $NEW);
@@ -248,8 +317,11 @@ sub _dot_perlall {
       my ($k,$v) = ($1, $2); 
       if ($k eq 'perl-git') {
 	$v =~ s/^cd //;
+	$c->config->{$k} = $v;
+	$v = "cd ".$v;
+      } else {
+	$c->config->{$k} = $v;
       }
-      $c->config->{$k} = $v;
       if ($write and $k eq 'p') {
 	$v = $write;
       }
@@ -271,11 +343,24 @@ sub _dot_perlall {
   close $CONFIG;
   if ($write) {
     close $NEW;
-    unlink $NEW;
-    rename $CONFIG, $NEW
+    unlink $CONFIG;
+    rename $filename.".tmp", $filename
       or Carp::croak "error writing $filename: $!\n";
   }
   scalar keys %{$c->config};  
+}
+
+# store alias p if explicitly wished (2nd arg $p), 
+# or if only one version was selected. no perl prefix
+sub _set_alias {
+  my ($c, $p) = @_;
+  my $f = "$ENV{HOME}/.perlall";
+  unless ($p) {
+    $p = $c->stash->{perlall}->[0] if @{$c->stash->{perlall}} == 1;
+    _dot_perlall($c, $f, $p) if -f $f and $p; # set alias
+  } else {
+    _dot_perlall($c, $f, "perl$p") if -f $f and $p; # set alias
+  }
 }
 
 sub _system {
@@ -308,16 +393,23 @@ e.g. a smoke-me branch, or a file or url with the perl-*.tar.gz
 The branchname is added to the archname suffix, such as C<@sproututf8>
 for C<sprout/utf8>, the binary name is taken from the first argument.
 
-The specified perl is taken from a perl git repo (specified in ~/.perlall), 
+The specified perl is taken from a perl git repo (specified via perl-git in ~/.perlall), 
 or downloaded via CPAN. (not yet)
 
 C<man> files are not installed.
 
 C<-Dusedevel> is always used to install versioned executables.
 
+On cygwin and windows the perl*.dll also gets the suffix, because they are 
+stored globally.
+
 Special site-specific non-default config vars are taken from
-F</usr/local/bin/perl>, such as cf_email, perladmin, ccflags, cc,
-ldflags, ld, pager, libpth, incpth, useshrplib.
+F</usr/local/bin/perl>, such as C<cf_email, perladmin, ccflags, cc,
+ldflags, ld, pager, libpth, incpth, useshrplib>.
+
+The builddir is under PERLALL_BUILDROOT (Default: "/usr/src/perl")
+as "build-E<lt>versionE<gtE<lt>suffix>"
+The intermediate "make install DESTDIR" as "inst-E<lt>versionE<gtE<lt>suffixE<gt>"
 
 =cut
 
@@ -475,42 +567,43 @@ sub build
       if $arch ne $new;
     _system($c, "$sed -i 's,bin/perl$ps,bin/perl$p,' config.h config.sh");
   }
+  my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
+  if (`grep '<command-line> $makefile`) {
+    system($^X,'-n','-e"print unless /<command-line>/"',$makefile,">$makefile.new");
+    system($^X,'-n','-e"print unless /<command-line>/"',"x2p/$makefile",">x2p/$makefile.new");
+    system($cp,"$makefile.new",$makefile);
+    system($cp,"x2p/$makefile.new","x2p/$makefile");
+  }
 
   _system($c, $make); 
-  _system($c, "$make test") unless $c->options->{notest}; 
-  _system($c, "$make install DESTDIR=$root/inst-$p");
+  _system($c, $make, "test") unless $c->options->{notest};
+  if ($c->cmd eq 'smoke') {
+    $c->execute('_smoke', $p, $from) if $c->cmd eq 'smoke'; # XXX not yet
+  } else {
+    _system($c, $make, "install", "DESTDIR=$root/inst-$p");
 
-  # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
-  my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
-  # XXX do we need sudo? check writable
-  my @c = ($cp, "$root/inst-$p/usr/local/bin/perl5.*","/usr/local/bin/perl$p");
-  $sudo = "" if $sudo and -w "/usr/local/bin/perl$p";
-  unshift @c, $sudo if $sudo;
-  _system($c, @c);
+    # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
+    my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
+    # XXX do we need sudo? check writable
+    my @c = ($cp, "$root/inst-$p/usr/local/bin/perl5.*","/usr/local/bin/perl$p");
+    $sudo = "" if $sudo and -w "/usr/local/bin/perl$p";
+    unshift @c, $sudo if $sudo;
+    _system($c, @c);
 
-  @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "/usr/local/");
-  $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
-  $sudo = "" if $sudo and -w "/usr/local/lib/perl5/$ps";
-  unshift @c, $sudo if $sudo;
-  _system($c, @c);
-
+    @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "/usr/local/");
+    $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
+    $sudo = "" if $sudo and -w "/usr/local/lib/perl5/$ps";
+    unshift @c, $sudo if $sudo;
+    _system($c, @c);
+    _set_alias($c, $p);
+  }
   print $c->output() if $c->options->{verbose};
-  my $f = "$ENV{HOME}/.perlall";
-  _dot_perlall($c, $f, "perl$p") if -f $f; # set alias
   return "/usr/local/bin/perl$p installed";
 }
 
 =item install  [ perl<version><suffix> [ from ]]
 
-alias to build
-
-=cut
-
-#sub install
-#  :Help(alias to build)
-#{
-#  build(@_);
-#}
+Same as build
 
 =item B<uninstall> perl<version><suffix>
 
@@ -522,6 +615,18 @@ sub uninstall
   :Help(sudo rm /usr/local/bin/perl <arg> and its libs)
 {
   "unimplemented";
+}
+
+=item B<smoke> [ perl<version><suffix> from ]
+
+Same as build, but reports the testresults to the smokers mailing list.
+C<from> may be a wildcard for multiple smoke branches, as C<smoke-me/*>.
+
+=cut
+
+sub _smoke
+{
+  return "unimplemented";
 }
 
 =item B<init> [perl-<version><suffix> [<modules>...]]
@@ -555,6 +660,7 @@ sub init
     # otherwise need -MCPAN -e'install qw(mods)'
     _system($c, $p, "-S", $cpan, $mods);
   }
+  _set_alias($c);
 }
 
 =item B<list> [version*]
@@ -632,6 +738,7 @@ sub do
   for my $p (@{$c->stash->{perlall}}) {
     _system($c, $p, @{$c->argv});
   }
+  _set_alias($c);
 }
 
 =item B<cpan> modules
@@ -649,6 +756,7 @@ sub cpan
   for my $p (@{$c->stash->{perlall}}) {
     _system($c, $p, "-S", "cpan", @{$c->argv});
   }
+  _set_alias($c);
 }
 
 =item B<cpanm> modules
@@ -666,6 +774,7 @@ sub cpanm
   for my $p (@{$c->stash->{perlall}}) {
     _system($c, $p, "-S", "cpanm", @{$c->argv});
   }
+  _set_alias($c);
 }
 
 =item B<make> args
@@ -685,7 +794,7 @@ sub _make {
   _system($c, $make, "-s", "clean") if -f "Makefile";
   if (-f "Makefile.PL") {
     _system($c, $p, "Makefile.PL");
-    _system($c, $make);
+    _system($c, $make,);
   } elsif (-f "Build.PL") {
     _system($c, $p, "Build.PL");
     _system($c, $p, "Build");
@@ -696,14 +805,15 @@ sub make
   :Help('perl Makefile.PL; make') 
 {
   my $c = shift;
-  my $argv = join " ",@{$c->argv}; # XXX preserve quotes!!
+  my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
-    if ($argv) {
+    if ($argv) { # preserves quotes as in -e'my $a;'
       _system($c, $p, @{$c->argv});
     }
   }
+  _set_alias($c);
 }
 
 =item B<maketest>
@@ -730,6 +840,7 @@ sub maketest
       _system($c, $make, @opts);
     }
   }
+  _set_alias($c);
 }
 
 =item B<makeinstall>
@@ -750,7 +861,25 @@ sub makeinstall
     _make($c, $p);
     _system($c, "$make test && $sudo $make install"); # csh?
   }
+  _set_alias($c);
 }
+
+
+=item B<testvm> <machines> <options>
+
+C<testvm> is only usable within a perl core builddir or in a module rootdir.
+It shells out to ssh account(s), copies the MANIFEST to the machine, runs 
+C<perlall maketest> there and copies the logfiles back.
+
+=cut
+
+sub testvm
+  :Help('test on external machines') 
+{
+  my $c = shift;
+  "unimplemented"
+}
+
 
 =item B<selfupgrade>
 

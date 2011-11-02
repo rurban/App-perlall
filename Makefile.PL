@@ -17,7 +17,6 @@ my %WriteMakefileArgs =
 		    # 'Devel::PatchPerl' => "0.46",
 		    'Pod::Usage' => "1.33",
 		    'File::Basename' => "2.74",
-		    'File::Slurp' => "9999.13",
 		    'Cwd' => "3.33",
 		    'File::Path' => "1.08",
 		    'Getopt::Long' => "2.36",
@@ -25,12 +24,17 @@ my %WriteMakefileArgs =
    "SIGN" => 1,
    ($ExtUtils::MakeMaker::VERSION gt '6.46' ?
     ('META_MERGE'  => 
-     { resources =>
-       {
+     { 
+      recommends => 
+      {
+       'File::Slurp' => "9999.13", # with B::C only
+      },
+      resources =>
+      {
 	license     => 'http://dev.perl.org/licenses/',
 	bugtracker  => 'RT',
 	repository  => 'git://github.com/rurban/App-perlall.git',
-       }}) : ()),
+      }}) : ()),
   );
 
 WriteMakefile(%WriteMakefileArgs);
@@ -42,7 +46,7 @@ if (! -f "$ENV{HOME}/.perlall") {
 Configuration in shell-syntax at ~/.perlall
 
 You might want to add this to the end of your ~/.profile for
-handy p and cdperl aliases:
+handy 'p' and 'cdperl' aliases:
 
 test -f ~/.perlall && . ~/.perlall
 INSTRUCTION

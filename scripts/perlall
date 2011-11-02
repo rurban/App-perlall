@@ -14,7 +14,6 @@ use App::Rad;
 our $VERSION = '0.01';
 use Config;
 use Cwd ();
-use File::Slurp ();
 use File::Basename ();
 
 our @opts = (
@@ -121,6 +120,7 @@ sub pre_process {
     $c->config->{cpan} = 'cpan';
     $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Task::Kensho';
     if (File::Basename::basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
+      require File::Slurp;
       $c->config->{'init-modules'} .= " ".join(" ",File::Slurp::read_file("t/top100"));
     }
   }

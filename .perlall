@@ -1,17 +1,29 @@
 alias p=perl5.15.4d-nt
 
 PERLALL_PREFIX=/usr/local
-# PERLALL_PREFIX=~/Perl/
 PERLALL_BUILDROOT=/usr/src/perl
-# PERLALL_BUILDROOT=~/Perl
+# untested!
+# PERLALL_PREFIX=~/perl5/perlbrew
+# PERLALL_BINDIR~/perl5/perlbrew/bin
+# PERLALL_BUILDROOT=~/perl5/perlbrew/build
+
 alias perl-git='cd /usr/src/perl/blead/perl-git'
+# just some suggestions
+alias pb="p -Mblib"
+alias m=make
+alias p=perl
+alias pb="p -Mblib"
+alias pmf="p Makefile.PL"
+alias pm='pmf && m'
+alias ppan='p -S cpan'
+alias mt='make test'
+alias mi="make test && sudo make install"
+alias perldoc=cpandoc
 
 cpan=cpan
 #cpan=cpanm
-
 #init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
 #   Params::Util Bundle::CPANReporter2 \
 #   B::Flags Opcodes Set::Object Math::Round Params::Classify \
-#   $(cat ~/Perl/B-C/t/top100) \
 #   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse \
 #   MouseX::Types Task::Kensho

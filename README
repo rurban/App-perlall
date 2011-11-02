@@ -2,6 +2,18 @@ This archive contains the distribution App::perlall
 
 Create perls and test with all perls
 
+perlall -v help
+
+Naming scheme: d DEBUGGING, -nt non-threaded, -m multi, @ git id
+
+Configuration in source-able shell script ~/.perlall
+
+You might want to link perlall to a valid command with "-command" appended
+  perlall-make perlall-do perlall-cpan perlall-maketest...
+but options handling is tricky then.
+
+I always disliked perlbrew, this is better.
+
 This software is copyright (c) 2011 by Reini Urban.
 
 This is free software; you can redistribute it and/or modify it under

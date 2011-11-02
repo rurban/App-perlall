@@ -153,9 +153,20 @@ sub App::Rad::_get_input {
         unless $Getopt::Long::VERSION >= 2.36;
 
     my (@options, @params);
+    my $base = File::Basename::basename($0);
+    my $cmd;
+    if ($base ne 'perlall') {
+      # take cmd from link name
+      ($cmd) = $base =~ /perlall-(\w+)$/;
+      $c->{'cmd'} = $cmd;
+      unless ($c->is_command($cmd)) {
+	warn "invalid link $base: unknown Command $cmd\n"; 
+	return;
+      }
+    }
     for (my $i=0; $i<@ARGV; $i++) {
       if (defined ($ARGV[$i]) and substr($ARGV[$i], 0, 1) ne '-') {
-	$c->{'cmd'} = $ARGV[$i];
+	$c->{'cmd'} = $ARGV[$i] unless $cmd;
 	@params = @ARGV[$i..$#ARGV];
 	shift @params;
 	last;
@@ -719,7 +730,8 @@ sub help
 sub version
   :Help(print version)
 {
-  print "perlall $main::VERSION\n";
+  # hardlink variants not yet supported (perlall-make, ...)
+  print File::Basename::basename($0)." $main::VERSION\n";
   exit;
 }
 

@@ -531,9 +531,9 @@ sub init
   my @argv = @{$c->argv};
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
   for my $p (@{$c->stash->{perlall}}) {
-    # XXX if App::cpan exists -S cpan, otherwise need -MCPAN -e'install qw(mods)'
-    warn "$p -S cpan $mods\n";
-    system("$p -S cpan $mods");
+    # XXX if App::cpan exists and works ok, -S cpan
+    # otherwise need -MCPAN -e'install qw(mods)'
+    _system($c, $p, "-S", "cpan", $mods);
   }
 }
 
@@ -611,6 +611,23 @@ sub do
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     _system($c, $p, @{$c->argv});
+  }
+}
+
+=item B<cpan> modules
+
+like C<perlall do>, but calls perl5.* -S cpan args... for all perls
+
+=cut
+
+sub cpan
+  :Help(call cpan with args for all perls) 
+{
+  my $c = shift;
+  my $argv = join " ",@{$c->argv};
+  return "missing args" unless $argv;
+  for my $p (@{$c->stash->{perlall}}) {
+    _system($c, $p, "-S", "cpan", @{$c->argv});
   }
 }
 

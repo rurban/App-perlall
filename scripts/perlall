@@ -197,6 +197,7 @@ sub _dot_perlall {
   open my $CONFIG, '<', $filename
     or Carp::croak "error opening $filename: $!\n";
   my ($s, $NEW);
+  $write = undef if $c->options->{dryrun};
   if ($write) {
     open $NEW, '>', $filename.".tmp"
       or Carp::croak "error opening $filename.tmp: $!\n";
@@ -220,10 +221,10 @@ sub _dot_perlall {
 	$v =~ s/^cd //;
       }
       $c->config->{$k} = $v;
-      if ($write) {
-	$v = $write if $k eq 'p';
-	print $NEW "alias p=$v\n";
+      if ($write and $k eq 'p') {
+	$v = $write;
       }
+      print $NEW "alias $k='$v'\n" if $write;
     }
     elsif ( m/^([^\=\:\s]+)          # key
 	      (?:                    # (value is optional)
@@ -241,6 +242,7 @@ sub _dot_perlall {
   close $CONFIG;
   if ($write) {
     close $NEW;
+    unlink $NEW;
     rename $CONFIG, $NEW
       or Carp::croak "error writing $filename: $!\n";
   }
@@ -249,7 +251,7 @@ sub _dot_perlall {
 
 sub _system {
   my $c = shift;
-  print @_,"\n" if $c->options->{verbose};
+  print join(" ",@_),"\n" if $c->options->{verbose};
   system(@_) unless $c->options->{dryrun};
 }
 
@@ -324,19 +326,19 @@ sub build
   unless (-d $root) {
     mkdir($root,0755) or _fail($c, "Cannot create PERLALL_BUILDROOT $root");
   }
-  $c->{output} .= "chdir $root\n";
-  chdir $root;
 
   my $from = shift @args ; # might be empty
   my $gitsuffix;
+  my $ps = $p;
+  $ps =~ s/\-.+$//;
+  $ps =~ s/@.+$//;
+  $ps =~ s/d$//;
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
-    my $ps = $p;
-    $ps =~ s/\-.+$//;
-    $ps =~ s/@.+$//;
-    $ps =~ s/d$//;
     if (-f $from or $from =~ /^https?:|ftp:|rsync:/) { # grab a file
       warn "XXX build from file very very unstable.\n"
 	.  "No idea how to know the resulting srcdir yet";
+      print "chdir $root\n" if $c->options->{verbose};
+      chdir $root;
       if (-f $from) {
 	_system($c, "tar xfz $from");
 	$srcdir = $root."/perl-$ps";
@@ -348,12 +350,11 @@ sub build
     } else { # git it, much better
       $srcdir = $c->config->{'perl-git'};
       $c->debug("cd $srcdir && git checkout $from");
+      print "chdir $srcdir\n" if $c->options->{verbose};
       chdir $srcdir or _fail($c, "invalid perl-git cfg $srcdir");
-      $c->{output} .= "chdir $srcdir\n";
       undef $!;
       _system($c,"git","checkout",$from); # git returns strange values, ignore
       _fail($c, "git checkout $from: $!") if $!;
-      chdir $root;
       $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
       if ($gitsuffix) {
 	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
@@ -375,30 +376,43 @@ sub build
   my $rm = $Config{rm};
   $rm = "rm" unless $rm;
 
+  print "chdir $root\n" if $c->options->{verbose};
+  chdir $root;
   my $builddir = "build".$p;
   if (-d $builddir) {
-    $c->{output} .= "chdir $builddir\n";
+    print "chdir $builddir\n" if $c->options->{verbose};
     chdir $builddir;
     _system($c, $rm, "config.h") if -f "config.h";
     _system($c, $rm, "config.sh") if -f "config.sh";
     _system($c, $rm, "Policy.sh") if -f "Policy.sh";
     _system($c, $make, "clean") if -f "Makefile";
   } else {
-    $c->{output} .= "mkdir $builddir\n";
+    print "mkdir $builddir\n" if $c->options->{verbose};
     mkdir($builddir,0755)
       or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
-    $c->{output} .= "chdir $builddir\n";
+    print "chdir $builddir\n" if $c->options->{verbose};
     chdir $builddir;
   }
   # prepare configure options, dependent on options and $p
-  my $conf = "$srcdir/Configure -de -Dusedevel -Dmksymlinks";
+  my @conf = ("$srcdir/Configure","-de","-Dusedevel","-Dmksymlinks");
   my $debug = $p =~ /\dd-?/;
-  my $ithreads = $debug;
-  $conf .= " -DEBUGGING" if $debug;
-  $conf .= " -Dusemultiplicity" if $p =~ /\dd?-m/;
-  $conf .= (($ithreads ? " -D" :" -U") . "useithreads");
-  $c->debug("$conf - missing cc,ld,ccflags,ldflags,libpath stuff");
-  _system($c, $conf);
+  my $ithreads = $p !~ /-nt/;
+  push @conf, "-DEBUGGING" if $debug;
+  push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
+  push @conf, (($ithreads ? " -D" :" -U") . "useithreads");
+  push @conf, "-D'".$c->options->{D}."'" if $c->options->{D};
+  push @conf, "-A'".$c->options->{A}."'" if $c->options->{A};
+  push @conf, "-U'".$c->options->{U}."'" if $c->options->{U};
+  if (-e "/usr/local/bin/perl") {
+    # XXX compare options
+    my $x = "/usr/local/bin/perl";
+    for (qw(cc ld ccflags ldflags libpth incpth)) {
+      my $o = `$x -V:$_`;
+      my $n = `grep "^$_=" config.sh`;
+    }
+  }
+  $c->debug(join(" ",@conf)." - missing cc,ld,ccflags,ldflags,libpath stuff");
+  _system($c, @conf);
 
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug) {

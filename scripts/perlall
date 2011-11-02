@@ -129,10 +129,10 @@ sub pre_process {
     if ( $c->argv->[0] =~ /^(perl)?5\./ ) {
       @p = (shift @{$c->argv});
       if ($p[0] =~ /[\*\?\[]/) {
-	@p = @{$c->_expand_env($p[0])};
+	@p = @{_expand_env($c, $p[0])};
       }
     } else {
-      @p = @{$c->_expand_env()};
+      @p = @{_expand_env($c)};
     }
     $c->stash->{perlall} = \@p;
   }
@@ -171,7 +171,7 @@ sub App::Rad::_get_input {
 
 # decode suffix into wanted archname. needed by build only
 # cwd is the builddir after Configure
-sub App::Rad::_suffix2arch {
+sub _suffix2arch {
   my $c = shift;
   my $_ = shift;
   my $arch = "";
@@ -179,9 +179,10 @@ sub App::Rad::_suffix2arch {
   /\dd?-nt/ or $arch .= "-multi-thread";
   /\dd?-m/ or $arch .= "-multi";
   # XXX check for needed git or branch suffix
+  return $arch;
 }
 
-sub App::Rad::_expand_env {
+sub _expand_env {
   my ($c, $glob) = @_;
   unless ($glob) {
     $glob = $ENV{perlall} ? $ENV{perlall} : "5.*";
@@ -248,7 +249,7 @@ sub _dot_perlall {
 
 sub _system {
   my $c = shift;
-  $c->{output} .= join(" ",@_)."\n";
+  print @_,"\n" if $c->options->{verbose};
   system(@_) unless $c->options->{dryrun};
 }
 
@@ -302,7 +303,8 @@ sub build
     $c->execute('help') and return undef;
   }
   $p =~ s/^perl//;
-  if ($p =~ /[\*\?\[]/) {
+  $p =~ s/^-//;
+  if ($p =~ /[\*\?\[]/ or $p !~ /^5\./) {
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
@@ -326,13 +328,16 @@ sub build
   chdir $root;
 
   my $from = shift @args ; # might be empty
+  my $gitsuffix;
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
-    # XXX very very unstable
     my $ps = $p;
     $ps =~ s/d$//;
     $ps =~ s/-nt$//;
     $ps =~ s/-m$//;
-    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) { # grab it
+    $ps =~ s/-git$//;
+    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) { # grab a file
+      warn "XXX build from file very very unstable.\n"
+	.  "No idea how to know the resulting srcdir yet";
       if (-f $from) {
 	_system($c, "tar xfz $from");
 	$srcdir = $root."/perl-$ps";
@@ -341,14 +346,26 @@ sub build
 	_system($c, "tar xfz perl-$ps.tgz");
 	$srcdir = $root."/perl-$ps";
       }
-    } else { # git it
-      chdir $c->config->{'perl-git'} or _fail($c, "invalid perl-git cfg");
+    } else { # git it, much better
       $srcdir = $c->config->{'perl-git'};
-      $c->{output} .= "chdir ".$c->config->{'perl-git'}."\n";
+      $c->debug("cd $srcdir && git checkout $from");
+      chdir $srcdir or _fail($c, "invalid perl-git cfg $srcdir");
+      $c->{output} .= "chdir $srcdir\n";
       undef $!;
       _system($c,"git","checkout",$from); # git returns strange values, ignore
       _fail($c, "git checkout $from: $!") if $!;
       chdir $root;
+      $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
+      if ($gitsuffix) {
+	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
+	  $gitsuffix = "@".substr($gitsuffix,0,6);
+	} else {
+	  $gitsuffix =~ s/^smoke-me\///;
+	  $gitsuffix =~ s/\W//; # collapse non-word chars
+	  $gitsuffix = "@".substr($gitsuffix,0,12);
+	  # $gitsuffix = "git" if $gitsuffix eq 'blead'; 
+	}
+      }
     }
   }
   my $builddir = "build".$p;
@@ -362,15 +379,44 @@ sub build
     _system($c, $make, "clean") if -f "Makefile";
   } else {
     $c->{output} .= "mkdir $builddir\n";
-    mkdir($builddir,0755) 
+    mkdir($builddir,0755)
       or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
     $c->{output} .= "chdir $builddir\n";
     chdir $builddir;
   }
+  # prepare configure options, dependent on options and $p
+  my $conf = "$srcdir/Configure -de -Dusedevel -Dmksymlinks";
+  my $debug = $p =~ /\dd-?/;
+  my $ithreads = $debug;
+  $conf .= " -DEBUGGING" if $debug;
+  $conf .= " -Dusemultiplicity" if $p =~ /\dd?-m/;
+  $conf .= (($ithreads ? " -D" :" -U") . "useithreads");
+  $c->debug("$conf - missing cc,ld,ccflags,ldflags,libpath stuff");
+  _system($c, $conf);
 
+  # fix libs on debug and git-stuff
+  if ($gitsuffix or $debug) {
+    $c->debug("post-configure archname fixes");
+    my $arch = `grep ^archname= config.sh|cut -c10-`;
+    chomp $arch;
+    $arch =~ s/'//g;
+    my $new = $arch;
+    $new .= "-debug" if $debug;
+    $new .= $gitsuffix if $gitsuffix;
+    _system($c, "sed -i 's,$arch,$new,' config.h config.sh Policy.sh");
+    # TODO mandirs
+  }
+
+  _system($c, $make); 
+  _system($c, "$make test") unless $c->options->{notest}; 
+  _system($c, "$make install DESTDIR=$root/inst-$p");
+  _system($c, "sudo cp $root/inst-$p/usr/local/bin/perl5.* /usr/local/bin/perl$p");
+  _system($c, "sudo cp -r $root/inst-$p/usr/local/lib /usr/local/");
 
   print $c->output() if $c->options->{verbose};
-  "build unimplemented"
+  my $f = "$ENV{HOME}/.perlall";
+  _dot_perlall($c, $f, "perl$p") if -f $f; # set alias
+  return "/usr/local/bin/perl$p installed";
 }
 
 =item install  [ perl<version><suffix> [ from ]]

@@ -11,7 +11,6 @@ alias perl-git='cd /usr/src/perl/blead/perl-git'
 # just some suggestions
 alias pb="p -Mblib"
 alias m=make
-alias p=perl
 alias pb="p -Mblib"
 alias pmf="p Makefile.PL"
 alias pm='pmf && m'

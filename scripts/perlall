@@ -142,6 +142,7 @@ sub pre_process {
     if ( $c->argv->[0] =~ /^(perl)?5\./ ) {
       @p = (shift @{$c->argv});
       if ($p[0] =~ /[\*\?\[]/) {
+	$p[0] =~ s/^perl//;
 	@p = @{_expand_env($c, $p[0])};
       }
     } else {
@@ -211,6 +212,7 @@ sub _expand_env {
   unless ($glob) {
     $glob = $ENV{perlall} ? $ENV{perlall} : "5.*";
   }
+  die "invalid version $glob" if $glob !~ /^5\./ or $glob =~ /[!"';,\(\)]/;
   my $prefix = $c->config->{PERLALL_BINDIR};
   return [ glob "$prefix/perl$glob" ];
 }

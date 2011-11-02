@@ -337,7 +337,8 @@ sub build
     $c->execute('help') and return undef;
   }
   my @options = keys %{$c->options};
-  warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @args\n";
+  warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @args\n" 
+    if $c->options->{verbose};
   # build is allowed to take options after the cmd: as
   $c->getopt( map {$_->[0]} @opts )
     or $c->execute('usage') and return undef;

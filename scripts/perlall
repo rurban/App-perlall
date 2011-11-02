@@ -331,10 +331,9 @@ sub build
   my $gitsuffix;
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
     my $ps = $p;
+    $ps =~ s/\-.+$//;
+    $ps =~ s/@.+$//;
     $ps =~ s/d$//;
-    $ps =~ s/-nt$//;
-    $ps =~ s/-m$//;
-    $ps =~ s/-git$//;
     if (-f $from or $from =~ /^https?:|ftp:|rsync:/) { # grab a file
       warn "XXX build from file very very unstable.\n"
 	.  "No idea how to know the resulting srcdir yet";
@@ -368,14 +367,21 @@ sub build
       }
     }
   }
-  my $builddir = "build".$p;
   my $make = $Config{make};
+  my $sed = $Config{sed};
+  $sed = "sed" unless $sed;
+  my $cp = $Config{cp};
+  $cp = "cp" unless $cp;
+  my $rm = $Config{rm};
+  $rm = "rm" unless $rm;
+
+  my $builddir = "build".$p;
   if (-d $builddir) {
     $c->{output} .= "chdir $builddir\n";
     chdir $builddir;
-    _system($c, qw(rm config.h)) if -f "config.h";
-    _system($c, qw(rm config.sh)) if -f "config.sh";
-    _system($c, qw(rm Policy.sh)) if -f "Policy.sh";
+    _system($c, $rm, "config.h") if -f "config.h";
+    _system($c, $rm, "config.sh") if -f "config.sh";
+    _system($c, $rm, "Policy.sh") if -f "Policy.sh";
     _system($c, $make, "clean") if -f "Makefile";
   } else {
     $c->{output} .= "mkdir $builddir\n";
@@ -403,15 +409,28 @@ sub build
     my $new = $arch;
     $new .= "-debug" if $debug;
     $new .= $gitsuffix if $gitsuffix;
-    _system($c, "sed -i 's,$arch,$new,' config.h config.sh Policy.sh");
+    _system($c, "$sed -i 's,$arch,$new,' config.h config.sh Policy.sh");
+    _system($c, "$sed -i 's,bin/perl$ps,bin/perl$p,' config.h config.sh");
     # TODO mandirs
   }
 
   _system($c, $make); 
   _system($c, "$make test") unless $c->options->{notest}; 
   _system($c, "$make install DESTDIR=$root/inst-$p");
-  _system($c, "sudo cp $root/inst-$p/usr/local/bin/perl5.* /usr/local/bin/perl$p");
-  _system($c, "sudo cp -r $root/inst-$p/usr/local/lib /usr/local/");
+
+  # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
+  my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
+  # XXX do we need sudo? check writable
+  my @c = ($cp, "$root/inst-$p/usr/local/bin/perl5.*","/usr/local/bin/perl$p");
+  $sudo = "" if $sudo and -w "/usr/local/bin/perl$p";
+  unshift @c, $sudo if $sudo;
+  _system($c, @c);
+
+  @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "/usr/local/");
+  $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
+  $sudo = "" if $sudo and -w "/usr/local/lib/perl5/$ps";
+  unshift @c, $sudo if $sudo;
+  _system($c, @c);
 
   print $c->output() if $c->options->{verbose};
   my $f = "$ENV{HOME}/.perlall";

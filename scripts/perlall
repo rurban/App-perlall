@@ -33,13 +33,14 @@ App::Rad->run();
 
 =head1 NAME
 
-perlall - Create all perls and test a module with all perls
+perlall - Create perls and test with all perls
 
 =head1 SYNOPSIS
 
     perlall build perl5.15.4d-nt
     perlall build perl5.15.4
-    perlall build perl5.15.4-d
+    perlall build perl5.14.2-nt
+    perlall -v build 5.15.4d-nt@khw-tk smoke-me/khw-tk
 
     perlall init perl5.15.4d-nt DBI $(cat ~/Perl/B-C/t/top100)
 
@@ -51,17 +52,21 @@ perlall - Create all perls and test a module with all perls
 
     perlall maketest "5.*.d*" # test with all debugging, version as option
 
+Planned:
+    perlall smoke blead smoke-me/*
+
 =head1 DESCRIPTION
 
 B<perlall> is a better L<perlbrew> with perls in the default
 F</usr/local/bin/>, and F</usr/local/lib/perl5/VERSION>, instead of
 locally.  It is preferred to have write access to the default PREFIX
-F</usr/local>.  It does not use L<local::lib>, does not mangle
-C<PERL5LIB> and builds and keeps sane global perl installations,
+F</usr/local> via C<sudo>. 
+It does not use L<local::lib>, does not mangle C<PERL5LIB> and builds 
+and keeps sane global perl installations,
 without the need to save and restore internal states.
 
-The currently used perl and all options are stored as alias 
-C<p> in F<~/.perlall>
+The currently used perl together with more options is stored as alias 
+C<p> in F<~/.perlall>.
 
     alias p=perl5.15.4d-nt
 
@@ -72,19 +77,20 @@ Version numbers look like C<5.xx.x> and the C<suffix> can be:
   C<d>   DEBUGGING
   C<-nt> non-threaded
   C<-m>  multi
+  C<@xxx> git ids
 
 For older perls special patches are applied to successfully build
 them.  C<archname> and the archlibs are extended by C<-debug> and
 special git suffices. The installed perl binary ditto.
 
-I use perlall on cygwin, mingw (strawberry), linux (debian+centos),
+I use perlall on cygwin, linux (debian+centos),
 freebsd, openbsd and solaris, with bash, dash and ksh. 
 Supporting other platforms besides VMS should not be hard.
-freebsd needs sudo from ports.
+freebsd needs sudo from ports. mingw (strawberry) support is planned.
 
 The do and make* commands always create a log file with the platform 
 and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
-F<log.install-osx1068-5.15.4> for C<makeinstall>.
+F<log.install-osx1068-5.15.4> for C<makeinstall>. (NOT YET)
 
 =cut
 
@@ -99,8 +105,6 @@ sub App::Rad::Help::usage {
 
 sub pre_process {
   my $c = shift;
-  # XXX Take opts only before the command, not afterwards!
-  # $c->getopt( map {$_->[0]} @opts );
   my $cmd = $c->cmd;
   # defaults: for all
   $c->config->{PERLALL_PREFIX} = '/usr/local';
@@ -113,6 +117,8 @@ sub pre_process {
       $c->config->{'init-modules'} .= " ".join(" ",File::Slurp::read_file("t/top100"));
     }
   }
+  my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
+  $c->config->{sudo} = $sudo;
   # need .perlall config
   if ($cmd =~ /^build|uninstall|init|list|do|make.*|cpan$/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
@@ -593,8 +599,7 @@ sub do
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
-    warn "$p $argv\n";
-    system("$p $argv");
+    _system($c, $p, @{$c->argv});
   }
 }
 
@@ -605,22 +610,31 @@ before executing the arguments.
 
 =cut
 
+sub _make {
+  my $c = shift;
+  my $p = shift;
+  my $make = $Config{make};
+  # XXX check MB
+  _system($c, $make, "-s", "clean") if -f "Makefile";
+  if (-f "Makefile.PL") {
+    _system($c, $p, "Makefile.PL");
+    _system($c, $make);
+  } elsif (-f "Build.PL") {
+    _system($c, $p, "Build.PL");
+    _system($c, $p, "Build");
+  }
+}
+
 sub make
   :Help('perl Makefile.PL; make') 
 {
   my $c = shift;
-  my $argv = join " ",@{$c->argv};
+  my $argv = join " ",@{$c->argv}; # XXX preserve quotes!!
   my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
-    # XXX check MB
-    system("$make -s clean");
-    warn "$p Makefile.PL\n";
-    system("$p Makefile.PL");
-    warn "$make\n";
-    system("$make");
+    _make($c, $p);
     if ($argv) {
-      warn "$p $argv\n";
-      system("$p $argv");
+      _system($c, $p, @{$c->argv});
     }
   }
 }
@@ -637,18 +651,12 @@ sub maketest
   my $c = shift;
   my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
-    # XXX check MB
-    system("$make -s clean");
-    warn "$p Makefile.PL\n";
-    system("$p Makefile.PL");
-    warn "$make\n";
-    system("$make");
-    if ($c->options->{quiet}) {
-      warn "$make test\n";
-      system("$make test");
+    _make($c, $p);
+    my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
+    if (-f "Build") {
+      _system($c, $p, "Build", @opts);
     } else {
-      warn "$make test TEST_VERBOSE=1\n";
-      system("$make test TEST_VERBOSE=1");
+      _system($c, $make, @opts);
     }
   }
 }
@@ -664,16 +672,11 @@ sub makeinstall
 {
   my $c = shift;
   my $make = $Config{make};
+  # XXX check MyCPAN.pm for sudo
+  my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
-    # XXX check MB
-    system("$make -s clean");
-    warn "$p Makefile.PL\n";
-    system("$p Makefile.PL");
-    warn "$make\n";
-    system("$make");
-    # XXX check MyCPAN.pm for sudo
-    warn "$make test && sudo $make install\n";
-    system("$make test && sudo $make install");
+    _make($c, $p);
+    _system($c, "$make test && $sudo $make install"); # csh?
   }
 }
 
@@ -716,13 +719,15 @@ sub help
 sub version
   :Help(print version)
 {
-  warn "perlapp $main::VERSION\n";
+  print "perlall $main::VERSION\n";
   exit;
 }
 
 =back
 
 =head2 OPTIONS
+
+=over
 
 =item B<-f| --force>
 

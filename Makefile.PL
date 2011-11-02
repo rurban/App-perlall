@@ -2,34 +2,51 @@ use strict;
 use warnings;
 
 use ExtUtils::MakeMaker 6.30;
+use Config;
 
 my %WriteMakefileArgs = 
   (
    "NAME" => "App::perlall",
-   "VERSION_FROM" => "scripts/perlall.pl",
-   "ABSTRACT" => "Test with all perls",
+   "VERSION_FROM" => "scripts/perlall",
+   "ABSTRACT" => "Create perls and test with all perls",
    "AUTHOR" => "Reini Urban <rurban\@cpan.org>",
-   "EXE_FILES" => [qw(script/perlall)],
    "LICENSE" => "perl",
    "PREREQ_PM" =>  {
 		    'App::Rad' => "1.04",
+		    'Devel::Platform::Info' => '0',
+		    # 'Devel::PatchPerl' => "0.46",
 		    'Pod::Usage' => "1.36",
 		    'File::Basename' => "2.77",
 		    'File::Slurp' => "9999.13",
 		    'Cwd' => "3.33",
 		    'File::Path' => "2.07",
 		    'Getopt::Long' => "2.36",
-		    # 'Devel::PatchPerl' => "0.46",
 		   },
    "SIGN" => 1,
+   ($ExtUtils::MakeMaker::VERSION gt '6.46' ?
+    ('META_MERGE'  => 
+     { resources =>
+       {
+	license     => 'http://dev.perl.org/licenses/',
+	bugtracker  => 'RT',
+	repository  => 'git://github.com/rurban/App-perlall.git',
+       }}) : ()),
   );
-
-# XXX copy .perlall to $HOME
 
 WriteMakefile(%WriteMakefileArgs);
 
-package MY;
+if (! -f "$ENV{HOME}/.perlall") {
+    my $cp = $Config{cp};
+    system($cp, ".perlall", "$ENV{HOME}/.perlall");
+    print <<INSTRUCTION;
+Configuration in shell-syntax at ~/.perlall
 
+You might want to add this to the end of your ~/.profile for
+handy p and cdperl aliases:
+
+test -f ~/.perlall && . ~/.perlall
+INSTRUCTION
+}
 
 # Local Variables:
 #   mode: cperl

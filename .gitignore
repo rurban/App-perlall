@@ -1,1 +1,4 @@
 App*.tar.gz
+*~
+.DS_Store
+Makefile.old

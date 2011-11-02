@@ -1,13 +1,9 @@
+This archive contains the distribution App::perlall
 
-
-This archive contains the distribution App-perlall,
-version 0.01:
-
-  Build and test with all perls
+Create perls and test with all perls
 
 This software is copyright (c) 2011 by Reini Urban.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
-
 

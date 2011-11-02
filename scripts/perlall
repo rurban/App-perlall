@@ -2,6 +2,13 @@
 eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
+# TODO: .lockfile
+#   trap Ctrl-Break in subprocesses
+#   properly quote do args: -e'my $a'
+#   logfiles
+#   more args (skip,newer,older,as,force,...)
+#   check opts-mix with hardlinks cmd, opts vs params
+
 use strict;
 use App::Rad;
 our $VERSION = '0.01';

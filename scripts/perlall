@@ -14,7 +14,7 @@ use App::Rad;
 our $VERSION = '0.01';
 use Config;
 use Cwd ();
-use File::Basename ();
+use File::Basename 'basename';
 
 our @opts = (
 	  [ "skip=s",   "skip versions (glob-style)" ],
@@ -103,6 +103,7 @@ F<log.install-osx1068-5.15.4> for C<makeinstall>. (NOT YET)
 sub setup { 
   $_[0]->register_commands( {-ignore_prefix => '_'} );
   $_[0]->register('install', \&build, "alias to build");
+  $_[0]->unregister('basename'); #imported (bug)
 }
 
 sub App::Rad::Help::usage {
@@ -112,22 +113,23 @@ sub App::Rad::Help::usage {
 sub pre_process {
   my $c = shift;
   my $cmd = $c->cmd;
-  # defaults: for all
+  # config defaults: for all
   $c->config->{PERLALL_PREFIX} = '/usr/local';
   # build only
   $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
   if ($cmd eq 'cpan') {
     $c->config->{cpan} = 'cpan';
     $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Task::Kensho';
-    if (File::Basename::basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
+    if (basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
       require File::Slurp;
-      $c->config->{'init-modules'} .= " ".join(" ",File::Slurp::read_file("t/top100"));
+      $c->config->{'init-modules'} .= " "
+	.join(" ",File::Slurp::read_file("t/top100"));
     }
   }
   my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
   $c->config->{sudo} = $sudo;
-  # need .perlall config
-  if ($cmd =~ /^build|uninstall|init|list|do|make.*|cpan$/) {
+  # need .perlall config. cpan/cpanm not
+  if ($cmd =~ /^build|uninstall|init|list|do|make.*$/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
       _dot_perlall($c, $_) if -f $_;
     }
@@ -137,7 +139,7 @@ sub pre_process {
       unless $c->config->{'perl-git'};
   }
   # expand versions from $ENV{perlall} or just version from first argument
-  if ($cmd =~ /^do|make.*|init|cpan|list|uninstall$/) {
+  if ($cmd =~ /^do|make.*|init|cpanm?|list|uninstall$/) {
     my @p;
     if ( $c->argv->[0] =~ /^(perl)?5\./ ) {
       @p = (shift @{$c->argv});
@@ -161,7 +163,7 @@ sub App::Rad::_get_input {
         unless $Getopt::Long::VERSION >= 2.36;
 
     my (@options, @params);
-    my $base = File::Basename::basename($0);
+    my $base = basename($0);
     my $cmd;
     if ($base ne 'perlall') {
       # take cmd from link name
@@ -171,6 +173,7 @@ sub App::Rad::_get_input {
 	warn "invalid link $base: unknown Command $cmd\n"; 
 	return;
       }
+      $c->config->{linked} = $cmd;
     }
     for (my $i=0; $i<@ARGV; $i++) {
       if (defined ($ARGV[$i]) and substr($ARGV[$i], 0, 1) ne '-') {
@@ -291,30 +294,30 @@ sub _fail {
 
 =over
 
-=item B<build> [ perl<version><suffix> [ from ]] 
+=item B<build> [ perl<version><suffix> [ from ]]
 
 Build and install the given version of perl.
 
 Unreleased git versions, like blead or smoke-me branches 
 get a C<@xxxxxx> suffix. The version can be "blead" which
-resolves to the current development version.
+resolves to the current development version. 
+C<smoke-me/> is stripped from the suffix.
 
 The optional 2nd argument C<from> can be a git tag/commit/branch, 
 e.g. a smoke-me branch, or a file or url with the perl-*.tar.gz
-The branchname is added to the perl suffix, such as perl5.15.4dnt-smokeme-utf8 
-or can be overridden with --as.
+The branchname is added to the archname suffix, such as C<@sproututf8>
+for C<sprout/utf8>, the binary name is taken from the first argument.
 
 The specified perl is taken from a perl git repo (specified in ~/.perlall), 
-or downloaded via CPAN.
+or downloaded via CPAN. (not yet)
 
 C<man> files are not installed.
 
 C<-Dusedevel> is always used to install versioned executables.
 
-Special site-specific non-default config vars are taken 
-from F</usr/local/bin/perl> if different from F</usr/bin/perl>,
-such as cf_email, perladmin, ccflags, cc, ldflags, ld, man1dir, 
-man3dir, pager, libpth.
+Special site-specific non-default config vars are taken from
+F</usr/local/bin/perl>, such as cf_email, perladmin, ccflags, cc,
+ldflags, ld, pager, libpth, incpth, useshrplib.
 
 =cut
 
@@ -339,7 +342,7 @@ sub build
   my @options = keys %{$c->options};
   warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @args\n" 
     if $c->options->{verbose};
-  # build is allowed to take options after the cmd: as
+  # build is allowed to take options after the cmd
   $c->getopt( map {$_->[0]} @opts )
     or $c->execute('usage') and return undef;
   my $srcdir;
@@ -439,7 +442,9 @@ sub build
   if (-e $tryperl) { # use tryperl as template and merge options
     my $tryargs = `$tryperl -V:config_args`;
     $c->debug("old args: $tryargs");
-    for my $f (qw(cc ld ccflags ldflags libpth incpth useshrplib)) {
+    for my $f (qw(cc ld ccflags ldflags libpth incpth pager 
+		  cf_email perladmin useshrplib))
+    {
       next if $c->options->{D} =~ /^$f[= ]/
 	or $c->options->{A} =~ /^$f[= ]/
 	or $c->options->{U} =~ /^$f[= ]/;
@@ -525,12 +530,15 @@ sub uninstall
 
 Installs and updates basic CPAN modules.
 
-Default: $init-modules from ~/.perlall
+Default: C<init-modules> in F<~/.perlall>
    (YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info 
    Params::Util Bundle::CPANReporter2 
    B::Flags Opcodes  Math::Round Params::Classify $(cat ~/Perl/B-C/t/top100)
    Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse 
    MouseX::Types Task::Kensho)
+
+Default: C<cpan>=C<cpan> or C<cpanm> in F<.perlall>
+Todo: cpan=-MCPAN
 
 =cut
 
@@ -540,10 +548,12 @@ sub init
   my $c = shift;
   my @argv = @{$c->argv};
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
+  my $cpan = $c->config->{'cpan'};
+  $cpan = 'cpan' unless $cpan;
   for my $p (@{$c->stash->{perlall}}) {
     # XXX if App::cpan exists and works ok, -S cpan
     # otherwise need -MCPAN -e'install qw(mods)'
-    _system($c, $p, "-S", "cpan", $mods);
+    _system($c, $p, "-S", $cpan, $mods);
   }
 }
 
@@ -641,10 +651,29 @@ sub cpan
   }
 }
 
+=item B<cpanm> modules
+
+like C<perlall cpan>, but uses cpanm.
+
+=cut
+
+sub cpanm
+  :Help(call cpanm with args for all perls) 
+{
+  my $c = shift;
+  my $argv = join " ",@{$c->argv};
+  return "missing args" unless $argv;
+  for my $p (@{$c->stash->{perlall}}) {
+    _system($c, $p, "-S", "cpanm", @{$c->argv});
+  }
+}
+
 =item B<make> args
 
-like C<perlall do>, but prepends C<make clean; $perl Makefile.PL; make> 
+like C<perlall do>, but prepends C<make -s clean; $perl Makefile.PL; make> 
 before executing the arguments.
+
+Also is Build.PL aware but prefers Makefile.PL.
 
 =cut
 
@@ -680,6 +709,9 @@ sub make
 =item B<maketest>
 
 like C<perlall make>, but runs C<make test TEST_VERBOSE=1> after C<make>.
+This is the most used feature.
+
+On C<--quiet> or C<-q> does not do TEST_VERBOSE=1
 
 =cut
 
@@ -688,10 +720,11 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
+  warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
-    if (-f "Build") {
+    if (!-f "Makefile" and -f "Build") {
       _system($c, $p, "Build", @opts);
     } else {
       _system($c, $make, @opts);
@@ -711,6 +744,7 @@ sub makeinstall
   my $c = shift;
   my $make = $Config{make};
   # XXX check MyCPAN.pm for sudo
+  warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
@@ -757,8 +791,8 @@ sub help
 sub version
   :Help(print version)
 {
-  # hardlink variants not yet supported (perlall-make, ...)
-  print File::Basename::basename($0)." $main::VERSION\n";
+  # hardlink variants (perlall-make, ...)
+  print basename($0)." $main::VERSION\n";
   exit;
 }
 
@@ -824,27 +858,55 @@ pass through switches to the perl Configure script.
 
 =head1 CONFIGURATION
 
-=over 4
-
-=item ~/.perlall
+B<~/.perlall> or F</etc/perlall>
 
 This is shell-script syntax with ENV vars and aliases. 
-C<alias p=$perlall> is also written by perlall.
- 
-    alias perl-git="cd /usr/src/perl/blead/perl-git"
-    alias p=perl5.15.4d-nt
+C<alias p=$perlall> is also written by C<perlall>.
 
-C<perl-git> stores the perl src root, which is also a handy alias to cd into it.
+=over 4
 
-Valid vars: 
+=item alias p=perl5.15.4d-nt
 
-    PERLALL_PREFIX  - Where perls are installed into. Default: /usr/local
-    PERLALL_BINDIR  - Where perl5 binaries. Default: PREFIX/bin
-    PERLALL_BUILDROOT - Where perls are built. Default: /usr/src/perl
-    alias perl-git  - blead root with .git to avoid downloading perl-*.tar.gz from CPAN
-    alias p         - save current perl
-    cpan 	    - cpan or cpanm
-    init-modules    - list of CPAN module names
+Save current perl.
+
+This is stored after each perlall execution.
+Dependend on p there are several other handy p aliases,
+which are active if you source them from your F<~/.profile>
+See F<.perlall>
+
+=item alias perl-git="cd /usr/src/perl/blead/perl-git"
+
+git repo to avoid downloading perl-*.tar.gz from CPAN.
+
+C<perl-git> stores the perl git root, and is also a handy alias to cd into it.
+
+=item PERLALL_PREFIX
+
+Where perls are installed into. Default: /usr/local
+
+=item PERLALL_BINDIR
+
+Where perl5. binaries are expected. 
+Default: PREFIX/bin but can also be ~/perl5/perlbrew/bin
+
+=item PERLALL_BUILDROOT
+
+Where perls are built. 
+Default: /usr/src/perl
+
+=item cpan
+
+For init only.
+
+C<cpan> or C<cpanm> (C<-MCPAN> not yet)
+
+=item init-modules
+
+List of CPAN module names for C<init>
+
+=item sudo
+
+Default: "sudo". Or "" on freebsd|cygwin|msys|MSWin32
 
 =back
 
@@ -853,7 +915,7 @@ Valid vars:
 The bash scripts, which I used for some years:
 L<http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall>
 
-L<App::perlbrew> which looked like my bash scripts and B<perlall>
+L<App::perlbrew> which looked like my bash scripts and B<perlall>,
 but pollutes PERL5LIB and thus your whole environment, similar to
 the horrible Oracle perl.
 

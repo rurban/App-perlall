@@ -378,7 +378,7 @@ sub build
 
   print "chdir $root\n" if $c->options->{verbose};
   chdir $root;
-  my $builddir = "build".$p;
+  my $builddir = "build-".$p;
   if (-d $builddir) {
     print "chdir $builddir\n" if $c->options->{verbose};
     chdir $builddir;
@@ -394,24 +394,40 @@ sub build
     chdir $builddir;
   }
   # prepare configure options, dependent on options and $p
-  my @conf = ("$srcdir/Configure","-de","-Dusedevel","-Dmksymlinks");
+  my @conf = ("$srcdir/Configure","-de","-Dusedevel","-Dmksymlinks",
+	      "-Dinstallman1dir=none","-Dinstallman3dir=none");
+  # we cannot force archname, because we don't know the resulting name yet
+  # we fix that post-configure
   my $debug = $p =~ /\dd-?/;
   my $ithreads = $p !~ /-nt/;
   push @conf, "-DEBUGGING" if $debug;
+  push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion};
   push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
-  push @conf, (($ithreads ? " -D" :" -U") . "useithreads");
+  push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
   push @conf, "-D'".$c->options->{D}."'" if $c->options->{D};
   push @conf, "-A'".$c->options->{A}."'" if $c->options->{A};
   push @conf, "-U'".$c->options->{U}."'" if $c->options->{U};
-  if (-e "/usr/local/bin/perl") {
-    # XXX compare options
-    my $x = "/usr/local/bin/perl";
-    for (qw(cc ld ccflags ldflags libpth incpth)) {
-      my $o = `$x -V:$_`;
-      my $n = `grep "^$_=" config.sh`;
+  $c->debug("config_args: ".join(" ",@conf));
+  my $tryperl = "/usr/local/bin/perl";
+  if (-e $tryperl) { # use tryperl as template and merge options
+    my $tryargs = `$tryperl -V:config_args`;
+    $c->debug("old args: $tryargs");
+    for my $f (qw(cc ld ccflags ldflags libpth incpth useshrplib)) {
+      next if $c->options->{D} =~ /^$f[= ]/
+	or $c->options->{A} =~ /^$f[= ]/
+	or $c->options->{U} =~ /^$f[= ]/;
+      my ($v) = $tryargs =~ /-D ?$f=(.+?) -/;
+      if ($f =~ /^use/ and !$v) {
+	my ($d) = $tryargs =~ /-([DU])$f /;
+	$c->debug("-$d$f");
+	push @conf, "-$d$f";
+      } elsif ($v) {
+	$c->debug("-D$f=$v") if $v;
+	push @conf, "-D$f='$v'";
+      }
     }
+    $c->debug("merged config_args: ".join(" ",@conf));
   }
-  $c->debug(join(" ",@conf)." - missing cc,ld,ccflags,ldflags,libpath stuff");
   _system($c, @conf);
 
   # fix libs on debug and git-stuff
@@ -421,11 +437,11 @@ sub build
     chomp $arch;
     $arch =~ s/'//g;
     my $new = $arch;
-    $new .= "-debug" if $debug;
-    $new .= $gitsuffix if $gitsuffix;
-    _system($c, "$sed -i 's,$arch,$new,' config.h config.sh Policy.sh");
+    $new .= "-debug" if $debug and $arch !~ /-debug/;
+    $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
+    _system($c, "$sed -i 's,$arch,$new,' config.h config.sh Policy.sh") 
+      if $arch ne $new;
     _system($c, "$sed -i 's,bin/perl$ps,bin/perl$p,' config.h config.sh");
-    # TODO mandirs
   }
 
   _system($c, $make); 

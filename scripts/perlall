@@ -3,7 +3,6 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # TODO:
-#   build: optional from if git
 #   special build patches: dbm, ... See bisect-runner.pl
 #   testvm (from perltestvm bash script, with load balancing)
 #   trap Ctrl-Break in subprocesses
@@ -644,15 +643,16 @@ sub build
   }
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
-	      (!$gitsuffix or $c->options->{link} ? "-Dmksymlinks" : ()),
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none");
   # we cannot force archname, because we don't know the resulting name yet
   # we fix that post-configure
+  # XXX However we should honor -Darchname
   my $debug = $p =~ /\dd-?/;
   my $ithreads = $p !~ /\dd?-nt/;
   if ($c->config->{usethrsuffix}) {
     $ithreads = $p =~ /\dd?thr/; # perl5.14.2dthr
   }
+  push @conf, "-Dmksymlinks" if !$gitsuffix or $c->options->{link};
   push @conf, "-DEBUGGING" if $debug;
   push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion};
   push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
@@ -701,6 +701,11 @@ sub build
     my $new = $arch;
     $new .= "-debug" if $debug and $arch !~ /-debug/;
     $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
+    if ($c->options->{D} =~ /^archname/) {
+      # XXX parse and set
+      $new = $c->options->{D};
+      $new =~ s/^archname=//;
+    }
     _system($c, "$sed -i 's,$arch,$new,' config.h config.sh Policy.sh") 
       if $arch ne $new;
     _system($c, "$sed -i 's,bin/perl$ps,bin/perl$p,' config.h config.sh");

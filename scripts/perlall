@@ -441,7 +441,15 @@ sub _system {
   my $c = shift;
   _log($c, @_) unless $c->options->{quiet};
   unless ($c->options->{dryrun}) {
-    $c->options->{verbose} ? system(@_) : qx(@_);
+    # native chdir/rmdir/mkdir/unlink
+    if ($_[0] =~ /^chdir|rmdir|mkdir|unlink$/) {
+      my $cmd = shift @_;
+      my $what = join "','",@_;
+      eval "$cmd('$what')";
+      print $! if $!; return 0 if $!;
+    } else {
+      $c->options->{verbose} ? system(@_) : qx(@_);
+    }
   }
 }
 
@@ -557,63 +565,8 @@ sub build
     _fail($c, "Empty PERLALL_BUILDROOT in .perlall");
   }
   unless (-d $root) {
-    _log($c, "mkdir $root");
-    mkdir($root,0755) or _fail($c, "Cannot create PERLALL_BUILDROOT $root");
-  }
-
-  my $from = shift @args ; # might be empty
-  my $gitsuffix;
-  my $ps = $p;
-  $ps =~ s/\-.+$//;
-  $ps =~ s/@.+$//;
-  $ps =~ s/thr$// if $c->config->{usethrsuffix};
-  $ps =~ s/d$//;
-  unless ($from) {
-    # XXX git only at first
-    if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
-      $from = _older($ps,"5.10") ? "perl-$ps" : "v$ps";
-    }
-  }
-  if ($from) { # looks like a file/url or more like a git branch/tag/commit
-    # file
-    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
-      warn "XXX build from file very very unstable.\n"
-	.  "No idea how to know the resulting srcdir yet";
-      _log($c, "cddir $root");
-      chdir $root;
-      if (-f $from) {
-	_system($c, "tar xfz $from");
-	$srcdir = $root."/perl-$ps";
-      } else {
-	_system($c, "wget -O perl-$ps.tgz $from");
-	_system($c, "tar xfz perl-$ps.tgz");
-	$srcdir = $root."/perl-$ps";
-      }
-    }
-    else { # git, much better
-      $srcdir = $c->config->{'perl-git'};
-      $c->debug("cd $srcdir && git checkout $from");
-      _log($c, "chdir $srcdir");
-      chdir $srcdir or _fail($c, "invalid perl-git cfg $srcdir");
-      undef $!;
-      _system($c,"git","checkout",$from); # git returns strange values, ignore
-      _fail($c, "git checkout $from: $!") if $!;
-      $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
-      if ($gitsuffix) {
-	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
-	  $gitsuffix = "@".substr($gitsuffix,0,6);
-	} else {
-	  $gitsuffix =~ s/^smoke-me\///;
-	  $gitsuffix =~ s/\W//; # collapse non-word chars
-          # for blead or HEAD replace by id
-          if ($gitsuffix =~ /^blead|HEAD$/) {
-	    $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
-	  }
-	  $gitsuffix = "@".substr($gitsuffix,0,12);
-	  # $gitsuffix = "git" if $gitsuffix eq 'blead'; 
-	}
-      }
-    }
+    _system($c, "mkdir",$root) 
+      or _fail($c, "Cannot create PERLALL_BUILDROOT $root");
   }
   my $make = $Config{make};
   my $sed = $Config{sed};
@@ -622,25 +575,89 @@ sub build
   $cp = "cp" unless $cp;
   my $rm = $Config{rm};
   $rm = "rm" unless $rm;
+  my $sudo = $c->config->{sudo};
 
-  _log($c,"chdir $root");
-  chdir $root;
-  my $builddir = "build-".$p;
+  my $from = shift @args ; # might be empty
+  my $gitsuffix;
+  my $ps = $p;
+  $ps =~ s/\-.+$//;
+  $ps =~ s/@.+$//;
+  $ps =~ s/thr$// if $c->config->{usethrsuffix};
+  $ps =~ s/d$//;
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !_older($ps, "5.10.0");
-  if (-d $builddir) {
-    _log($c, "chdir $builddir");
-    chdir $builddir;
-    _system($c, $rm, "config.h") if -f "config.h";
-    _system($c, $rm, "config.sh") if -f "config.sh";
-    _system($c, $rm, "Policy.sh") if -f "Policy.sh";
-    _system($c, $make, @j, "clean") if -f "Makefile";
+
+  unless ($from) {
+    # XXX git only at first
+    if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
+      $from = _older($ps,"5.10") ? "perl-$ps" : "v$ps";
+    }
   } else {
-    _log($c, "mkdir $builddir");
-    mkdir($builddir,0755)
-      or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
-    _log($c, "chdir $builddir");
-    chdir $builddir;
+    _fail ($c, "could not determine from for $p. perl-git missing");
   }
+  _system($c, "chdir", $root);
+  my $builddir = "build-".$p;
+  # XXX maybe it alerady exists and is not empty
+  if ($from) { # looks like a file/url or more like a git branch/tag/commit
+    # file
+    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
+      warn "XXX build from file very very unstable.\n"
+	.  "No idea how to know the resulting srcdir yet";
+      if (!-f $from) {
+	# try CPAN instead?
+	_system($c, "wget","-O","perl-$ps.tgz",$from);
+      }
+      _system($c, "tar","xfz","perl-$ps.tgz");
+      $srcdir = $root."/perl-$ps";
+      if (! -d $builddir) {
+	# OOPS LOOKS LIKE AN ERROR
+	_system($c, "mkdir", $builddir)
+	  or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
+      }
+      _system($c, "chdir", $builddir);
+    }
+    else { # git, much better
+      $srcdir = $c->config->{'perl-git'};
+      _fail($c, "perl-git $srcdir missing") unless -d $srcdir;
+      $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
+      my @cmd = ("mkdir", $builddir);
+      unshift @cmd, $sudo if $sudo;
+      _system($c, @cmd) unless -d $builddir;
+      _fail($c, "invalid builddir $builddir") unless -d $builddir;
+
+      # mksymlink for blead or branches
+      if (!$gitsuffix and !$c->options->{link}) { # cp anew
+	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
+	unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
+	_system($c, @cmd);
+	$srcdir = "."; # clean copy
+      }
+      _system($c, "chdir", $builddir); #or _fail($c, "invalid builddir $builddir");
+      undef $!;
+      _system($c, "git","checkout",$from); # git returns strange values, ignore
+      _fail($c, "git checkout $from: $!") if $!;
+      _system($c, "git","reset","--hard") if $srcdir eq "."; #else do a clean -dxf?
+
+      _system($c, $rm, "config.h") if -f "config.h";
+      _system($c, $rm, "config.sh") if -f "config.sh";
+      _system($c, $rm, "Policy.sh") if -f "Policy.sh";
+      _system($c, $make, @j, "clean") if -f "Makefile";
+
+      if ($gitsuffix) {
+	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
+	  $gitsuffix = "@".substr($gitsuffix,0,6);
+	} else {
+	  $gitsuffix =~ s/^smoke-me\///;
+	  $gitsuffix =~ s/\W//; # collapse non-word chars
+          # for blead or HEAD replace by id, a moving target
+          if ($gitsuffix =~ /^blead|HEAD$/) {
+	    $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
+	  }
+	  $gitsuffix = "@".substr($gitsuffix,0,12);
+	}
+      }
+    }
+  }
+
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none");
@@ -652,7 +669,7 @@ sub build
   if ($c->config->{usethrsuffix}) {
     $ithreads = $p =~ /\dd?thr/; # perl5.14.2dthr
   }
-  push @conf, "-Dmksymlinks" if !$gitsuffix or $c->options->{link};
+  push @conf, "-Dmksymlinks" if $srcdir ne "." and (!$gitsuffix or $c->options->{link});
   push @conf, "-DEBUGGING" if $debug;
   push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion};
   push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
@@ -726,7 +743,6 @@ sub build
   _system($c, $make, @j, "install", "DESTDIR=$root/inst-$p");
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
-  my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
   # do we need sudo? check writable
   my @c = ($cp, "$root/inst-$p/usr/local/bin/perl$ps","$prefix/bin/perl$p");
   $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
@@ -734,7 +750,6 @@ sub build
   _system($c, @c);
 
   @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
-  $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
   $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps";
   unshift @c, $sudo if $sudo;
   _system($c, @c);

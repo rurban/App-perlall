@@ -14,6 +14,7 @@ my %WriteMakefileArgs =
    "PREREQ_PM" =>  {
 		    'App::Rad' => "1.04",
 		    'Devel::Platform::Info' => '0',
+		    'IO::Tee' => '0.64',
 		    # 'Devel::PatchPerl' => "0.46",
 		    'Pod::Usage' => "1.33",
 		    'File::Basename' => "2.74",

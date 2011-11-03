@@ -4,12 +4,12 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 # TODO:
 #   special build patches: dbm, ... See bisect-runner.pl
-#   testvm (from perltestvm bash script)
+#   testvm (from perltestvm bash script, with load balancing)
 #   trap Ctrl-Break in subprocesses
 #   more args (as,force,j,...)
-#   check opts-mix with hardlinks cmd, opts vs params (if config->linked)
 #   build perlbrew and HOME friendly (not hardcoded paths)
-#   windows support, die on VMS, beos, ...
+#   windows support (paths, tee, tools), die on VMS, beos, ...
+#   tests: check opts-mix with hardlinks cmd, opts vs params (if config->linked)
 
 use strict;
 use App::Rad;
@@ -272,7 +272,7 @@ sub App::Rad::_get_input {
     @ARGV = @options; # getoptions eats @ARGV
     my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
     $c->debug('received options: ' . join(' ',@options) . ' => ' 
-	      . join" ",keys%{$c->{'_options'}});
+	      . _opts($c->options));
     $c->debug('received command: ' . $c->{'cmd'});
     $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
     @ARGV = @{$c->argv};
@@ -323,6 +323,17 @@ sub _get_perlall {
     }
   }
   %skip ? grep(!$skip{$_},@p) : @p;
+}
+
+# string of hash key=val...
+sub _opts {
+  my $h = shift;
+  my $s = '';
+  for (keys %$h) {
+    my $v = $h->{$_};
+    $s .= ($v != 1 ? "$s $_=$v" : "$s $_");
+  }
+  substr($s,1);
 }
 
 # $p gets full path
@@ -526,8 +537,7 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  my @options = keys %{$c->options};
-  warn "perlall ".(@options?"[-".join(" -",@options)."] ":"")."build $p @args\n" 
+  warn "perlall "._opts($c->options)."build $p @args\n" 
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix} . $p;
   # build is allowed to take options after the cmd
@@ -1006,9 +1016,10 @@ Options:
 Config settings:
 
     testvm="[user@]hostnames..."
-    testvm_prefix=Perl - if in a module
+    testvm_prefix=Perl - relative remote basepath of your modules
+          i.e. local basename = B-Generate => remote: vmhost:Perl/B-Generate
     testvm_max=4       - balancing, default for -j
-    testvm_ctl=virtsh  - type of vm ctl: virtsh, xen, vmrun, virtualbox
+    testvm_ctl=virsh   - type of vm ctl: virsh, xen-shell, vmrun, VBoXManage
 
 VM Balancing:
 
@@ -1024,8 +1035,8 @@ sub testvm
   :Help('test on remote accounts via ssh/rsync (vm or host)') 
 {
   my $c = shift;
-  # a different option set
-  $c->getopt( "init", "up", "prefix=s", "cmd=s", "option=s", "max|j=n" );
+  # testvm has a different option set and allows options after the command
+  $c->getopt( "init|i", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
   my @testvm = split //,$c->config->{testvm};
   my $argv = join " ",@{$c->argv};
   my @machines = $argv ? split(//,$argv) : @testvm;
@@ -1034,7 +1045,7 @@ sub testvm
   #       But then we have to check the network for possible machines, 
   #       or we want to do all hosts in /etc/hosts?
   # XXX check if in core or in a module
-  warn "perlall testvm ".join(" ",keys %{$c->options})." @machines\n" 
+  warn "perlall testvm "._opts($c->options)." @machines\n" 
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
 

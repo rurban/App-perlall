@@ -1,3 +1,4 @@
+# optionally source this from .profile
 alias p=perl5.15.4d-nt
 
 PERLALL_PREFIX=/usr/local
@@ -35,6 +36,6 @@ cpan=cpan
 testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 winxp solaris"
 # where modules are:
 testvm_prefix=Perl
-# TODO: control balancing? (virtsh, xen, vmrun, virtualbox)
+# TODO: control balancing? (virsh, xen-shell, vmrun, VBoXManage)
 #testvm_max=4
-#testvm_ctl=virtsh
+#testvm_ctl=virsh

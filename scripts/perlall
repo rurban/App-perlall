@@ -2,12 +2,11 @@
 eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
-# TODO: .lockfile
-#   logfiles
-#   special build patches: dbm, ...
+# TODO:
+#   special build patches: dbm, ... See bisect-runner.pl
 #   testvm (from perltestvm bash script)
 #   trap Ctrl-Break in subprocesses
-#   more args (quiet,as,force,j,...)
+#   more args (as,force,j,...)
 #   check opts-mix with hardlinks cmd, opts vs params (if config->linked)
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support, die on VMS, beos, ...
@@ -32,7 +31,7 @@ our @opts = (
 	  [ "D=s",      "./configure option" ],
 	  [ "A=s",      "./configure option" ],
 	  [ "U=s",      "./configure option" ],
-	  [ "j=n",      "parallel make" ],
+	  [ "j=n",      "parallel make (>5.10)" ],
 	  [ "link",     "make symlinks with git" ],
 	  [ "notest|n", "skip the test suite on build and makeinstall" ],
 	  [ "force|f",  "force install" ],
@@ -178,8 +177,12 @@ sub pre_process {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
       _dot_perlall($c, $_) if -f $_;
     }
+    $c->config->{PERLALL_PREFIX} = '/usr/local'
+      unless $c->config->{PERLALL_PREFIX};
     $c->config->{PERLALL_BINDIR} = $c->config->{PERLALL_PREFIX}."/bin"
       unless $c->config->{PERLALL_BINDIR};
+    $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl'
+      unless $c->config->{PERLALL_BUILDROOT};
     $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
       unless $c->config->{'perl-git'};
 
@@ -296,6 +299,7 @@ sub _get_perlall {
   }
   die "invalid version $glob" if $glob !~ /^5\./ or $glob =~ /[!"';,\(\)]/;
   my $prefix = $c->config->{PERLALL_BINDIR};
+  $prefix = "/usr/local/bin" unless $prefix;
   my @p = glob "$prefix/perl$glob";
   # do the filtering
   @p = grep !/\@/,@p if $c->options->{nogit};
@@ -595,13 +599,14 @@ sub build
   print "chdir $root\n" if $c->options->{verbose};
   chdir $root;
   my $builddir = "build-".$p;
+  my @j = ("-j".$c->options->{j}) if $c->options->{j} and !_older($ps, "5.10.0");
   if (-d $builddir) {
     print "chdir $builddir\n" if $c->options->{verbose};
     chdir $builddir;
     _system($c, $rm, "config.h") if -f "config.h";
     _system($c, $rm, "config.sh") if -f "config.sh";
     _system($c, $rm, "Policy.sh") if -f "Policy.sh";
-    _system($c, $make, "clean") if -f "Makefile";
+    _system($c, $make, @j, "clean") if -f "Makefile";
   } else {
     print "mkdir $builddir\n" if $c->options->{verbose};
     mkdir($builddir,0755)
@@ -680,12 +685,12 @@ sub build
     system($cp,"x2p/$makefile.new","x2p/$makefile");
   }
 
-  _system($c, $make); 
-  _system($c, $make, "test") unless $c->options->{notest};
+  _system($c, $make, @j); 
+  _system($c, $make, @j, "test") unless $c->options->{notest};
   if ($c->cmd eq 'smoke') {
-    return $c->execute('_smoke', $p, $from) if $c->cmd eq 'smoke'; # XXX not yet
+    return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  _system($c, $make, "install", "DESTDIR=$root/inst-$p");
+  _system($c, $make, @j, "install", "DESTDIR=$root/inst-$p");
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
   my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
@@ -908,7 +913,7 @@ sub _make {
   $c->stash->{log} = $c->stash->{logprefix} . _short($p);
   if (-f "Makefile.PL") {
     _system($c, $p, "Makefile.PL");
-    _system($c, $make,);
+    _system($c, $make);
   } elsif (-f "Build.PL") {
     _system($c, $p, "Build.PL");
     _system($c, $p, "Build");
@@ -948,6 +953,7 @@ sub maketest
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
+    unshift @opts,"-j".$c->options->{j} if $c->options->{j} and !_older($p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {
       _system($c, $p, "Build", @opts);
     } else {

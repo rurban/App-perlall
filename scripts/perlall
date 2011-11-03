@@ -3,6 +3,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # TODO:
+#   build: optional from if git
 #   special build patches: dbm, ... See bisect-runner.pl
 #   testvm (from perltestvm bash script, with load balancing)
 #   trap Ctrl-Break in subprocesses
@@ -331,7 +332,7 @@ sub _opts {
   my $s = '';
   for (keys %$h) {
     my $v = $h->{$_};
-    $s .= ($v != 1 ? "$s $_=$v" : "$s $_");
+    $s .= ($v != 1 ? "$s --$_=$v" : "$s --$_");
   }
   substr($s,1);
 }
@@ -339,8 +340,8 @@ sub _opts {
 # $p gets full path
 sub _older {
   my ($p, $ver) = @_;
-  $p =~ s/^.*perl5\.//;
-  $p =~ s/(\.\d+)\D.*$//;
+  $p =~ s/^.*(perl)?5\.//;
+  $p =~ s/(\.\d+)\D.*$/\1/;
   # perl5.14.2d-nt@345aef vs 5.12 => 14.2 vs 12
   $ver =~ s/^5\.//;
   return $p < $ver;
@@ -439,6 +440,14 @@ sub _short {
 
 sub _system {
   my $c = shift;
+  _log($c, @_) unless $c->options->{quiet};
+  unless ($c->options->{dryrun}) {
+    $c->options->{verbose} ? system(@_) : qx(@_);
+  }
+}
+
+sub _log {
+  my $c = shift;
   my $q = $c->options->{quiet};
   my $log = $c->stash->{log};
   my $fh  = $c->stash->{log_fh};
@@ -457,9 +466,6 @@ sub _system {
     print $fh join(" ",@_),"\n" unless $q;
   } else {
     print join(" ",@_),"\n" if $v;
-  }
-  unless ($dryrun) {
-    $v ? system(@_) : qx(@_);
   }
 }
 
@@ -537,8 +543,7 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  warn "perlall "._opts($c->options)."build $p @args\n" 
-    if $c->options->{verbose};
+  _log($c,"perlall",_opts($c->options),"build",$p,@args);
   $c->stash->{log} = $c->stash->{logprefix} . $p;
   # build is allowed to take options after the cmd
   $c->getopt( map {$_->[0]} @opts )
@@ -553,6 +558,7 @@ sub build
     _fail($c, "Empty PERLALL_BUILDROOT in .perlall");
   }
   unless (-d $root) {
+    _log($c, "mkdir $root");
     mkdir($root,0755) or _fail($c, "Cannot create PERLALL_BUILDROOT $root");
   }
 
@@ -563,11 +569,18 @@ sub build
   $ps =~ s/@.+$//;
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
   $ps =~ s/d$//;
+  unless ($from) {
+    # XXX git only at first
+    if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
+      $from = _older($ps,"5.10") ? "perl-$ps" : "v$ps";
+    }
+  }
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
-    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) { # grab a file
+    # file
+    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
       warn "XXX build from file very very unstable.\n"
 	.  "No idea how to know the resulting srcdir yet";
-      print "chdir $root\n" if $c->options->{verbose};
+      _log($c, "cddir $root");
       chdir $root;
       if (-f $from) {
 	_system($c, "tar xfz $from");
@@ -577,10 +590,11 @@ sub build
 	_system($c, "tar xfz perl-$ps.tgz");
 	$srcdir = $root."/perl-$ps";
       }
-    } else { # git it, much better
+    }
+    else { # git, much better
       $srcdir = $c->config->{'perl-git'};
       $c->debug("cd $srcdir && git checkout $from");
-      print "chdir $srcdir\n" if $c->options->{verbose};
+      _log($c, "chdir $srcdir");
       chdir $srcdir or _fail($c, "invalid perl-git cfg $srcdir");
       undef $!;
       _system($c,"git","checkout",$from); # git returns strange values, ignore
@@ -592,6 +606,10 @@ sub build
 	} else {
 	  $gitsuffix =~ s/^smoke-me\///;
 	  $gitsuffix =~ s/\W//; # collapse non-word chars
+          # for blead or HEAD replace by id
+          if ($gitsuffix =~ /^blead|HEAD$/) {
+	    $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
+	  }
 	  $gitsuffix = "@".substr($gitsuffix,0,12);
 	  # $gitsuffix = "git" if $gitsuffix eq 'blead'; 
 	}
@@ -606,22 +624,22 @@ sub build
   my $rm = $Config{rm};
   $rm = "rm" unless $rm;
 
-  print "chdir $root\n" if $c->options->{verbose};
+  _log($c,"chdir $root");
   chdir $root;
   my $builddir = "build-".$p;
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !_older($ps, "5.10.0");
   if (-d $builddir) {
-    print "chdir $builddir\n" if $c->options->{verbose};
+    _log($c, "chdir $builddir");
     chdir $builddir;
     _system($c, $rm, "config.h") if -f "config.h";
     _system($c, $rm, "config.sh") if -f "config.sh";
     _system($c, $rm, "Policy.sh") if -f "Policy.sh";
     _system($c, $make, @j, "clean") if -f "Makefile";
   } else {
-    print "mkdir $builddir\n" if $c->options->{verbose};
+    _log($c, "mkdir $builddir");
     mkdir($builddir,0755)
       or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
-    print "chdir $builddir\n" if $c->options->{verbose};
+    _log($c, "chdir $builddir");
     chdir $builddir;
   }
   # prepare configure options, dependent on options and $p
@@ -689,8 +707,8 @@ sub build
   }
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (`grep '<command-line> $makefile`) {
-    system($^X,'-n','-e"print unless /<command-line>/"',$makefile,">$makefile.new");
-    system($^X,'-n','-e"print unless /<command-line>/"',"x2p/$makefile",">x2p/$makefile.new");
+    system($^X,'-nl','-e"print unless /<command-line>/"',$makefile,">$makefile.new");
+    system($^X,'-nl','-e"print unless /<command-line>/"',"x2p/$makefile",">x2p/$makefile.new");
     system($cp,"$makefile.new",$makefile);
     system($cp,"x2p/$makefile.new","x2p/$makefile");
   }

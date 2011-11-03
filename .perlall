@@ -6,6 +6,7 @@ PERLALL_BUILDROOT=/usr/src/perl
 # PERLALL_PREFIX=~/perl5/perlbrew
 # PERLALL_BINDIR~/perl5/perlbrew/bin
 # PERLALL_BUILDROOT=~/perl5/perlbrew/build
+#usethrsuffix=0
 
 alias perl-git='cd /usr/src/perl/blead/perl-git'
 # just some suggestions
@@ -19,6 +20,7 @@ alias mt='make test'
 alias mi="make test && sudo make install"
 alias perldoc=cpandoc
 
+# for init
 cpan=cpan
 #cpan=cpanm
 #init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
@@ -26,3 +28,13 @@ cpan=cpan
 #   B::Flags Opcodes Set::Object Math::Round Params::Classify \
 #   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse \
 #   MouseX::Types Task::Kensho
+
+# testvm settings taken from default perl (/usr/local/bin/perl, /usr/bin/perl)
+# and remote perlall. e.g. freebsd make=gmake
+# valid [user@]hostnames (manipulate your /etc/hosts)
+testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 winxp solaris"
+# where modules are:
+testvm_prefix=Perl
+# TODO: control balancing? (virtsh, xen, vmrun, virtualbox)
+#testvm_max=4
+#testvm_ctl=virtsh

@@ -331,7 +331,7 @@ sub _opts {
   my $s = '';
   for (keys %$h) {
     my $v = $h->{$_};
-    $s .= ($v != 1 ? "$s --$_=$v" : "$s --$_");
+    $s .= ($v != 1 ? " --".$_."=$v" : " --".$_);
   }
   substr($s,1);
 }
@@ -442,8 +442,8 @@ sub _short {
 
 sub _system {
   my $c = shift;
-  _log($c, @_) unless $c->options->{quiet};
   unless ($c->options->{dryrun}) {
+    _log($c, @_) unless $c->options->{quiet};
     # native chdir/rmdir/mkdir/unlink
     if ($_[0] =~ /^chdir|rmdir|mkdir|unlink$/) {
       my $cmd = shift @_;
@@ -599,7 +599,8 @@ sub build
     }
   }
   undef $!;
-  _system($c, "chdir", $root);
+  _log($c, "chdir $root") unless $c->options->{quiet} or $c->options->{dryrun};
+  chdir $root;
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
   if ($from) { # looks like a file/url or more like a git branch/tag/commit

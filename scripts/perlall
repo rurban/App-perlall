@@ -743,7 +743,8 @@ sub build
 
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
-	      "-Dinstallman1dir=none","-Dinstallman3dir=none");
+	      "-Dinstallman1dir=none","-Dinstallman3dir=none",
+	      "-Dinstallsiteman1dir=none","-Dinstallsiteman3dir=none");
   # we cannot force archname, because we don't know the resulting name yet
   # we fix that post-configure
   # XXX However we should honor -Darchname

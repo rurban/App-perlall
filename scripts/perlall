@@ -1013,7 +1013,7 @@ sub cpan
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    _system($c, $p, "-S", "cpan", @{$c->argv});
+    _system0($c, $p, "-S", "cpan", @{$c->argv});
   }
   _set_alias($c);
 }
@@ -1032,7 +1032,7 @@ sub cpanm
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    _system($c, $p, "-S", "cpanm", @{$c->argv});
+    _system0($c, $p, "-S", "cpanm", @{$c->argv});
   }
   _set_alias($c);
 }
@@ -1074,7 +1074,7 @@ sub make
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
-      _system($c, $p, @{$c->argv});
+      _system0($c, $p, @{$c->argv});
     }
   }
   _set_alias($c);
@@ -1100,9 +1100,9 @@ sub maketest
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} if $c->options->{j} and !_older($c, $p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {
-      _system($c, $p, "Build", @opts);
+      _system0($c, $p, "Build", @opts);
     } else {
-      _system($c, $make, @opts);
+      _system0($c, $make, @opts);
     }
   }
   _set_alias($c);
@@ -1124,8 +1124,8 @@ sub makeinstall
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
-    _print0("$make test && $sudo $make install");
-    _system($c, "$make test && $sudo $make install"); # csh?
+    #_print0("$make test && $sudo $make install");
+    _system0($c, "$make test && $sudo $make install"); # csh?
   }
   _set_alias($c);
 }
@@ -1196,7 +1196,7 @@ sub testvm
   _fail($c, "$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
   if ( -M $man > -M $f ) {
-    _print1 "Creating $f" unless $c->options->{quiet};
+    print "Creating $f\n" unless $c->options->{quiet};
     open M,'<',$man; open F,'>',$f;
     while (<M>) {
       print F $_ unless /^#/;
@@ -1207,7 +1207,8 @@ sub testvm
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
     _system($c,"rsync","-avzL","--delete",'--files-from=MANIFEST.files','.',"$m:$prefix/$base/");
-    _system($c,"ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
+    #_print1 "$m:$base perlall $cmd $opt" unless $c->options->{quiet};
+    _system1($c,"ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
       unless $c->options->{up};
   }
   "testvm done on @machines"
@@ -1237,21 +1238,27 @@ sub initvm
   unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
     for my $t (/ecdsa dsa rsa /) {
       if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
+	_print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys" unless $c->options->{quiet};
 	qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
 	qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
 	last
       }
     }
   }
-  _system($c,"rsync","-avzL",$0,"$m:bin/perlall");
+  _system1($c,"rsync","-avzL",$0,"$m:bin/perlall");
   # check .perlall, and cpan deps
   unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
-    _system($c,"rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
+    #_print1 "rsync -avzL ~/.perlall $m:.perlall" unless $c->options->{quiet};
+    _system1($c,"rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
   }
-  _system($c,"ssh",$m,"perl","-MCPAN",
+  #_print1 "ssh $m perl -MCPAN -e\"install 'App::Rad IO::Tee Devel::Platform::Info'\""
+  #  unless $c->options->{quiet};
+  _system1($c,"ssh",$m,"perl","-MCPAN",
 	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info'");
   # XXX we are not sure if bin is in the PATH
-  _system($c,"ssh",$m,"bin/perlall init ".join " ",@{$c->argv});
+  #_print1 "ssh $m bin/perlall init @{$c->argv}"
+  #  unless $c->options->{quiet};
+  _system1($c,"ssh",$m,"bin/perlall init ".join " ",@{$c->argv});
   "initvm done on ".$m
 }
 

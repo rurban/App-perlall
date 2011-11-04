@@ -20,6 +20,7 @@ use Config;
 use Cwd ();
 use File::Basename 'basename';
 use IO::Tee;
+use Devel::Platform::Info;
 
 our @opts = (
 	  [ "skip=s",   "skip versions (glob-style)" ],
@@ -76,17 +77,23 @@ perlall - Create perls and test with all perls
 	  "quiet|q",  "Make perlall command quieter"
 	  "verbose|v","Make perlall command say more"
 	  "dryrun!",  "do not execute commands, only print"
+	  "log!",     "skip writing to the log file"
+	  "help|h",   "commands and options"
+	  "debug|d",  "lots of internal debugging output"
+	  "version|V"
+
+build only:
 	  "D=s",      "./configure option"
 	  "A=s",      "./configure option"
 	  "U=s",      "./configure option"
 	  "j=n",      "parallel make" (NOT YET)
 	  "link",     "-Dmksymlinks with git, otherwise copy"
+
+build and makeinstall
 	  "notest|n", "skip the test suite on build and makeinstall"
 	  "force|f",  "force install"
-	  "log!",     "skip writing to the log file"
-	  "help|h",   "commands and options"
-	  "debug|d",  "lots of internal debugging output"
-	  "version|V"
+
+testvm: see L</testvm>
 
 =head1 DESCRIPTION
 
@@ -186,7 +193,6 @@ sub pre_process {
 
     # logging + locking
     # "we should not disturb a running perlall in this dir"
-    require Devel::Platform::Info;
     my $d = Devel::Platform::Info->new->get_info();
     my $s = $d->{oslabel}.$d->{osvers}; $s=~s/\s//g;
     $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
@@ -278,12 +284,12 @@ sub App::Rad::_get_input {
     $parser->configure( qw(bundling) );
     @ARGV = @options; # getoptions eats @ARGV
     my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
-    $c->debug('received options: ' . join(' ',@options) . ' => ' 
+    $c->debug('received options: ' . join(' ',@options) . ' => '
 	      . _opts($c->options));
     $c->debug('received command: ' . $c->{'cmd'});
     $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
     @ARGV = @{$c->argv};
-    return $c;	      
+    return $c;
 }
 
 sub _get_perlall {
@@ -327,7 +333,7 @@ sub _opts {
     my $v = $h->{$_};
     $s .= ($v != 1 ? " --".$_."=$v" : " --".$_);
   }
-  substr($s,1);
+  substr($s,1); ##bogus warning "substr outside of string at scripts/perlall line 336"
 }
 
 # $p gets full path
@@ -336,7 +342,7 @@ sub _older {
   my ($p, $ver) = @_;
   $p =~ s/^.*perl5\.//;
   $p =~ s/^5\.//;
-  $p =~ s/(\.\d+)\D.*$/\1/;
+  $p =~ s/(\.\d+)\D.*$/$1/;
   # perl5.14.2d-nt@345aef vs 5.12 => 14.2 vs 12
   $ver =~ s/^5\.//;
   $c->debug("_older($_[0],$_[1]) => $p,$ver");
@@ -560,47 +566,26 @@ The builddir is under C<PERLALL_BUILDROOT> (Default: "/usr/src/perl")
 as "build-E<lt>versionE<gt>E<lt>suffix>"
 The intermediate "make install DESTDIR" as "inst-E<lt>versionE<gt>E<lt>suffixE<gt>".
 
-Specific options: C<-D -A -U -j --link --as --notest --force>
+Specific OPTIONS:
 
-=head2 OPTIONS
+  -f|--force    Force installation if make test fails.
+  -jnum         Enable parallel make and test (if supported by the target perl)
 
-=over
+                perlall build -j5 perl5.12.3
 
-=item B<-f| --force>
-
-Force installation of a perl.
-
-=item B<-j>C<number>
-
-Enable parallel make and test (if supported by the target perl)
-
-  perlall build -j5 perl5.12.3
-
-=item B<--link>
-
-Force C<-Dmksymlinks> to the srcdir. Otherwise releases from git are
-copied anew.
-
-=item B<-n|--notest>
-
-Skip the test suite
-
-=item B<--as>
-
-Install a given perl under the given name.
+  --link        Force -Dmksymlinks to the srcdir. Otherwise releases from git 
+                are copied anew.
+  -n|--notest   Skip the test suite
+  --as name     Install a given perl under the given name.
 
     perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
     perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
 
-=item B<-D>, B<-U>, B<-A>
-
-pass through switches to the perl Configure script.
+  -D.. -U.. -A..  pass through switches to the perl Configure script.
 
     perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
 
-Certain special switches are merged from F</usr/local/bin/perl>.
-
-=back
+    Certain special switches are merged from F</usr/local/bin/perl>.
 
 =cut
 
@@ -641,7 +626,7 @@ sub build
   _fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $srcdir;
   my $cwd = Cwd::getcwd();
-  END { chdir $cwd if $cwd; }
+  END { chdir $cwd if $cwd }
 
   my $root = $c->config->{PERLALL_BUILDROOT};
   my $prefix = $c->config->{PERLALL_PREFIX};
@@ -1064,13 +1049,16 @@ sub _make {
   my $c = shift;
   my $p = shift;
   my $make = $Config{make};
-  # XXX check MB
+  # checks MB
   _system($c, $make, "-s", "clean") if -f "Makefile";
   $c->stash->{log} = $c->stash->{logprefix} . _short($p);
   if (-f "Makefile.PL") {
     _system($c, $p, "Makefile.PL");
     _system0($c, $make);
   } elsif (-f "Build.PL") {
+    # this is broken and needs a realclean
+    _system($c, "./Build", "realclean") if -f "Build" and $^O ne 'MSWin32';
+    _system($c, "rm", "-rf", "blib", "_Build", "Build" ) if $^O ne 'MSWin32';
     _system($c, $p, "Build.PL");
     _system0($c, $p, "Build");
   }
@@ -1145,7 +1133,7 @@ sub makeinstall
 =item B<testvm> [OPTIONS] [user@]hostname...
 
 Does C<perlall maketest> in parallel on remote machines.
-C<testvm> is only usable within a perl core builddir/srcdir 
+C<testvm> is only usable within a perl core builddir/srcdir
 or in a module rootdir.
 It shells out to ssh account(s), copies the files in MANIFEST 
 to the machine, runs C<perlall maketest> there and copies the
@@ -1154,6 +1142,7 @@ logfiles back.
 Options:
 
     --init|i   - copy pubkey to .ssh/authorized_keys, perlall to ~bin/\
+                 same as deploy
     --all|a    - all hosts defined in config C<testvm>
     --up       - only upload
     --prefix|p=Perl - remote basedir
@@ -1175,35 +1164,57 @@ VM Balancing:
     If the remote hosts are VM's on this machine, you can control how many
     VM's should run in parallel, and how they are started and stopped.
 
-    If C<testvm_ctl> is not set, no balancing - start+stop - will be done, 
+    If C<testvm_ctl> is not set, no balancing - start+stop - will be done,
     such as on physical hosts or enough VM power.
     See F<.perlall>
 
 =cut
 
 sub testvm
-  :Help('test on remote accounts via ssh/rsync (vm or host)') 
+  :Help('test on remote accounts via ssh/rsync (vm or host)')
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
   $c->addopts( "init|i", "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
 
   my @testvm = split //,$c->config->{testvm};
-  my $argv = join " ",@{$c->argv};
-  my @machines = $argv ? split(//,$argv) : @testvm;
-  # XXX Expand glob-style machines 
+  my @machines = $c->options->{all} ? @testvm : @{$c->argv};
+  return "missing args" unless @machines;
+
+  # XXX Expand glob-style machines
   # Idea: - check /etc/hosts so testvm can be empty?
-  #       But then we have to check the network for possible machines, 
+  #       But then we have to check the network for possible machines,
   #       or we want to do all hosts in /etc/hosts?
   #       - check hosts in .ssh/known_hosts
   # XXX check if in core or in a module
-  warn "perlall testvm "._opts($c->options)." @machines\n" 
+  warn "perlall testvm "._opts($c->options)." @machines\n"
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
-
+  for my $m (@machines) {
+    if ($c->options->{init}) {
+      unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
+	for my $t (/ecdsa dsa rsa /) {
+	  if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
+	    qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
+	    qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
+	    last
+	  }
+	}
+      }
+      _system($c,"rsync","-avzL",$0,"$m:bin/perlall");
+      # check .perlall, and cpan deps
+      unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
+	_system($c,"rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
+      }
+      _system($c,"ssh",$m,"perl","-MCPAN",
+	      "-e'install qw(App::Rad IO::Tee Devel::Platform::Info)'");
+      # we are not sure if bin is in the PATH
+      _system($c,"ssh",$m,"bin/perlall","init");
+    }
+    #
+  }
   "unimplemented"
 }
-
 
 =item B<selfupgrade>
 
@@ -1212,7 +1223,7 @@ This command upgrades perlall to its latest version.
 =cut
 
 sub selfupgrade
-  :Help(upgrade perlall to its latest version) 
+  :Help(upgrade perlall to its latest version)
 {
   my $c = shift;
   "unimplemented" # see perlbrew
@@ -1286,7 +1297,7 @@ For C<build>, this prints the whole build and test process to STDOUT.
 
 B<~/.perlall> or F</etc/perlall>
 
-This is shell-script syntax with ENV vars and aliases. 
+This is shell-script syntax with ENV vars and aliases.
 C<alias p=$perlall> is also written by C<perlall>.
 
 =over 4

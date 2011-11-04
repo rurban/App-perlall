@@ -464,13 +464,20 @@ sub _log {
       if ( $v and !$dryrun ) {
 	# STDERR also doubles all console prints. but we want system messages
 	$fh = IO::Tee->new(\*STDOUT, \*STDERR, ">$log");
+	$fh = IO::Tee->new(\*STDOUT, ">$log") unless $fh;
       } else {
 	$fh = $q ? IO::File->new(">>$log") : \*STDOUT;
 	select $fh if $q;
       }
       $c->stash->{log_fh} = $fh;
     }
-    print $fh join(" ",@_),"\n" unless $q;
+    if (!$q) {
+      if ($fh) {
+	print $fh join(" ",@_),"\n";
+      } else {
+	print join(" ",@_),"\n"; # fails on my centos5
+      }
+    }
   } else {
     print join(" ",@_),"\n" if $v;
   }

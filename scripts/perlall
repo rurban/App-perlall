@@ -449,7 +449,7 @@ sub _system {
     } else {
       $c->options->{verbose} ? system(@_) : qx(@_);
     }
-  }
+  } else { return 0 };
 }
 
 sub _log {
@@ -556,6 +556,7 @@ sub build
   }
   $c->stash->{log} = $c->stash->{logprefix} . $p;
   _log($c,"perlall",_opts($c->options),"build",$p,@args);
+  _fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $srcdir;
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd; }
@@ -597,7 +598,7 @@ sub build
     }
   }
   undef $!;
-  _log($c, "chdir $root") unless $c->options->{quiet} or $dryrun;
+  _log($c, "chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty

@@ -312,14 +312,14 @@ sub _get_perlall {
     # XXX if last char is non-decimal match this suffix filter also
     my $ver = $c->options->{older};
     for (@p) {
-      $skip{$_}++ if _older($_, $ver);
+      $skip{$_}++ if _older($c, $_, $ver);
     }
   }
   if ($c->options->{newer}) { #or same
     my $ver = $c->options->{newer};
     # XXX if last char is non-decimal match this suffix filter also
     for (@p) {
-      $skip{$_}++ unless _older($_, $ver);
+      $skip{$_}++ unless _older($c, $_, $ver);
     }
   }
   %skip ? grep(!$skip{$_},@p) : @p;
@@ -338,11 +338,14 @@ sub _opts {
 
 # $p gets full path
 sub _older {
+  my $c = shift;
   my ($p, $ver) = @_;
-  $p =~ s/^.*(perl)?5\.//;
+  $p =~ s/^.*perl5\.//;
+  $p =~ s/^5\.//;
   $p =~ s/(\.\d+)\D.*$/\1/;
   # perl5.14.2d-nt@345aef vs 5.12 => 14.2 vs 12
   $ver =~ s/^5\.//;
+  $c->debug("_older($_[0],$_[1]) => $p,$ver");
   return $p < $ver;
 }
 
@@ -584,16 +587,17 @@ sub build
   $ps =~ s/@.+$//;
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
   $ps =~ s/d$//;
-  my @j = ("-j".$c->options->{j}) if $c->options->{j} and !_older($ps, "5.10.0");
+  my @j = ("-j".$c->options->{j}) if $c->options->{j} and !_older($c, $ps, "5.10.0");
 
   unless ($from) {
     # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
-      $from = _older($ps,"5.10.0") ? "perl-$ps" : "v$ps";
+      $from = _older($c, $ps,"5.10.0") ? "perl-$ps" : "v$ps";
     } else {
       _fail ($c, "could not determine from argument for $p. perl-git missing?");
     }
   }
+  undef $!;
   _system($c, "chdir", $root);
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
@@ -1001,7 +1005,7 @@ sub maketest
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
-    unshift @opts,"-j".$c->options->{j} if $c->options->{j} and !_older($p,"5.10.0");
+    unshift @opts,"-j".$c->options->{j} if $c->options->{j} and !_older($c, $p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {
       _system($c, $p, "Build", @opts);
     } else {

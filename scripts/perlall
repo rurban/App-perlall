@@ -236,6 +236,15 @@ sub pre_process {
   }
 }
 
+# add opts for specific commands
+# getopts overwites the old opts
+sub App::Rad::addopts {
+  my $c = shift;
+  my $savopts = $c->options;
+  $c->getopt( @_ );
+  $c->options->{$_} = $savopts->{$_} for keys %$savopts; # merge with old opts
+}
+
 # only process opts before the command. 
 # all other opts are passed verbatim to the subprocesses
 sub App::Rad::_get_input {
@@ -554,10 +563,10 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  _log($c,"perlall",_opts($c->options),"build",$p,@args);
   $c->stash->{log} = $c->stash->{logprefix} . $p;
+  _log($c,"perlall",_opts($c->options),"build",$p,@args);
   # build is allowed to take options after the cmd
-  $c->getopt( map {$_->[0]} @opts )
+  $c->addopts( map {$_->[0]} @opts ) # overwrites globals options
     or $c->execute('usage') and return undef;
   my $srcdir;
   my $cwd = Cwd::getcwd();
@@ -1083,7 +1092,8 @@ sub testvm
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
-  $c->getopt( "init|i", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
+  $c->addopts( "init|i", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
+
   my @testvm = split //,$c->config->{testvm};
   my $argv = join " ",@{$c->argv};
   my @machines = $argv ? split(//,$argv) : @testvm;
@@ -1124,7 +1134,7 @@ sub help
   :Help('list of commands. With -v more')
 {
   my $c = shift;
-  $c->getopt( 'verbose|v' );
+  $c->addopts( 'verbose|v' );
   require Pod::Usage;
   return Pod::Usage::pod2usage
     ( { -message => App::Rad::Help::usage() . "\n\n"

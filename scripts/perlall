@@ -3,6 +3,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # TODO:
+#   stablier .lock file handling (custom end blocks)
 #   special build patches: dbm, ... See bisect-runner.pl
 #   testvm (from perltestvm bash script, with load balancing)
 #   trap Ctrl-Break in subprocesses
@@ -106,37 +107,38 @@ without the need to save and restore internal states.
 The suffices are used in postprocessing scripts to keep arch-features together.
 
 The currently used perl together with more options is stored as alias 
-C<p> in F<~/.perlall>.
+C<p> in F<~/.perlall>, which can be sourced by your F<.profile>.
 
     alias p=perl5.15.4d-nt
 
 Build and init perls:
 
-Version numbers look like C<5.xx.x> and the C<suffix> can be any of:
+Version numbers look like C<5.xx.x> and the perl C<suffix> can be any of:
 
   C<d>    DEBUGGING
   C<-nt>  non-threaded, or
   C<-m>   multi
-  C<@xxx> git ids
+  C<@xxxxxx> git ids / branch names
 
 You want to switch to using a "thr" suffix, then the default
 is non-threaded. This behaviour is controlled via the config setting 
 C<usethrsuffix=1>.
 
 For older perls special patches are applied to successfully build
-them.  C<archname> and the archlibs are extended by C<-debug> and
-special git suffices. The installed perl binary ditto.
+them. C<archname> and the archlibs are extended by C<-debug> and
+special git suffices. The installed perl binary and on windows
+the F<perl.dll> ditto.
 
-I use perlall on cygwin, linux (debian+centos),
-freebsd, openbsd and solaris, with bash, dash and ksh. 
+I plan to use perlall on cygwin, linux (debian+centos),
+freebsd, openbsd and solaris, with bash, dash and ksh.
 Supporting other platforms besides VMS should not be hard.
 freebsd needs sudo from ports. mingw (strawberry) support is planned.
 
 The do and make* commands always create a log file with the platform 
 and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
-F<log.install-osx1068-5.15.4> for C<makeinstall>. (NOT YET)
+F<log.install-osx1068-5.15.4> for C<makeinstall>.
 
-In L<B::C> there are post-processing scripts 
+In L<B::C> there are post-processing scripts
 F<status_upd> and F<store_rpt> for those generated logfiles.
 
 =cut
@@ -162,7 +164,10 @@ sub pre_process {
   $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
   if ($cmd eq 'cpan') {
     $c->config->{cpan} = 'cpan';
-    $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Task::Kensho';
+    $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info'
+      .' Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor'
+      .' YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Modern::Perl'
+      .' Task::Kensho';
     if (basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
       require File::Slurp;
       $c->config->{'init-modules'} .= " "
@@ -203,15 +208,15 @@ sub pre_process {
     close LOCK;
     END {
       my $l = "perlall.lock";
-      if (-f $l) {
+      if (-f $l) { # do not override other locks
 	open LOCK,"<",$l;
 	my $pid = <LOCK>;
 	close LOCK;
 	if ($$ == $pid) {
 	  unlink $l;
 	} else {
-	  warn "Other perlall process $pid still running\n";
-	  unlink $l;
+	  warn "Other perlall process $pid still running. perlall.lock kept\n";
+	  # unlink $l;
 	}
       }
     }
@@ -299,7 +304,7 @@ sub _get_perlall {
   my @p = glob "$prefix/perl$glob";
   # do the filtering
   @p = grep !/\@/,@p if $c->options->{nogit};
-  # hmm, glob-style
+  # glob-style
   my %skip;
   if ($c->options->{skip}) {
     %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
@@ -462,9 +467,7 @@ sub _log {
   if ($log) {
     if ( !$fh ) {
       if ( $v and !$dryrun ) {
-	# STDERR also doubles all console prints. but we want system messages
-	$fh = IO::Tee->new(\*STDOUT, \*STDERR, ">$log");
-	$fh = IO::Tee->new(\*STDOUT, ">$log") unless $fh;
+	$fh = IO::Tee->new(\*STDOUT, ">$log");
       } else {
 	$fh = $q ? IO::File->new(">>$log") : \*STDOUT;
 	select $fh if $q;

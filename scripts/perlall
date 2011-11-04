@@ -438,8 +438,8 @@ sub _short {
 
 sub _system {
   my $c = shift;
+  _log($c, @_) unless $c->options->{quiet};
   unless ($c->options->{dryrun}) {
-    _log($c, @_) unless $c->options->{quiet};
     # native chdir/rmdir/mkdir/unlink
     if ($_[0] =~ /^chdir|rmdir|mkdir|unlink$/) {
       my $cmd = shift @_;
@@ -550,11 +550,12 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
+  # build is allowed to take all options after the cmd
+  if (@args) {
+    $c->addopts( map {$_->[0]} @opts );
+  }
   $c->stash->{log} = $c->stash->{logprefix} . $p;
   _log($c,"perlall",_opts($c->options),"build",$p,@args);
-  # build is allowed to take options after the cmd
-  $c->addopts( map {$_->[0]} @opts ) # overwrites globals options
-    or $c->execute('usage') and return undef;
   my $srcdir;
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd; }
@@ -580,6 +581,7 @@ sub build
   my $from = shift @args ; # might be empty
   my $gitsuffix;
   my $ps = $p;
+  my $dryrun = $c->options->{dryrun};
   $ps =~ s/\-.+$//;
   $ps =~ s/@.+$//;
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
@@ -595,8 +597,8 @@ sub build
     }
   }
   undef $!;
-  _log($c, "chdir $root") unless $c->options->{quiet} or $c->options->{dryrun};
-  chdir $root;
+  _log($c, "chdir $root") unless $c->options->{quiet} or $dryrun;
+  chdir $root unless $dryrun;
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
@@ -624,12 +626,12 @@ sub build
     }
     else { # git, much better
       $srcdir = $c->config->{'perl-git'};
-      _fail($c, "perl-git $srcdir missing") unless -d $srcdir;
+      _fail($c, "perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
       $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
       my @cmd = ("mkdir", $builddir);
       unshift @cmd, $sudo if $sudo;
       _system($c, @cmd) unless -d $builddir;
-      _fail($c, "invalid builddir $builddir") unless -d $builddir;
+      _fail($c, "invalid builddir $builddir") if !-d $builddir and !$dryrun;
 
       # mksymlink for blead or branches
       if (!$gitsuffix and !$c->options->{link}) { # cp anew
@@ -641,7 +643,7 @@ sub build
       } else {
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
       }
-      _system($c, "chdir", $builddir); #or _fail($c, "invalid builddir $builddir");
+      _system($c, "chdir", $builddir);# and _fail($c, "invalid builddir $builddir");
       undef $!;
       _system($c, "git","checkout",$from); # git returns strange values, ignore
       _fail($c, "git checkout $from: $!") if $!;
@@ -654,7 +656,7 @@ sub build
 	  $gitsuffix =~ s/^smoke-me\///;
 	  $gitsuffix =~ s/\W//; # collapse non-word chars
           # for blead or HEAD replace by id, a moving target
-          if ($gitsuffix =~ /^blead|HEAD$/) {
+          if ($gitsuffix =~ /^blead|HEAD$/ and !$dryrun) {
 	    $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
 	  }
 	  $gitsuffix = "@".substr($gitsuffix,0,12);
@@ -722,8 +724,9 @@ sub build
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug) {
     $c->debug("post-configure archname fixes");
-    my $arch = `grep ^archname= config.sh|cut -c10-`;
+    my $arch = `grep ^archname= config.sh|cut -c10-` unless $dryrun;
     chomp $arch;
+    $arch = "fake-arch" if $dryrun;
     $arch =~ s/'//g;
     my $new = $arch;
     $new .= "-debug" if $debug and $arch !~ /-debug/;
@@ -738,7 +741,7 @@ sub build
     _system($c, "$sed -i 's,bin/perl$ps,bin/perl$p,' config.h config.sh");
   }
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
-  if (`grep '<command-line> $makefile`) {
+  if (!$dryrun and `grep '<command-line> $makefile`) {
     system($^X,'-nl','-e"print unless /<command-line>/"',$makefile,">$makefile.new");
     system($^X,'-nl','-e"print unless /<command-line>/"',"x2p/$makefile",">x2p/$makefile.new");
     system($cp,"$makefile.new",$makefile);
@@ -769,6 +772,7 @@ sub build
   _set_alias($c, $p);
 
   print $c->output() if $c->options->{verbose};
+  return "$prefix/bin/perl$p faked" if $dryrun;
   return -f "$prefix/bin/perl$p"
     ? "$prefix/bin/perl$p installed"
     : "$prefix/bin/perl$p failed to install";

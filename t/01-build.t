@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 3;
+use Test::More tests => 5;
 
 {
   # fake home for cpan-testers
@@ -12,4 +12,6 @@ use Test::More tests => 3;
   like( $c, qr/received options: -d -v --dryrun/m, "options" );
   like( $c, qr/received parameters: 5.15.4 blead/m, "params" );
   # if $perl-git/.git exists check more
+  like( $c, qr/post-configure archname fixes/m, "almost through" );
+  like( $c, qr/5.15.4 faked$/m, "fake end" );
 }

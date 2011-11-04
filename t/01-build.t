@@ -11,4 +11,5 @@ use Test::More tests => 3;
   like( $c, qr/^\[debug\]   executing 'build'/m, "cmd=build" );
   like( $c, qr/received options: -d -v --dryrun/m, "options" );
   like( $c, qr/received parameters: 5.15.4 blead/m, "params" );
+  # if $perl-git/.git exists check more
 }

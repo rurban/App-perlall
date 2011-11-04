@@ -566,7 +566,7 @@ sub build
   }
   unless (-d $root) {
     _system($c, "mkdir",$root) 
-      or _fail($c, "Cannot create PERLALL_BUILDROOT $root");
+      and _fail($c, "Cannot create PERLALL_BUILDROOT $root");
   }
   my $make = $Config{make};
   my $sed = $Config{sed};
@@ -606,14 +606,19 @@ sub build
 	.  "No idea how to know the resulting srcdir yet";
       if (!-f $from) {
 	# try CPAN instead?
-	_system($c, "wget","-O","perl-$ps.tgz",$from);
+	_system($c, "wget","-O","perl-$ps.tgz",$from) 
+	  and _fail("downloading $from failed");
+	$from = "perl-$ps.tgz";
       }
-      _system($c, "tar","xfz","perl-$ps.tgz");
+      my @tarx = (($^O eq 'solaris' ? 'gtar' : 'tar'),
+	  ($from =~ m/bz2$/ ? 'xjf' : 'xzf' ));
+      _system($c, @tarx, $from) and _fail("extracting the tarball $from failed");
       $srcdir = $root."/perl-$ps";
       if (! -d $builddir) {
 	# OOPS LOOKS LIKE AN ERROR
 	_system($c, "mkdir", $builddir)
-	  or _fail($c, "Cannot create $builddir. Check your PERLALL_BUILDROOT in ~/.perlall");
+	  and _fail($c, "Cannot create $builddir."
+		    ." Check your PERLALL_BUILDROOT in ~/.perlall");
       }
       _system($c, "chdir", $builddir);
     }
@@ -741,11 +746,12 @@ sub build
   }
 
   _system($c, $make, @j); 
-  _system($c, $make, @j, "test") unless $c->options->{notest};
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  _system($c, $make, @j, "install", "DESTDIR=$root/inst-$p");
+  my $testerr = _system($c, $make, @j, "test") unless $c->options->{notest};
+  _system($c, $make, @j, "install", "DESTDIR=$root/inst-$p")
+    if !$testerr or $c->options->{force};
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
   # do we need sudo? check writable

@@ -288,19 +288,6 @@ sub App::Rad::_get_input {
     return $c;	      
 }
 
-# decode suffix into wanted archname. needed by build only
-# cwd is the builddir after Configure
-sub _suffix2arch {
-  my $c = shift;
-  my $_ = shift;
-  my $arch = "";
-  /\dd-?/ and $arch .= "-debug";
-  /\dd?-nt/ or $arch .= "-multi-thread";
-  /\dd?-m/ or $arch .= "-multi";
-  # XXX check for needed git or branch suffix
-  return $arch;
-}
-
 sub _get_perlall {
   my ($c, $glob) = @_;
   unless ($glob) {

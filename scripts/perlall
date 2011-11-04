@@ -445,7 +445,7 @@ sub _system {
       my $cmd = shift @_;
       my $what = join "','",@_;
       eval "$cmd('$what')";
-      print $! if $!; return 0 if $!;
+      # print $! if $!; return 0 if $!;
     } else {
       $c->options->{verbose} ? system(@_) : qx(@_);
     }
@@ -585,6 +585,7 @@ sub build
   my $rm = $Config{rm};
   $rm = "rm" unless $rm;
   my $sudo = $c->config->{sudo};
+  $sudo = "" unless $<; # already sudo
 
   my $from = shift @args ; # might be empty
   my $gitsuffix;
@@ -604,7 +605,7 @@ sub build
       _fail ($c, "could not determine from argument for $p. perl-git missing?");
     }
   }
-  undef $!;
+  # undef $!;
   _log($c, "chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
   my $builddir = "build-".$p;
@@ -637,24 +638,25 @@ sub build
       _fail($c, "perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
       $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
       my @cmd = ("mkdir", $builddir);
-      unshift @cmd, $sudo if $sudo;
+      unshift @cmd, $sudo if $sudo and !-w $builddir;
       _system($c, @cmd) unless -d $builddir;
       _fail($c, "invalid builddir $builddir") if !-d $builddir and !$dryrun;
+      _system($c, $sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
 
       # mksymlink for blead or branches
       if (!$gitsuffix and !$c->options->{link}) { # cp anew
 	$c->debug("copy full git tree anew for $from, no gitsuffix");
 	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
-	unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
+	# unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
 	_system($c, @cmd);
 	$srcdir = "."; # clean copy
       } else {
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
       }
       _system($c, "chdir", $builddir);# and _fail($c, "invalid builddir $builddir");
-      undef $!;
-      _system($c, "git","checkout",$from); # git returns strange values, ignore
-      _fail($c, "git checkout $from: $!") if $!;
+      # undef $!;
+      _system($c, "git","checkout","-f",$from); # git returns strange values, ignore
+      _fail($c, "git checkout -f $from") unless -f "Configure";
       _system($c, "git","reset","--hard") if $srcdir eq "."; #else do a clean -dxf?
 
       if ($gitsuffix) {

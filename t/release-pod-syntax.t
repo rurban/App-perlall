@@ -1,9 +1,9 @@
 #!perl
 
 BEGIN {
-  unless ($ENV{RELEASE_TESTING}) {
+  unless (-d '.git' or $ENV{RELEASE_TESTING}) {
     require Test::More;
-    Test::More::plan(skip_all => 'release candidate testing only');
+    Test::More::plan(skip_all => 'author test');
   }
 }
 

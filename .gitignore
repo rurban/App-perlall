@@ -1,4 +1,10 @@
 App*.tar.gz
 *~
 .DS_Store
+Makefile
 Makefile.old
+MYMETA.json
+MYMETA.yml
+META.yml
+log.*
+pm_to_blib

@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 # TODO:
 #   stablier .lock file handling (custom end blocks)
+#   init: disable use_sqlite for the first bunch (DBI...)
 #   special build patches: dbm, ... See bisect-runner.pl
 #   testvm (from perltestvm bash script, with load balancing)
 #   trap Ctrl-Break in subprocesses
@@ -27,15 +28,7 @@ our @opts = (
 	  [ "nogit",    "skip @ git versions" ],
 	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
-	  [ "as=s",     "install perl under given name" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
-	  [ "D=s",      "./configure option" ],
-	  [ "A=s",      "./configure option" ],
-	  [ "U=s",      "./configure option" ],
-	  [ "j=n",      "parallel make (>5.10)" ],
-	  [ "link",     "make symlinks with git" ],
-	  [ "notest|n", "skip the test suite on build and makeinstall" ],
-	  [ "force|f",  "force install" ],
 	  [ "nolog",    "skip writing log files" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
@@ -52,7 +45,7 @@ perlall - Create perls and test with all perls
     perlall build perl5.15.4d-nt
     perlall build perl5.15.4
     perlall build perl5.14.2-nt
-    perlall -v build 5.15.4d-nt@khw-tk smoke-me/khw-tk
+    perlall -v build -j4 5.15.4d-nt@khw-tk smoke-me/khw-tk
 
     perlall init perl5.15.4d-nt DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
 
@@ -67,7 +60,7 @@ perlall - Create perls and test with all perls
 
 =head2 Planned Features
 
-    perlall smoke blead smoke-me/*
+    perlall smoke -j4 blead smoke-me/*
     perlall cpan Devel::*
     perlall testvm centos4 centos5 centos6 solaris10 freebsd7 freebsd8 openbsd89 cygwin
     perlall testvm --all
@@ -162,7 +155,7 @@ sub pre_process {
   $c->config->{PERLALL_PREFIX} = '/usr/local';
   # build only
   $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
-  if ($cmd eq 'cpan') {
+  if ($cmd =~ "init") {
     $c->config->{cpan} = 'cpan';
     $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info'
       .' Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor'
@@ -441,9 +434,14 @@ sub _short {
   return $p;
 }
 
-sub _system {
+sub _print0 {
+    print "\033[1;32m",join(" ",@_),"\033[0;0m\n";
+}
+sub _print1 {
+    print "\033[1;39m",join(" ",@_),"\033[0;0m\n";
+}
+sub __system {
   my $c = shift;
-  _log($c, @_) unless $c->options->{quiet};
   unless ($c->options->{dryrun}) {
     # native chdir/rmdir/mkdir/unlink
     if ($_[0] =~ /^chdir|rmdir|mkdir|unlink$/) {
@@ -456,7 +454,31 @@ sub _system {
     }
   } else { return 0 };
 }
-
+sub _system {
+  my $c = shift;
+  unless ($c->options->{quiet}) {
+    _log($c, @_);
+  }
+  __system($c, @_); 
+}
+sub _system0 {
+  my $c = shift;
+  unless ($c->options->{quiet}) {
+    local $c->options->{quiet} = 1;
+    _print0(@_);
+    _log($c, @_);
+  }
+  __system($c, @_); 
+}
+sub _system1 {
+  my $c = shift;
+  unless ($c->options->{quiet}) {
+    local $c->options->{quiet} = 1;
+    _print1(@_);
+    _log($c, @_);
+  }
+  __system($c, @_);
+}
 sub _log {
   my $c = shift;
   my $q = $c->options->{quiet};
@@ -502,7 +524,7 @@ sub _fail {
 
 =over
 
-=item B<build> [ perl<version><suffix> [ from ]]
+=item B<build> [OPTIONS] perl<version><suffix> [ from ]
 
 Build and install the given version of perl.
 
@@ -519,7 +541,7 @@ marked with C<@> and the sources are copied to the
 builddir. C<-Dmksymlinks> is not used, unless the option C<--link> is
 specified.
 
-On cygwin and windows the perl*.dll also gets the suffix, because they
+On cygwin and windows the F<perl*.dll> also gets the suffix, because they
 are stored globally. (NOT YET)
 
 The specified perl is taken from a perl git repo 
@@ -534,11 +556,51 @@ Special site-specific non-default config vars are taken from
 F</usr/local/bin/perl>, such as C<cf_email, perladmin, ccflags, cc,
 ldflags, ld, pager, libpth, incpth, useshrplib>.
 
-The builddir is under PERLALL_BUILDROOT (Default: "/usr/src/perl")
-as "build-E<lt>versionE<gtE<lt>suffix>"
-The intermediate "make install DESTDIR" as "inst-E<lt>versionE<gtE<lt>suffixE<gt>".
+The builddir is under C<PERLALL_BUILDROOT> (Default: "/usr/src/perl")
+as "build-E<lt>versionE<gt>E<lt>suffix>"
+The intermediate "make install DESTDIR" as "inst-E<lt>versionE<gt>E<lt>suffixE<gt>".
 
-Specific options: -D -A -U -j --link --as --notest --force
+Specific options: C<-D -A -U -j --link --as --notest --force>
+
+=head2 OPTIONS
+
+=over
+
+=item B<-f| --force>
+
+Force installation of a perl.
+
+=item B<-j>C<number>
+
+Enable parallel make and test (if supported by the target perl)
+
+  perlall build -j5 perl5.12.3
+
+=item B<--link>
+
+Force C<-Dmksymlinks> to the srcdir. Otherwise releases from git are
+copied anew.
+
+=item B<-n|--notest>
+
+Skip the test suite
+
+=item B<--as>
+
+Install a given perl under the given name.
+
+    perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
+    perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
+
+=item B<-D>, B<-U>, B<-A>
+
+pass through switches to the perl Configure script.
+
+    perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
+
+Certain special switches are merged from F</usr/local/bin/perl>.
+
+=back
 
 =cut
 
@@ -560,9 +622,19 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  # build is allowed to take all options after the cmd
+  # special build options (after the cmd)
   if (@args) {
-    $c->addopts( map {$_->[0]} @opts );
+    my @build_opts = (
+	  [ "as=s",     "install perl under given name" ],
+	  [ "D=s",      "./configure option" ],
+	  [ "A=s",      "./configure option" ],
+	  [ "U=s",      "./configure option" ],
+	  [ "j=n",      "parallel make (>5.10)" ],
+	  [ "link",     "make symlinks with git" ],
+	  [ "notest|n", "skip the test suite on build and makeinstall" ],
+	  [ "force|f",  "force install" ]
+      );
+    $c->addopts( map {$_->[0]} @build_opts );
   }
   $c->stash->{log} = $c->stash->{logprefix} . $p;
   _log($c,"perlall",_opts($c->options),"build",$p,@args);
@@ -732,7 +804,7 @@ sub build
     _system($c, "cp", "-r", "$srcdir/*", ".");
     $conf[1] = "Configure";
   }
-  _system($c, @conf);
+  _system0($c, @conf);
 
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug) {
@@ -807,10 +879,12 @@ sub uninstall
   "unimplemented";
 }
 
-=item B<smoke> [ perl<version><suffix> from ]
+=item B<smoke> [OPTIONS] perl<version><suffix> [ from ]
 
-Same as build, but reports the testresults to the smokers mailing list.
+Same as C<build>, but reports the testresults to the smokers mailing list.
 C<from> may be a wildcard for multiple smoke branches, as C<smoke-me/*>.
+
+Description and OPTIONS see L</build>.
 
 =cut
 
@@ -843,13 +917,19 @@ sub init
   my $c = shift;
   my @argv = @{$c->argv};
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
+  return "missing config init-modules" unless $mods;
   my $cpan = $c->config->{'cpan'};
   $cpan = 'cpan' unless $cpan;
+  $c->options->{verbose} = 1;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
     # XXX if App::cpan exists and works ok, -S cpan
-    # otherwise need -MCPAN -e'install qw(mods)'
-    _system($c, $p, "-S", $cpan, $mods);
+    #     otherwise need -MCPAN -e'install qw(mods)'
+    # use_sqlite bootstrap: YAML DBI DBD::SQLite CPAN::SQLite
+    qx($p -MCPAN::SQLite -e0); if ($!)  {# okay
+      _system($c, $p, "-MCPAN", '-e"install qw(DBI DBD::SQLite)"');
+    }
+    _system($c, $p, "-S", $cpan, split / /,$mods);
   }
   _set_alias($c);
 }
@@ -989,10 +1069,10 @@ sub _make {
   $c->stash->{log} = $c->stash->{logprefix} . _short($p);
   if (-f "Makefile.PL") {
     _system($c, $p, "Makefile.PL");
-    _system($c, $make);
+    _system0($c, $make);
   } elsif (-f "Build.PL") {
     _system($c, $p, "Build.PL");
-    _system($c, $p, "Build");
+    _system0($c, $p, "Build");
   }
 }
 
@@ -1055,29 +1135,32 @@ sub makeinstall
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     _make($c, $p);
+    _print0("$make test && $sudo $make install");
     _system($c, "$make test && $sudo $make install"); # csh?
   }
   _set_alias($c);
 }
 
 
-=item B<testvm> [<options] <machines>
+=item B<testvm> [OPTIONS] [user@]hostname...
 
 Does C<perlall maketest> in parallel on remote machines.
 C<testvm> is only usable within a perl core builddir/srcdir 
 or in a module rootdir.
-It shells out to ssh account(s), copies the MANIFEST to the machine, runs 
-C<perlall maketest> there and copies the logfiles back.
+It shells out to ssh account(s), copies the files in MANIFEST 
+to the machine, runs C<perlall maketest> there and copies the
+logfiles back.
 
 Options:
 
-    --init  - copy pubkey to .ssh/authorized_keys, perlall to ~bin/
-    --up    - only upload
-    --prefix=Perl - remote basedir
-    --cmd=<remotecmd> any valid perlall command, like
-              build, init, makeinstall, smoke. Default: maketest
-    --args=<> any remote perlall args
-    -j4     - how many machines in parallel. Also --max=n
+    --init|i   - copy pubkey to .ssh/authorized_keys, perlall to ~bin/\
+    --all|a    - all hosts defined in config C<testvm>
+    --up       - only upload
+    --prefix|p=Perl - remote basedir
+    --cmd|c=<remotecmd> any valid perlall command, like
+               build, init, makeinstall, smoke. Default: maketest
+    --option|o="" remaining remote perlall cmd options and args
+    --max|j 4  - how many machines in parallel.
 
 Config settings:
 
@@ -1094,6 +1177,7 @@ VM Balancing:
 
     If C<testvm_ctl> is not set, no balancing - start+stop - will be done, 
     such as on physical hosts or enough VM power.
+    See F<.perlall>
 
 =cut
 
@@ -1102,7 +1186,7 @@ sub testvm
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
-  $c->addopts( "init|i", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
+  $c->addopts( "init|i", "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
 
   my @testvm = split //,$c->config->{testvm};
   my $argv = join " ",@{$c->argv};
@@ -1171,20 +1255,6 @@ sub version
 
 =over
 
-=item B<-f| --force>
-
-Force installation of a perl.
-
-=item B<-j>C<number>
-
-Enable parallel make and test (if supported by the target perl)
-
-  perlall build -j5 perl5.12.3
-
-=item B<-n| --notest>
-
-Skip the test suite
-
 =item B<--skip> C<versions>
 
 versions might be a glob-style regex.
@@ -1208,20 +1278,7 @@ Make perlall command quieter.
 
 Make perlall command say more.
 
-For C<build> command, this prints the building whole process to STDOUT.
-
-=item B<--as>
-
-Install a given perl under the given name.
-
-    perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
-    perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
-
-=item B<-D>, B<-U>, B<-A>
-
-pass through switches to the perl Configure script.
-
-    perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
+For C<build>, this prints the whole build and test process to STDOUT.
 
 =back
 

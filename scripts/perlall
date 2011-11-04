@@ -408,7 +408,7 @@ sub _dot_perlall {
 }
 
 # store alias p if explicitly wished (2nd arg $p), 
-# or if only one version was selected. no perl prefix
+# or if only one version was selected. received with no perl prefix
 sub _set_alias {
   my ($c, $p) = @_;
   my $f = "$ENV{HOME}/.perlall";
@@ -589,14 +589,14 @@ sub build
   unless ($from) {
     # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
-      $from = _older($ps,"5.10") ? "perl-$ps" : "v$ps";
+      $from = _older($ps,"5.10.0") ? "perl-$ps" : "v$ps";
+    } else {
+      _fail ($c, "could not determine from argument for $p. perl-git missing?");
     }
-  } else {
-    _fail ($c, "could not determine from for $p. perl-git missing");
   }
   _system($c, "chdir", $root);
   my $builddir = "build-".$p;
-  # XXX maybe it alerady exists and is not empty
+  # XXX maybe it already exists and is not empty
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
     # file
     if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
@@ -1079,9 +1079,10 @@ sub testvm
   my $argv = join " ",@{$c->argv};
   my @machines = $argv ? split(//,$argv) : @testvm;
   # XXX Expand glob-style machines 
-  # Idea: check /etc/hosts so testvm can be empty?
+  # Idea: - check /etc/hosts so testvm can be empty?
   #       But then we have to check the network for possible machines, 
   #       or we want to do all hosts in /etc/hosts?
+  #       - check hosts in .ssh/known_hosts
   # XXX check if in core or in a module
   warn "perlall testvm "._opts($c->options)." @machines\n" 
     if $c->options->{verbose};

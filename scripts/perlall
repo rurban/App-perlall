@@ -656,7 +656,7 @@ sub build
       _system($c, "chdir", $builddir);# and _fail($c, "invalid builddir $builddir");
       # undef $!;
       _system($c, "git","checkout","-f",$from); # git returns strange values, ignore
-      _fail($c, "git checkout -f $from") unless -f "Configure";
+      _fail($c, "git checkout -f $from") if !-f "Configure" and !$dryrun;
       _system($c, "git","reset","--hard") if $srcdir eq "."; #else do a clean -dxf?
 
       if ($gitsuffix) {

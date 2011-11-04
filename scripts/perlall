@@ -807,9 +807,9 @@ sub build
       $new = $c->options->{D};
       $new =~ s/^archname=//;
     }
-    _system($c, "$sed -i 's,$arch,$new,' config.h config.sh Policy.sh") 
+    _system($c, $sed, "-i.bak","-e's,$arch,$new,'","config.h","config.sh","Policy.sh")
       if $arch ne $new;
-    _system($c, "$sed -i 's,bin/perl$ps,bin/perl$p,' config.h config.sh");
+    _system($c, $sed, "-i.bak","-e's,bin/perl$ps,bin/perl$p,'","config.h","config.sh");
   }
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (!$dryrun and `grep '<command-line> $makefile`) {

@@ -666,7 +666,6 @@ sub build
       _fail ($c, "could not determine from argument for $p. perl-git missing?");
     }
   }
-  # undef $!;
   _log($c, "chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
   my $builddir = "build-".$p;
@@ -715,10 +714,11 @@ sub build
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
       }
       _system($c, "chdir", $builddir);# and _fail($c, "invalid builddir $builddir");
-      # undef $!;
       _system($c, "git","checkout","-f",$from); # git returns strange values, ignore
       _fail($c, "git checkout -f $from") if !-f "Configure" and !$dryrun;
-      _system($c, "git","reset","--hard") if $srcdir eq "."; #else do a clean -dxf?
+      if ($srcdir eq "." and !$gitsuffix) {
+	_system($c, "git","reset","--hard");
+      }
 
       if ($gitsuffix) {
 	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
@@ -766,7 +766,7 @@ sub build
   if (-e $tryperl) { # use tryperl as template and merge options
     my $tryargs = `$tryperl -V:config_args`;
     $c->debug("old args: $tryargs");
-    for my $f (qw(cc ld ccflags ldflags libpth incpth pager 
+    for my $f (qw(cc ld ccflags ldflags libpth incpth pager
 		  cf_email perladmin useshrplib))
     {
       next if $c->options->{D} =~ /^$f[= ]/
@@ -784,7 +784,7 @@ sub build
     }
     $c->debug("merged config_args: ".join(" ",@conf));
   }
-  # with git branches prefer to cp to keep the debugging src, 
+  # with git branches prefer to cp to keep the debugging src,
   # no mksymlinks. --link only if you have not enough space.
   if ($gitsuffix and !$c->options->{link}) {
     _system($c, "cp", "-r", "$srcdir/*", ".");
@@ -792,6 +792,9 @@ sub build
   }
   _system0($c, @conf);
 
+  if (!$gitsuffix and $srcdir eq ".") {
+    _system($c, "rm","-rf",".git");
+  }
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug) {
     $c->debug("post-configure archname fixes");
@@ -807,9 +810,26 @@ sub build
       $new = $c->options->{D};
       $new =~ s/^archname=//;
     }
-    _system($c, $sed, "-i.bak","-e's,$arch,$new,'","config.h","config.sh","Policy.sh")
+    if ($^O =~ /cygwin|MSWin32/) {
+      my $dll = `$^X -nle"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
+      chomp $dll;
+      $dll = "fake.dll" if $dryrun;
+      my $newdll = $dll;
+      my $suff = "";
+      $suff .= "d" if $debug;
+      $suff .= "-nt" if $threads;
+      $suff .= "-m" if $multi;
+      $suff .= "@$gitsuffix" if $gitsuffix;
+      $newdll =~ s/(\d)\.dll/$1$suff.dll/ if $suff;
+      _system($c, $sed, "-i.bak","-e's,$dll,$newdll,'",
+	      "config.h", "Makefile", "GNUmakefile", "myconfig")
+	if $suff;
+    }
+    _system($c, $sed, "-i.bak","-e's,$arch,$new,'",
+	    "config.h","config.sh","Policy.sh", "myconfig")
       if $arch ne $new;
-    _system($c, $sed, "-i.bak","-e's,bin/perl$ps,bin/perl$p,'","config.h","config.sh");
+    _system($c, $sed, "-i.bak","-e's,bin/perl$ps,bin/perl$p,'",
+	    "config.h","config.sh");
   }
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (!$dryrun and `grep '<command-line> $makefile`) {

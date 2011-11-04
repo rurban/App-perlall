@@ -466,7 +466,8 @@ sub _log {
   if ($log) {
     if ( !$fh ) {
       if ( $v and !$dryrun ) {
-	$fh = IO::Tee->new(\*STDOUT, ">$log");
+	# STDERR also doubles all console prints. but we want system messages
+	$fh = IO::Tee->new(\*STDOUT, \*STDERR, ">$log");
       } else {
 	$fh = $q ? IO::File->new(">>$log") : \*STDOUT;
 	select $fh if $q;
@@ -630,21 +631,19 @@ sub build
 
       # mksymlink for blead or branches
       if (!$gitsuffix and !$c->options->{link}) { # cp anew
+	$c->debug("copy full git tree anew for $from, no gitsuffix");
 	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
 	unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
 	_system($c, @cmd);
 	$srcdir = "."; # clean copy
+      } else {
+	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
       }
       _system($c, "chdir", $builddir); #or _fail($c, "invalid builddir $builddir");
       undef $!;
       _system($c, "git","checkout",$from); # git returns strange values, ignore
       _fail($c, "git checkout $from: $!") if $!;
       _system($c, "git","reset","--hard") if $srcdir eq "."; #else do a clean -dxf?
-
-      _system($c, $rm, "config.h") if -f "config.h";
-      _system($c, $rm, "config.sh") if -f "config.sh";
-      _system($c, $rm, "Policy.sh") if -f "Policy.sh";
-      _system($c, $make, @j, "clean") if -f "Makefile";
 
       if ($gitsuffix) {
 	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
@@ -662,6 +661,11 @@ sub build
     }
   }
 
+  _system($c, $rm, "config.h") if -f "config.h";
+  _system($c, $rm, "config.sh") if -f "config.sh";
+  _system($c, $rm, "Policy.sh") if -f "Policy.sh";
+  _system($c, $make, @j, "clean") if -f "Makefile";
+
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none");
@@ -675,7 +679,7 @@ sub build
   }
   push @conf, "-Dmksymlinks" if $srcdir ne "." and (!$gitsuffix or $c->options->{link});
   push @conf, "-DEBUGGING" if $debug;
-  push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion};
+  push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion}; #-g is lame
   push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
   push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
   push @conf, "-D'".$c->options->{D}."'" if $c->options->{D};

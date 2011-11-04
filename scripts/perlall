@@ -210,6 +210,7 @@ sub pre_process {
       if (-f $l) { # do not override other locks
 	open LOCK,"<",$l;
 	my $pid = <LOCK>;
+	chomp $pid;
 	close LOCK;
 	if ($$ == $pid) {
 	  unlink $l;
@@ -750,6 +751,7 @@ sub build
   # XXX However we should honor -Darchname
   my $debug = $p =~ /\dd-?/;
   my $ithreads = $p !~ /\dd?-nt/;
+  my $multi = $p !~ /\dd?-m/;
   if ($c->config->{usethrsuffix}) {
     $ithreads = $p =~ /\dd?thr/; # perl5.14.2dthr
   }
@@ -818,7 +820,7 @@ sub build
       my $newdll = $dll;
       my $suff = "";
       $suff .= "d" if $debug;
-      $suff .= "-nt" if $threads;
+      $suff .= "-nt" if $ithreads;
       $suff .= "-m" if $multi;
       $suff .= "@$gitsuffix" if $gitsuffix;
       $newdll =~ s/(\d)\.dll/$1$suff.dll/ if $suff;

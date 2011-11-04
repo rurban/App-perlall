@@ -609,15 +609,16 @@ sub build
   }
   # special build options (after the cmd)
   if (@args) {
-    my @build_opts = (
-	  [ "as=s",     "install perl under given name" ],
-	  [ "D=s",      "./configure option" ],
-	  [ "A=s",      "./configure option" ],
-	  [ "U=s",      "./configure option" ],
-	  [ "j=n",      "parallel make (>5.10)" ],
-	  [ "link",     "make symlinks with git" ],
-	  [ "notest|n", "skip the test suite on build and makeinstall" ],
-	  [ "force|f",  "force install" ]
+    my @build_opts =
+      (
+       [ "as=s",     "install perl under given name" ],
+       [ "D=s",      "./configure option" ],
+       [ "A=s",      "./configure option" ],
+       [ "U=s",      "./configure option" ],
+       [ "j=n",      "parallel make (>5.10)" ],
+       [ "link",     "make symlinks with git" ],
+       [ "notest|n", "skip the test suite on build and makeinstall" ],
+       [ "force|f",  "force install" ]
       );
     $c->addopts( map {$_->[0]} @build_opts );
   }
@@ -1135,14 +1136,12 @@ sub makeinstall
 Does C<perlall maketest> in parallel on remote machines.
 C<testvm> is only usable within a perl core builddir/srcdir
 or in a module rootdir.
-It shells out to ssh account(s), copies the files in MANIFEST 
+It shells out to ssh account(s), copies the files in MANIFEST
 to the machine, runs C<perlall maketest> there and copies the
 logfiles back.
 
 Options:
 
-    --init|i   - copy pubkey to .ssh/authorized_keys, perlall to ~bin/\
-                 same as deploy
     --all|a    - all hosts defined in config C<testvm>
     --up       - only upload
     --prefix|p=Perl - remote basedir
@@ -1175,8 +1174,9 @@ sub testvm
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
-  $c->addopts( "init|i", "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
+  $c->addopts( "init|i", "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s"); #, "max|j=n" );
 
+  my ($prefix, $base);
   my @testvm = split //,$c->config->{testvm};
   my @machines = $c->options->{all} ? @testvm : @{$c->argv};
   return "missing args" unless @machines;
@@ -1190,30 +1190,69 @@ sub testvm
   warn "perlall testvm "._opts($c->options)." @machines\n"
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
-  for my $m (@machines) {
-    if ($c->options->{init}) {
-      unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
-	for my $t (/ecdsa dsa rsa /) {
-	  if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
-	    qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
-	    qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
-	    last
-	  }
-	}
-      }
-      _system($c,"rsync","-avzL",$0,"$m:bin/perlall");
-      # check .perlall, and cpan deps
-      unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
-	_system($c,"rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
-      }
-      _system($c,"ssh",$m,"perl","-MCPAN",
-	      "-e'install qw(App::Rad IO::Tee Devel::Platform::Info)'");
-      # we are not sure if bin is in the PATH
-      _system($c,"ssh",$m,"bin/perlall","init");
+  my $cmd = $c->options->{cmd} || "maketest";
+  my $opt = $c->options->{option} || '';
+  my $man = 'MANIFEST';
+  _fail($c, "$man not found") unless -f $man;
+  my $f = 'MANIFEST.files';
+  if ( -M $man > -M $f ) {
+    _print1 "Creating $f" unless $c->options->{quiet};
+    open M,'<',$man; open F,'>',$f;
+    while (<M>) {
+      print F $_ unless /^#/;
     }
-    #
+    close M; close F;
   }
-  "unimplemented"
+  $prefix = $c->options->{prefix} || "Perl";
+  $base = basename(Cwd::getcwd);
+  for my $m (@machines) {
+    _system($c,"rsync","-avzL","--delete",'--files-from=MANIFEST.files','.',"$m:$prefix/$base/");
+    _system($c,"ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
+      unless $c->options->{up};
+  }
+  "testvm done on @machines"
+}
+
+=item B<initvm> user@[hostname] [MODULES]
+
+copies pubkey to host:.ssh/authorized_keys if not exists
+
+copies perlall to host:bin/
+
+ssh hostname perlall init MODULES
+
+=cut
+
+sub initvm
+  :Help('init remote perlall via ssh/rsync (vm or host)')
+{
+  my $c = shift;
+
+  my $m = shift @{$c->argv};
+  return "missing host" unless $m;
+
+  warn "perlall initvm $m ".@{$c->argv}
+    if $c->options->{verbose};
+  $c->stash->{log} = $c->stash->{logprefix};
+  unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
+    for my $t (/ecdsa dsa rsa /) {
+      if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
+	qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
+	qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
+	last
+      }
+    }
+  }
+  _system($c,"rsync","-avzL",$0,"$m:bin/perlall");
+  # check .perlall, and cpan deps
+  unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
+    _system($c,"rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
+  }
+  _system($c,"ssh",$m,"perl","-MCPAN",
+	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info'");
+  # XXX we are not sure if bin is in the PATH
+  _system($c,"ssh",$m,"bin/perlall init ".join " ",@{$c->argv});
+  "initvm done on ".$m
 }
 
 =item B<selfupgrade>

@@ -29,6 +29,7 @@ sub _find_scripts {
     find(
       sub {
         return unless -f;
+        return if /~$/;
         my $found = $File::Find::name;
         # nothing to skip
         open my $FH, '<', $_ or do {

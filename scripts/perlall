@@ -478,42 +478,51 @@ sub _system {
 sub _system0 {
   my $c = shift;
   unless ($c->options->{quiet}) {
-    local $c->options->{quiet} = 1;
+    $c->_loginit() if $c->stash->{log} and !$c->stash->{log_fh};
     _print0(@_);
-    $c->_log( @_);
   }
   $c->__system(@_); 
 }
 sub _system1 {
   my $c = shift;
   unless ($c->options->{quiet}) {
-    local $c->options->{quiet} = 1;
+    $c->_loginit() if $c->stash->{log} and !$c->stash->{log_fh};
     _print1(@_);
-    $c->_log( @_);
   }
   $c->__system(@_);
 }
+
+sub _loginit {
+  my $c = shift;
+  my $q = $c->options->{quiet};
+  my $v = $c->options->{verbose};
+  my $dryrun = $c->options->{dryrun};
+  my $log = $c->stash->{log};
+  my $fh  = $c->stash->{log_fh};
+  if ( $v and !$dryrun ) {
+    $fh = IO::Tee->new(\*STDOUT, ">$log");
+    # TODO tee STDERR also to log (open3, IPC::Cmd?)
+  } else {
+    $fh = $q ? IO::File->new(">>$log") : \*STDOUT;
+    select $fh if $q;
+  }
+  $c->stash->{log_fh} = $fh;
+}
+
 sub _log {
   my $c = shift;
   my $q = $c->options->{quiet};
-  my $log = $c->stash->{log};
-  my $fh  = $c->stash->{log_fh};
   my $v = $c->options->{verbose};
   my $dryrun = $c->options->{dryrun};
+  my $log = $c->stash->{log};
+  my $fh  = $c->stash->{log_fh};
+  local $| = 1;
   if ($log) {
-    if ( !$fh ) {
-      if ( $v and !$dryrun ) {
-	$fh = IO::Tee->new(\*STDOUT, ">$log");
-	# TODO tee STDERR also to log (open3, IPC::Cmd?)
-      } else {
-	$fh = $q ? IO::File->new(">>$log") : \*STDOUT;
-	select $fh if $q;
-      }
-      $c->stash->{log_fh} = $fh;
-    }
+    $c->_loginit unless $fh;
     if (!$q) {
       if ($fh) {
 	print $fh join(" ",@_),"\n";
+	$fh->flush;
       } else {
 	print join(" ",@_),"\n"; # fails on my centos5
       }
@@ -1257,7 +1266,7 @@ sub testvm
   #       or we want to do all hosts in /etc/hosts?
   #       - check hosts in .ssh/known_hosts
   # XXX check if in core or in a module
-  warn "perlall testvm "._opts($c->options)." @machines\n"
+  _print1("perlall testvm "._opts($c->options),@machines)
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
   my $cmd = $c->options->{cmd} || "maketest";
@@ -1276,8 +1285,9 @@ sub testvm
   $prefix = $c->options->{prefix} || "Perl";
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
-    $c->_system("rsync","-avzL","--delete",'--files-from=MANIFEST.files','.',"$m:$prefix/$base/");
-    #_print1 "$m:$base perlall $cmd $opt" unless $c->options->{quiet};
+    $c->_system("rsync","-avzL","--delete",
+		'--files-from=MANIFEST.files',
+		'.', "$m:$prefix/$base/");
     $c->_system1("ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
       unless $c->options->{up};
   }
@@ -1302,7 +1312,7 @@ sub initvm
   my $m = shift @{$c->argv};
   return "missing host" unless $m;
 
-  warn "perlall initvm $m ".@{$c->argv}
+  _print0("perlall initvm $m ",@{$c->argv})
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
   unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
@@ -1318,17 +1328,12 @@ sub initvm
   $c->_system1("rsync","-avzL",$0,"$m:bin/perlall");
   # check .perlall, and cpan deps
   unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
-    #_print1 "rsync -avzL ~/.perlall $m:.perlall" unless $c->options->{quiet};
     $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
   }
-  #_print1 "ssh $m perl -MCPAN -e\"install 'App::Rad IO::Tee Devel::Platform::Info'\""
-  #  unless $c->options->{quiet};
   $c->_system1("ssh",$m,"perl","-MCPAN",
 	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info'");
   # XXX we are not sure if bin is in the PATH
-  #_print1 "ssh $m bin/perlall init @{$c->argv}"
-  #  unless $c->options->{quiet};
-  $c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
+  #$c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
   "initvm done on ".$m
 }
 

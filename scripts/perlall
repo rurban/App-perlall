@@ -59,12 +59,16 @@ perlall - Create perls and test with all perls
 
     perlall maketest "5.*.d*" # test with all debugging, version as option
 
+    for m in centos4 centos5 solaris10; do
+      perlall initvm -v $m
+    done
+    perlall testvm centos4 centos5 solaris10
+    perlall testvm --all -c=init # see testvm in .perlall
+
 =head2 Planned Features
 
     perlall smoke -j4 blead smoke-me/*
     perlall cpan Devel::*
-    perlall testvm centos4 centos5 centos6 solaris10 freebsd7 freebsd8 openbsd89 cygwin
-    perlall testvm --all
     perlall selfupgrade
     perlall uninstall perl5.15.4d-nt@khw-tk
 
@@ -570,7 +574,9 @@ sub _teardown {
 
 sub _fail {
   my $c = shift;
-  warn $c->{output} if $c->options->{verbose};
+  if ($c->options->{verbose}) {
+    warn $c->{output}," from line @{[(caller)[2]]}\n";
+  }
   die "@_\n";
 }
 
@@ -704,12 +710,13 @@ sub build
   $ps =~ s/@.+$//;
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
   $ps =~ s/d$//;
+  # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
 
   unless ($from) {
     # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
-      $from = $c->_older($ps,"5.10.0") ? "perl-$ps" : "v$ps";
+      $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
     } else {
       $c->_fail ("could not determine from argument for $p. perl-git missing?");
     }
@@ -726,7 +733,7 @@ sub build
       if (!-f $from) {
 	# try CPAN instead?
 	$c->_system1( "wget","-O","perl-$ps.tgz",$from) 
-	  and _fail("downloading $from failed");
+	  and $c->_fail("downloading $from failed");
 	$from = "perl-$ps.tgz";
       }
       my @tarx = (($^O eq 'solaris' ? 'gtar' : 'tar'),
@@ -1240,12 +1247,12 @@ logfiles back.
 Options:
 
     --all|a    - all hosts defined in config C<testvm>
-    --up       - only upload
+    --up       - only upload local MANIFEST files
     --prefix|p=Perl - remote basedir
     --cmd|c=<remotecmd> any valid perlall command, like
                build, init, makeinstall, smoke. Default: maketest
     --option|o="" remaining remote perlall cmd options and args
-    --max|j 4  - how many machines in parallel.
+    --max|j 4  - how many machines in parallel. (NOT YET) 
 
 Config settings:
 
@@ -1271,7 +1278,7 @@ sub testvm
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
-  $c->addopts( "init|i", "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s"); #, "max|j=n" );
+  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s"); #, "max|j=n" );
 
   my ($prefix, $base);
   my @testvm = split //,$c->config->{testvm};
@@ -1336,7 +1343,8 @@ sub initvm
   unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
     for my $t (/ecdsa dsa rsa /) {
       if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
-	_print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys" unless $c->options->{quiet};
+	_print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys"
+	  unless $c->options->{quiet};
 	qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
 	qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
 	last

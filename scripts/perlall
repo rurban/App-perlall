@@ -820,7 +820,8 @@ sub build
   push @conf, "-D'".$_."'" for @{$c->options->{D}};
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
-  if ($^O =~ /cygwin|MSWin32/) {
+  # special *perl<xxx>.dll if non-default
+  if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh' and ($gitsuffix or $debug or !$ithreads)) {
     my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
     $dll = "fake.dll" if $dryrun;
     $libperl = $olddll = $dll;
@@ -830,7 +831,7 @@ sub build
     $suff .= "-m" if $multi;
     $suff .= "@$gitsuffix" if $gitsuffix;
     $libperl =~ s/(\d)\.dll/$1$suff.dll/ if $suff;
-    push @conf, "-Dlibperl=$libperl";
+    push @conf, "-Dlibperl=$libperl" if $libperl;
   }
   $c->debug("config_args: ".join(" ",@conf));
   for my $tryperl ("/usr/local/bin/perl", "/usr/bin/perl") {
@@ -847,12 +848,12 @@ sub build
 	# => anchor \G
 	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -/;
 	if ($f =~ /^use/ and !$v) {
-	  my ($d) = $tryargs =~ /-([DU])$f /;
-	  $c->debug("-$d$f");
-	  push @conf, "-$d$f";
+	  my ($u) = $tryargs =~ /-([DU])$f /;
+	  $c->debug("-$u$f") if $u;
+	  push @conf, "-$u$f" if $u;
 	} elsif ($v) {
-	  $c->debug("-$d$f=$v") if $v;
-	  push @conf, "-$d$f='$v'";
+	  $c->debug("-$d$f=$v") if $v and $d;
+	  push @conf, "-$d$f='$v'" if $d;
 	}
       }
       $c->debug("merged config_args: ".join(" ",@conf));
@@ -868,6 +869,7 @@ sub build
     $conf[1] = "Configure";
   }
   $c->_system1( @conf);
+  $c->_fail("Configure failed") unless -f 'config.sh';
 
   if (!$gitsuffix and $srcdir eq ".") {
     $c->_system1( "rm","-rf",".git");
@@ -892,7 +894,7 @@ sub build
     $c->_grep( "s,$arch,$new,; print", "config.h", "config.sh", "Policy.sh", "myconfig")
       if $arch and $arch ne $new;
   }
-  if ($^O =~ /cygwin|MSWin32/) {
+  if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or !$ithreads)) {
     $c->debug("post-configure perl.dll fixes");
     my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
     $dll = "fake.dll" if $dryrun;

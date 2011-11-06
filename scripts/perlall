@@ -844,16 +844,23 @@ sub build
 	next if grep /^$f[= ]/, @{$c->options->{D}}
 	     or grep /^$f[= ]/, @{$c->options->{A}}
 	     or grep /^$f[= ]/, @{$c->options->{U}};
-	# XXX there can be multiple -A$f=$v, we get only the first
-	# => anchor \G
-	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -/;
+	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) /;
 	if ($f =~ /^use/ and !$v) {
 	  my ($u) = $tryargs =~ /-([DU])$f /;
 	  $c->debug("-$u$f") if $u;
 	  push @conf, "-$u$f" if $u;
-	} elsif ($v) {
-	  $c->debug("-$d$f=$v") if $v and $d;
-	  push @conf, "-$d$f='$v'" if $d;
+	} elsif ($v and $d) {
+	  # There can be multiple -A$f=$v
+	  if ($d eq 'A') {
+	    my @v = ($tryargs =~ /-A$f=(.+?) /g);
+	    for my $v (@v) {
+	      $c->debug("-$d$f=$v") if $v;
+	      push @conf, "-$d$f='$v'";
+	    }
+	  } else {
+	    $c->debug("-$d$f=$v");
+	    push @conf, "-$d$f='$v'";
+	  }
 	}
       }
       $c->debug("merged config_args: ".join(" ",@conf));

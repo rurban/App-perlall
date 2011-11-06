@@ -3,8 +3,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # TODO:
-#   stablier .lock file handling (custom end blocks)
-#   init: disable use_sqlite for the first bunch (DBI...)
+#   stable .lock file handling (SIG traps, custom end blocks)
 #   special build patches: dbm, ... See bisect-runner.pl
 #   testvm (from perltestvm bash script, with load balancing)
 #   trap Ctrl-Break in subprocesses
@@ -22,6 +21,7 @@ use File::Basename 'basename';
 use IO::Tee;
 use Devel::Platform::Info;
 
+push @App::Rad::ISA, 'main';
 our @opts = (
 	  [ "skip=s",   "skip versions (glob-style)" ],
 	  [ "newer=s",  "only newer and same versions (glob-style)" ],
@@ -180,7 +180,7 @@ sub pre_process {
   # read .perlall config. cpan/cpanm not
   if ($cmd =~ /^build|uninstall|init|list|testvm|smoke|do|make.*$/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
-      _dot_perlall($c, $_) if -f $_;
+      $c->_dot_perlall($_) if -f $_;
     }
     $c->config->{PERLALL_PREFIX} = '/usr/local'
       unless $c->config->{PERLALL_PREFIX};
@@ -230,12 +230,12 @@ sub pre_process {
       @p = (shift @{$c->argv});
       if ($p[0] =~ /[\*\?\[]/) { # only glob if necessary
 	$p[0] =~ s/^perl//;
-	@p = _get_perlall($c, $p[0]);
+	@p = $c->_get_perlall($p[0]);
       } else {
 	$p[0] =~ s/^5\./perl5\./;
       }
     } else {
-      @p = _get_perlall($c);
+      @p = $c->_get_perlall();
     }
     $c->stash->{perlall} = \@p;
   }
@@ -313,14 +313,14 @@ sub _get_perlall {
     # XXX if last char is non-decimal match this suffix filter also
     my $ver = $c->options->{older};
     for (@p) {
-      $skip{$_}++ if _older($c, $_, $ver);
+      $skip{$_}++ if $c->_older( $_, $ver);
     }
   }
   if ($c->options->{newer}) { #or same
     my $ver = $c->options->{newer};
     # XXX if last char is non-decimal match this suffix filter also
     for (@p) {
-      $skip{$_}++ unless _older($c, $_, $ver);
+      $skip{$_}++ unless $c->_older( $_, $ver);
     }
   }
   %skip ? grep(!$skip{$_},@p) : @p;
@@ -332,9 +332,15 @@ sub _opts {
   my $s = '';
   for (keys %$h) {
     my $v = $h->{$_};
-    $s .= ($v != 1 ? " --".$_."=$v" : " --".$_);
+    if (ref($v) eq 'ARRAY') {
+      for my $v (@{$h->{$_}}) {
+	$s .= ($v != 1 ? " --".$_."=$v" : " --".$_);
+      }
+    } else {
+      $s .= ($v != 1 ? " --".$_."=$v" : " --".$_);
+    }
   }
-  substr($s,1); ##bogus warning "substr outside of string at scripts/perlall line 336"
+  substr($s,1);
 }
 
 # $p gets full path
@@ -418,9 +424,9 @@ sub _set_alias {
   my $f = "$ENV{HOME}/.perlall";
   unless ($p) {
     $p = $c->stash->{perlall}->[0] if @{$c->stash->{perlall}} == 1;
-    _dot_perlall($c, $f, $p) if -f $f and $p; # set alias
+    $c->_dot_perlall($f, $p) if -f $f and $p; # set alias
   } else {
-    _dot_perlall($c, $f, "perl$p") if -f $f and $p; # set alias
+    $c->_dot_perlall($f, "perl$p") if -f $f and $p; # set alias
   }
   ""
 }
@@ -440,10 +446,11 @@ sub _short {
   $p =~ s/^.*perl//;
   return $p;
 }
-
+# bold green
 sub _print0 {
     print "\033[1;32m",join(" ",@_),"\033[0;0m\n";
 }
+# bold red
 sub _print1 {
     print "\033[1;39m",join(" ",@_),"\033[0;0m\n";
 }
@@ -459,32 +466,32 @@ sub __system {
     } else {
       $c->options->{verbose} ? system(@_) : qx(@_);
     }
-  } else { return 0 };
+  }
 }
 sub _system {
   my $c = shift;
   unless ($c->options->{quiet}) {
-    _log($c, @_);
+    $c->_log( @_);
   }
-  __system($c, @_); 
+  $c->__system(@_); 
 }
 sub _system0 {
   my $c = shift;
   unless ($c->options->{quiet}) {
     local $c->options->{quiet} = 1;
     _print0(@_);
-    _log($c, @_);
+    $c->_log( @_);
   }
-  __system($c, @_); 
+  $c->__system(@_); 
 }
 sub _system1 {
   my $c = shift;
   unless ($c->options->{quiet}) {
     local $c->options->{quiet} = 1;
     _print1(@_);
-    _log($c, @_);
+    $c->_log( @_);
   }
-  __system($c, @_);
+  $c->__system(@_);
 }
 sub _log {
   my $c = shift;
@@ -497,6 +504,7 @@ sub _log {
     if ( !$fh ) {
       if ( $v and !$dryrun ) {
 	$fh = IO::Tee->new(\*STDOUT, ">$log");
+	# TODO tee STDERR also to log (open3, IPC::Cmd?)
       } else {
 	$fh = $q ? IO::File->new(">>$log") : \*STDOUT;
 	select $fh if $q;
@@ -513,6 +521,31 @@ sub _log {
   } else {
     print join(" ",@_),"\n" if $v;
   }
+}
+
+# print unless /<command-line>/
+# s,$dll,$newdll,; print
+sub _grep {
+  my $c = shift;
+  my $cmd = shift;
+  # -i inplace
+  $c->_log("perl -i -ne'$cmd' ",join(" ",@_));
+  return if $c->options->{dryrun};
+  while (my $f = shift @_) {
+    next unless -f $f;
+    my $b = $f."~";
+    unlink $b if -e $b;
+    rename($f, $b);
+    open(IN, "<", $b);
+    open(OUT, ">", $f);
+    select(OUT);
+  LINE: while (<IN>) {
+      eval $cmd;
+    }
+    close IN;
+    close OUT;
+  }
+  select(STDOUT);
 }
 
 sub _teardown {
@@ -594,6 +627,21 @@ sub build
   :Help(build [opts] perl<version><suffix> [ from ])
 {
   my $c = shift;
+  # special build options (after the cmd)
+  if (@{$c->argv}) {
+    my @build_opts =
+      (
+       [ "as=s",     "install perl under given name" ],
+       [ "D=s@",     "./configure option" ],
+       [ "A=s@",     "./configure option" ],
+       [ "U=s@",     "./configure option" ],
+       [ "j=n",      "parallel make (>5.10)" ],
+       [ "link",     "make symlinks with git" ],
+       [ "notest|n", "skip the test suite on build and makeinstall" ],
+       [ "force|f",  "force install" ]
+      );
+    $c->addopts( map {$_->[0]} @build_opts );
+  }
   my @args = @{$c->argv};
   my $p = $args[0];
   if ($p =~ /^(perl)?5\./ ) {
@@ -608,24 +656,9 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  # special build options (after the cmd)
-  if (@args) {
-    my @build_opts =
-      (
-       [ "as=s",     "install perl under given name" ],
-       [ "D=s",      "./configure option" ],
-       [ "A=s",      "./configure option" ],
-       [ "U=s",      "./configure option" ],
-       [ "j=n",      "parallel make (>5.10)" ],
-       [ "link",     "make symlinks with git" ],
-       [ "notest|n", "skip the test suite on build and makeinstall" ],
-       [ "force|f",  "force install" ]
-      );
-    $c->addopts( map {$_->[0]} @build_opts );
-  }
   $c->stash->{log} = $c->stash->{logprefix} . $p;
-  _log($c,"perlall",_opts($c->options),"build",$p,@args);
-  _fail("build not yet supported on Windows") if $^O eq 'MSWin32';
+  $c->_log("perlall",_opts($c->options),"build",$p,@args);
+  $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $srcdir;
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd }
@@ -633,11 +666,11 @@ sub build
   my $root = $c->config->{PERLALL_BUILDROOT};
   my $prefix = $c->config->{PERLALL_PREFIX};
   unless ($root) {
-    _fail($c, "Empty PERLALL_BUILDROOT in .perlall");
+    $c->_fail("Empty PERLALL_BUILDROOT in .perlall");
   }
   unless (-d $root) {
-    _system($c, "mkdir",$root) 
-      and _fail($c, "Cannot create PERLALL_BUILDROOT $root");
+    $c->_system1( "mkdir",$root) 
+      and $c->_fail("Cannot create PERLALL_BUILDROOT $root");
   }
   my $make = $Config{make};
   my $sed = $Config{sed};
@@ -657,17 +690,17 @@ sub build
   $ps =~ s/@.+$//;
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
   $ps =~ s/d$//;
-  my @j = ("-j".$c->options->{j}) if $c->options->{j} and !_older($c, $ps, "5.10.0");
+  my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
 
   unless ($from) {
     # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
-      $from = _older($c, $ps,"5.10.0") ? "perl-$ps" : "v$ps";
+      $from = $c->_older($ps,"5.10.0") ? "perl-$ps" : "v$ps";
     } else {
-      _fail ($c, "could not determine from argument for $p. perl-git missing?");
+      $c->_fail ("could not determine from argument for $p. perl-git missing?");
     }
   }
-  _log($c, "chdir $root") unless $c->options->{quiet};
+  $c->_log("chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
@@ -678,47 +711,47 @@ sub build
 	.  "No idea how to know the resulting srcdir yet";
       if (!-f $from) {
 	# try CPAN instead?
-	_system($c, "wget","-O","perl-$ps.tgz",$from) 
+	$c->_system1( "wget","-O","perl-$ps.tgz",$from) 
 	  and _fail("downloading $from failed");
 	$from = "perl-$ps.tgz";
       }
       my @tarx = (($^O eq 'solaris' ? 'gtar' : 'tar'),
 	  ($from =~ m/bz2$/ ? 'xjf' : 'xzf' ));
-      _system($c, @tarx, $from) and _fail("extracting the tarball $from failed");
+      $c->_system1( @tarx, $from) and _fail("extracting the tarball $from failed");
       $srcdir = $root."/perl-$ps";
       if (! -d $builddir) {
 	# OOPS LOOKS LIKE AN ERROR
-	_system($c, "mkdir", $builddir)
-	  and _fail($c, "Cannot create $builddir."
+	$c->_system("mkdir", $builddir)
+	  and $c->_fail("Cannot create $builddir."
 		    ." Check your PERLALL_BUILDROOT in ~/.perlall");
       }
-      _system($c, "chdir", $builddir);
+      $c->_system1( "chdir", $builddir);
     }
     else { # git, much better
       $srcdir = $c->config->{'perl-git'};
-      _fail($c, "perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
+      $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
       $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
       my @cmd = ("mkdir", $builddir);
       unshift @cmd, $sudo if $sudo and !-w $builddir;
-      _system($c, @cmd) unless -d $builddir;
-      _fail($c, "invalid builddir $builddir") if !-d $builddir and !$dryrun;
-      _system($c, $sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
+      $c->_system1( @cmd) unless -d $builddir;
+      $c->_fail( "invalid builddir $builddir") if !-d $builddir and !$dryrun;
+      $c->_system($sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
 
       # mksymlink for blead or branches
       if (!$gitsuffix and !$c->options->{link}) { # cp anew
 	$c->debug("copy full git tree anew for $from, no gitsuffix");
 	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
 	# unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
-	_system($c, @cmd);
+	$c->_system1( @cmd);
 	$srcdir = "."; # clean copy
       } else {
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
       }
-      _system($c, "chdir", $builddir);# and _fail($c, "invalid builddir $builddir");
-      _system($c, "git","checkout","-f",$from); # git returns strange values, ignore
-      _fail($c, "git checkout -f $from") if !-f "Configure" and !$dryrun;
+      $c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
+      $c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
+      $c->_fail("git checkout -f $from") if !-f "Configure" and !$dryrun;
       if ($srcdir eq "." and !$gitsuffix) {
-	_system($c, "git","reset","--hard");
+	$c->_system1( "git","reset","--hard");
       }
 
       if ($gitsuffix) {
@@ -737,10 +770,12 @@ sub build
     }
   }
 
-  _system($c, $rm, "config.h") if -f "config.h";
-  _system($c, $rm, "config.sh") if -f "config.sh";
-  _system($c, $rm, "Policy.sh") if -f "Policy.sh";
-  _system($c, $make, @j, "clean") if -f "Makefile";
+  $c->_system( $make, @j, "clean") if -f "Makefile" and -f 'miniperl';
+  $c->_system( $rm, "config.h") if -f "config.h";
+  $c->_system( $rm, "config.sh") if -f "config.sh";
+  $c->_system( $rm, "Policy.sh") if -f "Policy.sh";
+  $c->_system( $rm, "-rf", "UU") if -d "UU";
+  $c->_system( $rm, "-rf", ".config") if -d ".config";
 
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
@@ -752,6 +787,7 @@ sub build
   my $debug = $p =~ /\dd-?/;
   my $ithreads = $p !~ /\dd?-nt/;
   my $multi = $p !~ /\dd?-m/;
+  my ($libperl, $olddll);
   if ($c->config->{usethrsuffix}) {
     $ithreads = $p =~ /\dd?thr/; # perl5.14.2dthr
   }
@@ -760,43 +796,60 @@ sub build
   push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion}; #-g is lame
   push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
   push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
-  push @conf, "-D'".$c->options->{D}."'" if $c->options->{D};
-  push @conf, "-A'".$c->options->{A}."'" if $c->options->{A};
-  push @conf, "-U'".$c->options->{U}."'" if $c->options->{U};
-  # XXX TODO: set libperl name on windows
-  $c->debug("config_args: ".join(" ",@conf));
-  my $tryperl = "/usr/local/bin/perl";
-  if (-e $tryperl) { # use tryperl as template and merge options
-    my $tryargs = `$tryperl -V:config_args`;
-    $c->debug("old args: $tryargs");
-    for my $f (qw(cc ld ccflags ldflags libpth incpth pager
-		  cf_email perladmin useshrplib))
-    {
-      next if $c->options->{D} =~ /^$f[= ]/
-	or $c->options->{A} =~ /^$f[= ]/
-	or $c->options->{U} =~ /^$f[= ]/;
-      my ($v) = $tryargs =~ /-D ?$f=(.+?) -/;
-      if ($f =~ /^use/ and !$v) {
-	my ($d) = $tryargs =~ /-([DU])$f /;
-	$c->debug("-$d$f");
-	push @conf, "-$d$f";
-      } elsif ($v) {
-	$c->debug("-D$f=$v") if $v;
-	push @conf, "-D$f='$v'";
-      }
-    }
-    $c->debug("merged config_args: ".join(" ",@conf));
+  push @conf, "-D'".$_."'" for @{$c->options->{D}};
+  push @conf, "-A'".$_."'" for @{$c->options->{A}};
+  push @conf, "-U'".$_."'" for @{$c->options->{U}};
+  if ($^O =~ /cygwin|MSWin32/) {
+    my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
+    $dll = "fake.dll" if $dryrun;
+    $libperl = $olddll = $dll;
+    my $suff = "";
+    $suff .= "d" if $debug;
+    $suff .= "-nt" if $ithreads;
+    $suff .= "-m" if $multi;
+    $suff .= "@$gitsuffix" if $gitsuffix;
+    $libperl =~ s/(\d)\.dll/$1$suff.dll/ if $suff;
+    push @conf, "-Dlibperl=$libperl";
   }
+  $c->debug("config_args: ".join(" ",@conf));
+  for my $tryperl ("/usr/local/bin/perl", "/usr/bin/perl") {
+    if (-e $tryperl) { # use tryperl as template and merge options
+      my $tryargs = `$tryperl -V:config_args`;
+      $c->debug("old args: $tryargs");
+      for my $f (qw(cc ld ccflags ldflags libpth incpth pager
+		    cf_email perladmin useshrplib))
+      {
+	next if grep /^$f[= ]/, @{$c->options->{D}}
+	     or grep /^$f[= ]/, @{$c->options->{A}}
+	     or grep /^$f[= ]/, @{$c->options->{U}};
+	# XXX there can be multiple -A$f=$v, we get only the first
+	# => anchor \G
+	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -/;
+	if ($f =~ /^use/ and !$v) {
+	  my ($d) = $tryargs =~ /-([DU])$f /;
+	  $c->debug("-$d$f");
+	  push @conf, "-$d$f";
+	} elsif ($v) {
+	  $c->debug("-$d$f=$v") if $v;
+	  push @conf, "-$d$f='$v'";
+	}
+      }
+      $c->debug("merged config_args: ".join(" ",@conf));
+      last;
+    }
+  }
+  # XXX new cc with <5.8.9: error: unrecognized option '-no-cpp-precomp'
+
   # with git branches prefer to cp to keep the debugging src,
   # no mksymlinks. --link only if you have not enough space.
   if ($gitsuffix and !$c->options->{link}) {
-    _system($c, "cp", "-r", "$srcdir/*", ".");
+    $c->_system1( "cp", "-r", "$srcdir/*", ".");
     $conf[1] = "Configure";
   }
-  _system0($c, @conf);
+  $c->_system1( @conf);
 
   if (!$gitsuffix and $srcdir eq ".") {
-    _system($c, "rm","-rf",".git");
+    $c->_system1( "rm","-rf",".git");
   }
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug) {
@@ -813,41 +866,34 @@ sub build
       $new = $c->options->{D};
       $new =~ s/^archname=//;
     }
+    $c->_fail("Configure failed") unless $arch;
     if ($^O =~ /cygwin|MSWin32/) {
-      my $dll = `$^X -nle"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
-      chomp $dll;
+      my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
       $dll = "fake.dll" if $dryrun;
-      my $newdll = $dll;
-      my $suff = "";
-      $suff .= "d" if $debug;
-      $suff .= "-nt" if $ithreads;
-      $suff .= "-m" if $multi;
-      $suff .= "@$gitsuffix" if $gitsuffix;
-      $newdll =~ s/(\d)\.dll/$1$suff.dll/ if $suff;
-      _system($c, $sed, "-i.bak","-e's,$dll,$newdll,'",
-	      "config.h", "Makefile", "GNUmakefile", "myconfig")
-	if $suff;
+      if ($libperl eq $dll) {
+	$c->_log("configure did keep our libperl, good");
+      } else {
+	$c->_grep("s,$olddll,$libperl,", 
+		  "config.h", "Makefile", "GNUmakefile", "myconfig")
+	  if $libperl and $olddll;
+      }
     }
-    _system($c, $sed, "-i.bak","-e's,$arch,$new,'",
-	    "config.h","config.sh","Policy.sh", "myconfig")
-      if $arch ne $new;
-    _system($c, $sed, "-i.bak","-e's,bin/perl$ps,bin/perl$p,'",
-	    "config.h","config.sh");
+    $c->_grep( "s,$arch,$new,; print", "config.h", "config.sh", "Policy.sh", "myconfig")
+      if $arch and $arch ne $new;
+    $c->_grep( "s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
+      if $ps and $ps ne $p;
   }
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
-  if (!$dryrun and `grep '<command-line> $makefile`) {
-    system($^X,'-nl','-e"print unless /<command-line>/"',$makefile,">$makefile.new");
-    system($^X,'-nl','-e"print unless /<command-line>/"',"x2p/$makefile",">x2p/$makefile.new");
-    system($cp,"$makefile.new",$makefile);
-    system($cp,"x2p/$makefile.new","x2p/$makefile");
+  if (!$dryrun and `grep '<command-line>' $makefile`) {
+    $c->_grep( "print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 
-  _system($c, $make, @j); 
+  $c->_system1( $make, @j); 
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  my $testerr = _system($c, $make, @j, "test") unless $c->options->{notest};
-  _system($c, $make, @j, "install", "DESTDIR=$root/inst-$p")
+  my $testerr = $c->_system( $make, @j, "test") unless $c->options->{notest};
+  $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")
     if !$testerr or $c->options->{force};
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
@@ -855,12 +901,12 @@ sub build
   my @c = ($cp, "$root/inst-$p/usr/local/bin/perl$ps","$prefix/bin/perl$p");
   $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
   unshift @c, $sudo if $sudo;
-  _system($c, @c);
+  $c->_system1( @c);
 
   @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
   $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps";
   unshift @c, $sudo if $sudo;
-  _system($c, @c);
+  $c->_system1( @c);
 
   chdir $cwd;
   _set_alias($c, $p);
@@ -936,11 +982,11 @@ sub init
     #     otherwise need -MCPAN -e'install qw(mods)'
     # use_sqlite bootstrap: YAML DBI DBD::SQLite CPAN::SQLite
     qx($p -MCPAN::SQLite -e0); if ($!)  {# okay
-      _system($c, $p, "-MCPAN", '-e"install qw(DBI DBD::SQLite)"');
+      $c->_system( $p, "-MCPAN", '-e"install qw(DBI DBD::SQLite)"');
     }
-    _system($c, $p, "-S", $cpan, split / /,$mods);
+    $c->_system( $p, "-S", $cpan, split / /,$mods);
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 =item B<list> [version*]
@@ -1017,9 +1063,9 @@ sub do
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    _system($c, $p, @{$c->argv});
+    $c->_system( $p, @{$c->argv});
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 =item B<cpan> modules
@@ -1036,9 +1082,9 @@ sub cpan
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    _system0($c, $p, "-S", "cpan", @{$c->argv});
+    $c->_system0($p, "-S", "cpan", @{$c->argv});
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 =item B<cpanm> modules
@@ -1055,9 +1101,9 @@ sub cpanm
   return "missing args" unless $argv;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    _system0($c, $p, "-S", "cpanm", @{$c->argv});
+    $c->_system0($p, "-S", "cpanm", @{$c->argv});
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 =item B<make> args
@@ -1074,17 +1120,17 @@ sub _make {
   my $p = shift;
   my $make = $Config{make};
   # checks MB
-  _system($c, $make, "-s", "clean") if -f "Makefile";
+  $c->_system( $make, "-s", "clean") if -f "Makefile";
   $c->stash->{log} = $c->stash->{logprefix} . _short($p);
   if (-f "Makefile.PL") {
-    _system($c, $p, "Makefile.PL");
-    _system0($c, $make);
+    $c->_system( $p, "Makefile.PL");
+    $c->_system0( $make);
   } elsif (-f "Build.PL") {
     # this is broken and needs a realclean
-    _system($c, "./Build", "realclean") if -f "Build" and $^O ne 'MSWin32';
-    _system($c, "rm", "-rf", "blib", "_Build", "Build" ) if $^O ne 'MSWin32';
-    _system($c, $p, "Build.PL");
-    _system0($c, $p, "Build");
+    $c->_system( "./Build", "realclean") if -f "Build" and $^O ne 'MSWin32';
+    $c->_system( "rm", "-rf", "blib", "_Build", "Build" ) if $^O ne 'MSWin32';
+    $c->_system( $p, "Build.PL");
+    $c->_system0( $p, "Build");
   }
 }
 
@@ -1095,12 +1141,12 @@ sub make
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
   for my $p (@{$c->stash->{perlall}}) {
-    _make($c, $p);
+    $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
-      _system0($c, $p, @{$c->argv});
+      $c->_system0( $p, @{$c->argv});
     }
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 =item B<maketest>
@@ -1119,16 +1165,17 @@ sub maketest
   my $make = $Config{make};
   warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   for my $p (@{$c->stash->{perlall}}) {
-    _make($c, $p);
+    $c->_make($p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
-    unshift @opts,"-j".$c->options->{j} if $c->options->{j} and !_older($c, $p,"5.10.0");
+    unshift @opts,"-j".$c->options->{j} 
+      if $c->options->{j} and !$c->_older( $p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {
-      _system0($c, $p, "Build", @opts);
+      $c->_system0( $p, "Build", @opts);
     } else {
-      _system0($c, $make, @opts);
+      $c->_system0( $make, @opts);
     }
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 =item B<makeinstall>
@@ -1146,11 +1193,11 @@ sub makeinstall
   warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
-    _make($c, $p);
+    $c->_make($p);
     #_print0("$make test && $sudo $make install");
-    _system0($c, "$make test && $sudo $make install"); # csh?
+    $c->_system0( "$make test && $sudo $make install"); # csh?
   }
-  _set_alias($c);
+  $c->_set_alias();
 }
 
 
@@ -1216,7 +1263,7 @@ sub testvm
   my $cmd = $c->options->{cmd} || "maketest";
   my $opt = $c->options->{option} || '';
   my $man = 'MANIFEST';
-  _fail($c, "$man not found") unless -f $man;
+  $c->_fail("$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
   if ( -M $man > -M $f ) {
     print "Creating $f\n" unless $c->options->{quiet};
@@ -1229,9 +1276,9 @@ sub testvm
   $prefix = $c->options->{prefix} || "Perl";
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
-    _system($c,"rsync","-avzL","--delete",'--files-from=MANIFEST.files','.',"$m:$prefix/$base/");
+    $c->_system("rsync","-avzL","--delete",'--files-from=MANIFEST.files','.',"$m:$prefix/$base/");
     #_print1 "$m:$base perlall $cmd $opt" unless $c->options->{quiet};
-    _system1($c,"ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
+    $c->_system1("ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
       unless $c->options->{up};
   }
   "testvm done on @machines"
@@ -1268,20 +1315,20 @@ sub initvm
       }
     }
   }
-  _system1($c,"rsync","-avzL",$0,"$m:bin/perlall");
+  $c->_system1("rsync","-avzL",$0,"$m:bin/perlall");
   # check .perlall, and cpan deps
   unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
     #_print1 "rsync -avzL ~/.perlall $m:.perlall" unless $c->options->{quiet};
-    _system1($c,"rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
+    $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
   }
   #_print1 "ssh $m perl -MCPAN -e\"install 'App::Rad IO::Tee Devel::Platform::Info'\""
   #  unless $c->options->{quiet};
-  _system1($c,"ssh",$m,"perl","-MCPAN",
+  $c->_system1("ssh",$m,"perl","-MCPAN",
 	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info'");
   # XXX we are not sure if bin is in the PATH
   #_print1 "ssh $m bin/perlall init @{$c->argv}"
   #  unless $c->options->{quiet};
-  _system1($c,"ssh",$m,"bin/perlall init ".join " ",@{$c->argv});
+  $c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
   "initvm done on ".$m
 }
 

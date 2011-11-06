@@ -8,3 +8,4 @@ MYMETA.yml
 META.yml
 log.*
 pm_to_blib
+MANIFEST.files

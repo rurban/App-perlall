@@ -202,9 +202,12 @@ sub pre_process {
       system("pgrep","-fl","perlall");
       exit 1;
     }
-    open LOCK,">","perlall.lock";
+    open LOCK,">","perlall.lock";# XXX where? for build in the builddir
     print LOCK $$,"\n";
     close LOCK;
+
+    $SIG{INT} = $SIG{TERM} = sub {my $l="perlall.lock"; unlink $l if -f $l };
+    
     END {
       my $l = "perlall.lock";
       if (-f $l) { # do not override other locks
@@ -216,6 +219,7 @@ sub pre_process {
 	  unlink $l;
 	} else {
 	  warn "Other perlall process $pid still running. perlall.lock kept\n";
+	  #warn `pgrep -Ll $pid`,"\n";
 	  # unlink $l;
 	}
       }
@@ -500,8 +504,9 @@ sub _loginit {
   my $log = $c->stash->{log};
   my $fh  = $c->stash->{log_fh};
   if ( $v and !$dryrun ) {
+    # only with -v we print to STDOUT also, else only to the log
     $fh = IO::Tee->new(\*STDOUT, ">$log");
-    # TODO tee STDERR also to log (open3, IPC::Cmd?)
+    # TODO tee STDERR also to log (2>&1 open3, IPC::Cmd?)
   } else {
     $fh = $q ? IO::File->new(">>$log") : \*STDOUT;
     select $fh if $q;
@@ -861,7 +866,7 @@ sub build
     $c->_system1( "rm","-rf",".git");
   }
   # fix libs on debug and git-stuff
-  if ($gitsuffix or $debug) {
+  if ($gitsuffix or $debug or $^O eq 'darwin') {
     $c->debug("post-configure archname fixes");
     my $arch = `grep ^archname= config.sh|cut -c10-` unless $dryrun;
     chomp $arch;
@@ -869,6 +874,7 @@ sub build
     $arch =~ s/'//g;
     my $new = $arch;
     $new .= "-debug" if $debug and $arch !~ /-debug/;
+    # XXX strip -2level if -m32 or -m64
     $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
     if ($c->options->{D} =~ /^archname/) {
       # XXX parse and set
@@ -876,24 +882,36 @@ sub build
       $new =~ s/^archname=//;
     }
     $c->_fail("Configure failed") unless $arch;
-    if ($^O =~ /cygwin|MSWin32/) {
-      my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
-      $dll = "fake.dll" if $dryrun;
-      if ($libperl eq $dll) {
-	$c->_log("configure did keep our libperl, good");
-      } else {
-	$c->_grep("s,$olddll,$libperl,", 
-		  "config.h", "Makefile", "GNUmakefile", "myconfig")
-	  if $libperl and $olddll;
-      }
-    }
     $c->_grep( "s,$arch,$new,; print", "config.h", "config.sh", "Policy.sh", "myconfig")
       if $arch and $arch ne $new;
-    $c->_grep( "s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
-      if $ps and $ps ne $p;
   }
+  if ($^O =~ /cygwin|MSWin32/) {
+    $c->debug("post-configure perl.dll fixes");
+    my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
+    $dll = "fake.dll" if $dryrun;
+    if ($libperl eq $dll) {
+      $c->_log("configure did keep our libperl, good");
+    } else {
+      $c->_grep("s,$olddll,$libperl,", 
+		"config.h", "Makefile", "GNUmakefile", "myconfig")
+	if $libperl and $olddll;
+    }
+  }
+  if ($^O eq 'darwin') { # darwin hints overwrote ld
+    $c->debug("post-configure darwin ld fixes");
+    my $ld = $dryrun ? "env MACOSX_DEPLOYMENT_TARGET=10.3 cc" 
+      : `$^X -ne"if (/ld='(.+)'/){print \$1}" config.sh`;
+    my $cc = $dryrun ? "cc" : `$^X -ne"if (/cc='(.+)'/){print \$1}" config.sh`;
+    if ($ld ne $cc) {  # XXX and honor cmdline -Dld=
+      $c->_grep( "s,^ld='$ld',ld='$cc',; print", "config.sh");
+    }
+  }
+  $c->debug("post-configure startperl fixes");
+  $c->_grep( "s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
+    if $ps and $ps ne $p;
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
-  if (!$dryrun and `grep '<command-line>' $makefile`) {
+  if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?
+    $c->debug("post-configure old-perl Makefile fixes");
     $c->_grep( "print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 
@@ -913,7 +931,7 @@ sub build
   $c->_system1( @c);
 
   @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
-  $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps";
+  # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
   unshift @c, $sudo if $sudo;
   $c->_system1( @c);
 

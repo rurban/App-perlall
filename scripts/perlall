@@ -575,7 +575,7 @@ sub _teardown {
 sub _fail {
   my $c = shift;
   if ($c->options->{verbose}) {
-    warn $c->{output}," from line @{[(caller)[2]]}\n";
+    warn $c->{output}," at perlall line @{[(caller(0))[2]]}\n";
   }
   die "@_\n";
 }

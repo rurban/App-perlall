@@ -15,7 +15,7 @@ my %WriteMakefileArgs =
 		    'App::Rad' => "1.04",
 		    'Devel::Platform::Info' => '0',
 		    'IO::Tee' => '0.64',
-		    # 'Devel::PatchPerl' => "0.46",
+		    'Devel::PatchPerl' => "0.46",
 		    'Pod::Usage' => "1.33",
 		    'File::Basename' => "2.74",
 		    'Cwd' => "3.33",
@@ -24,9 +24,9 @@ my %WriteMakefileArgs =
 		   },
    "SIGN" => 1,
    ($ExtUtils::MakeMaker::VERSION gt '6.46' ?
-    ('META_MERGE'  => 
+    ('META_MERGE'  =>
      { 
-      recommends => 
+      recommends =>
       {
        'File::Slurp' => "9999.13", # with B::C only
       },

@@ -865,6 +865,8 @@ sub build
 	      push @conf, "-$d$f='$v'";
 	    }
 	  } else {
+            # avoid the BSDPAN ports hack, we do not want to register our modules with ports
+	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
 	    $c->debug("-$d$f=$v");
 	    push @conf, "-$d$f='$v'";
 	  }
@@ -886,9 +888,6 @@ sub build
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh';
 
-  if (!$gitsuffix and $srcdir eq ".") {
-    $c->_system1( "rm","-rf",".git");
-  }
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug or $^O eq 'darwin') {
     $c->debug("post-configure archname fixes");
@@ -958,6 +957,10 @@ sub build
   # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
   unshift @c, $sudo if $sudo;
   $c->_system1( @c);
+
+  if (!$gitsuffix and $srcdir eq "." and -d '.git') {
+    $c->_system1( "rm","-rf",".git");
+  }
 
   chdir $cwd;
   _set_alias($c, $p);

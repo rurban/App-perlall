@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   implement smoke, uninstall, selfupgrade
 #   check stable .lock file handling (looks better now)
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
@@ -194,36 +195,38 @@ sub pre_process {
     $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
       unless $c->config->{'perl-git'};
 
-    # logging + locking
-    # "we should not disturb a running perlall in this dir"
-    my $d = Devel::Platform::Info->new->get_info();
-    my $s = $d->{oslabel}.$d->{osvers}; $s=~s/\s//g;
-    $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
+    if ($cmd !~ /^list/) {
+      # logging + locking
+      # "we should not disturb a running perlall in this dir"
+      my $d = Devel::Platform::Info->new->get_info();
+      my $s = $d->{oslabel}.$d->{osvers}; $s=~s/\s//g;
+      $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
-    if (-f "perlall.lock") {
-      print "perlall.lock exists. Probably perlall still running.\n";
-      system("pgrep","-fl","perlall");
-      exit 1;
-    }
-    open LOCK,">","perlall.lock";# XXX where? for build in the builddir
-    print LOCK $$,"\n";
-    close LOCK;
+      if (-f "perlall.lock") {
+	print "perlall.lock exists. Probably perlall still running.\n";
+	system("pgrep","-fl","perlall");
+	exit 1;
+      }
+      open LOCK,">","perlall.lock";# XXX where? for build in the builddir
+      print LOCK $$,"\n";
+      close LOCK;
 
-    $SIG{INT} = $SIG{TERM} = sub {my $l="perlall.lock"; unlink $l if -f $l };
+      $SIG{INT} = $SIG{TERM} = sub {my $l="perlall.lock"; unlink $l if -f $l };
     
-    END {
-      my $l = "perlall.lock";
-      if (-f $l) { # do not override other locks
-	open LOCK,"<",$l;
-	my $pid = <LOCK>;
-	chomp $pid;
-	close LOCK;
-	if ($$ == $pid) {
-	  unlink $l;
-	} else {
-	  warn "Other perlall process $pid still running. perlall.lock kept\n";
-	  #warn `pgrep -Ll $pid`,"\n";
-	  # unlink $l;
+      END {
+	my $l = "perlall.lock";
+	if (-f $l) { # do not override other locks
+	  open LOCK,"<",$l;
+	  my $pid = <LOCK>;
+	  chomp $pid;
+	  close LOCK;
+	  if ($$ == $pid) {
+	    unlink $l;
+	  } else {
+	    warn "Other perlall process $pid still running. perlall.lock kept\n";
+	    #warn `pgrep -Ll $pid`,"\n";
+	    # unlink $l;
+	  }
 	}
       }
     }
@@ -457,7 +460,7 @@ sub _short {
 sub _print0 {
     print "\033[1;32m",join(" ",@_),"\033[0;0m\n";
 }
-# bold red
+# bold red/black
 sub _print1 {
     print "\033[1;39m",join(" ",@_),"\033[0;0m\n";
 }
@@ -921,27 +924,29 @@ sub build
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug or $^O eq 'darwin') {
     $c->debug("post-configure archname fixes");
-    my $arch = `grep ^archname= config.sh|cut -c10-` unless $dryrun;
-    chomp $arch;
+    my $arch = `$^X -ne"if (/^archname='(.+?)'/){print \$1}" config.sh` unless $dryrun;
+    #my $arch = `grep ^archname= config.sh|cut -c10-` unless $dryrun;
+    #chomp $arch;
     $arch = "fake-arch" if $dryrun;
     $arch =~ s/'//g;
     my $new = $arch;
     $new .= "-debug" if $debug and $arch !~ /-debug/;
-    # XXX strip -2level if -m32 or -m64
-    # => ldflags -flat-namespace
     $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
-    if ($c->options->{D} =~ /^archname/) {
-      # XXX parse and set
-      $new = $c->options->{D};
-      $new =~ s/^archname=//;
+    for my $d (@{$c->options->{D}}) {
+      if ($d =~ /^archname/) {
+	# XXX parse and set
+	$new = $d;
+	$new =~ s/^archname=//;
+      }
     }
     $c->_fail("Configure failed") unless $arch;
+    # XXX This is very fragile!
     $c->_grep( "s,$arch,$new,; print", "config.h", "config.sh", "Policy.sh", "myconfig")
       if $arch and $arch ne $new;
   }
   if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or !$ithreads)) {
     $c->debug("post-configure perl.dll fixes");
-    my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
+    my $dll = `$^X -ne"if (/^libperl='(.+?)'/){print \$1}" config.sh` unless $dryrun;
     $dll = "fake.dll" if $dryrun;
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
@@ -1281,7 +1286,6 @@ sub makeinstall
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_make($p);
-    #_print0("$make test && $sudo $make install");
     $c->_system0( "$make test && $sudo $make install"); # csh?
   }
   $c->_set_alias();

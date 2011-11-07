@@ -2,6 +2,7 @@
 eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
+#BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
 #   stable .lock file handling
 #   special build patches: dbm, ... See bisect-runner.pl
@@ -642,7 +643,7 @@ Specific OPTIONS:
 =cut
 
 sub build
-  :Help(build [opts] perl<version><suffix> [ from ])
+  :Help('build [opts] perl<version><suffix> [ from ]')
 {
   my $c = shift;
   # special build options (after the cmd)
@@ -825,7 +826,9 @@ sub build
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
   # special *perl<xxx>.dll if non-default
-  if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh' and ($gitsuffix or $debug or !$ithreads)) {
+  if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh'
+      and ($gitsuffix or $debug or !$ithreads))
+  {
     my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
     $dll = "fake.dll" if $dryrun;
     $libperl = $olddll = $dll;
@@ -872,6 +875,7 @@ sub build
     }
   }
   # XXX new cc with <5.8.9: error: unrecognized option '-no-cpp-precomp'
+  # XXX <= 5.10.1 debian: empty perllibs in config.sh and thus libs in Makefile
 
   # with git branches prefer to cp to keep the debugging src,
   # no mksymlinks. --link only if you have not enough space.
@@ -976,7 +980,7 @@ Uninstalls the given version.
 =cut
 
 sub uninstall
-  :Help(sudo rm /usr/local/bin/perl <arg> and its libs)
+  :Help('sudo rm /usr/local/bin/perl <arg> and its libs')
 {
   "unimplemented";
 }
@@ -1014,7 +1018,7 @@ Todo: cpan=-MCPAN
 =cut
 
 sub init
-  :Help(Installs and updates basic CPAN modules)
+  :Help('Installs and updates basic CPAN modules')
 {
   my $c = shift;
   my @argv = @{$c->argv};
@@ -1043,7 +1047,7 @@ List all installed perlall versions
 =cut
 
 sub list
-  :Help(List all installed perlall versions) 
+  :Help('List all installed perlall versions')
 {
   my $c = shift;
   return join "\n", @{$c->stash->{perlall}};
@@ -1103,7 +1107,7 @@ Notice that the commands are not executed in parallel.
 =cut
 
 sub do
-  :Help(Execute commands with all perls) 
+  :Help('Execute commands with all perls') 
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
@@ -1122,7 +1126,7 @@ like C<perlall do>, but calls perl5.* -S cpan args... for all perls
 =cut
 
 sub cpan
-  :Help(call cpan with args for all perls) 
+  :Help('Call cpan with args for all perls') 
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
@@ -1141,7 +1145,7 @@ like C<perlall cpan>, but uses cpanm.
 =cut
 
 sub cpanm
-  :Help(call cpanm with args for all perls) 
+  :Help('Call cpanm with args for all perls') 
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
@@ -1182,7 +1186,7 @@ sub _make {
 }
 
 sub make
-  :Help('perl Makefile.PL; make') 
+  :Help('Do perl Makefile.PL; make for all perls') 
 {
   my $c = shift;
   my $argv = join " ",@{$c->argv};
@@ -1206,7 +1210,7 @@ On C<--quiet> or C<-q> does not do TEST_VERBOSE=1
 =cut
 
 sub maketest
-  :Help('make; make test') 
+  :Help('Do make; make test for all perls') 
 {
   my $c = shift;
   my $make = $Config{make};
@@ -1232,7 +1236,7 @@ like C<perlall maketest>, but runs C<sudo make install> after C<make test>.
 =cut
 
 sub makeinstall
-  :Help('make test && sudo make install') 
+  :Help('Do make test && sudo make install for all perls') 
 {
   my $c = shift;
   my $make = $Config{make};
@@ -1287,7 +1291,7 @@ VM Balancing:
 =cut
 
 sub testvm
-  :Help('test on remote accounts via ssh/rsync (vm or host)')
+  :Help('Test on remote accounts via ssh/rsync (vm or host)')
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
@@ -1343,7 +1347,7 @@ ssh hostname perlall init MODULES
 =cut
 
 sub initvm
-  :Help('init remote perlall via ssh/rsync (vm or host)')
+  :Help('Init remote perlall via ssh/rsync (vm or host)')
 {
   my $c = shift;
 
@@ -1383,7 +1387,7 @@ This command upgrades perlall to its latest version.
 =cut
 
 sub selfupgrade
-  :Help(upgrade perlall to its latest version)
+  :Help('Upgrade perlall to its latest version')
 {
   my $c = shift;
   "unimplemented" # see perlbrew
@@ -1396,7 +1400,7 @@ prints this help. With -v even more.
 =cut
 
 sub help
-  :Help('list of commands. With -v more')
+  :Help('List of commands. With -v more')
 {
   my $c = shift;
   $c->addopts( 'verbose|v' );
@@ -1413,7 +1417,7 @@ sub help
 =cut
 
 sub version
-  :Help(print version)
+  :Help('Print version')
 {
   # hardlink variants (perlall-make, ...)
   print basename($0)." $main::VERSION\n";

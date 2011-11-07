@@ -1031,11 +1031,12 @@ sub uninstall
   $bindir = "/usr/local/bin" unless $bindir;
   $c->_fail("$bindir/$p does not exist") unless -e "$bindir/$p";
   my $archlib = `$bindir/$p -MConfig -e'print $Config{archlibexp}'`;
+  $archlib = `$bindir/$p -MConfig -e'print $Config{archlib}'` unless $archlib;
   my $sitearch = `$bindir/$p -MConfig -e'print $Config{sitearchexp}'`; # may be empty
   if ($c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib)) {
     $c->_system0("sudo rm -rf $bindir/$p $archlib $sitearch");
   } else {
-    $c->_fail("$bindir/$p or $archlib did not exist");
+    $c->_fail("$p archlib $archlib did not exist");
   }
   "perl$p uninstalled"
 }

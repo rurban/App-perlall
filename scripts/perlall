@@ -1029,10 +1029,14 @@ sub uninstall
   my $p = shift @{$c->stash->{perlall}};
   my $bindir = $c->config->{PERLALL_BINDIR};
   $bindir = "/usr/local/bin" unless $bindir;
-  my $archlib = `$p -MConfig -e'print $Config{archlibexp}'`;
-  my $sitearch = `$p -MConfig -e'print $Config{sitearchexp}'`; # may be empty
-  $c->_system0("sudo rm -rf $bindir/$p $archlib $sitearch")
-    if $c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib);
+  $c->_fail("$bindir/$p does not exist") unless -e "$bindir/$p";
+  my $archlib = `$bindir/$p -MConfig -e'print $Config{archlibexp}'`;
+  my $sitearch = `$bindir/$p -MConfig -e'print $Config{sitearchexp}'`; # may be empty
+  if ($c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib)) {
+    $c->_system0("sudo rm -rf $bindir/$p $archlib $sitearch");
+  } else {
+    $c->_fail("$bindir/$p or $archlib did not exist");
+  }
   "perl$p uninstalled"
 }
 

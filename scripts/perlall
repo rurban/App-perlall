@@ -956,8 +956,8 @@ sub build
   if ($^O eq 'darwin') { # darwin hints overwrote ld
     $c->debug("post-configure darwin ld fixes");
     my $ld = $dryrun ? "env MACOSX_DEPLOYMENT_TARGET=10.3 cc" 
-      : `$^X -ne"if (/ld='(.+)'/){print \$1}" config.sh`;
-    my $cc = $dryrun ? "cc" : `$^X -ne"if (/cc='(.+)'/){print \$1}" config.sh`;
+      : `$^X -ne"if (/^ld='(.+?)'/){print \$1}" config.sh`;
+    my $cc = $dryrun ? "cc" : `$^X -ne"if (/^cc='(.+?)'/){print \$1}" config.sh`;
     if ($ld ne $cc) {  # XXX and honor cmdline -Dld=
       $c->_grep( "s,^ld='$ld',ld='$cc',; print", "config.sh");
     }

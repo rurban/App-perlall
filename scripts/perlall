@@ -744,6 +744,24 @@ sub build
   }
   $c->_log("chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
+
+  $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
+  if ($gitsuffix) {
+    $srcdir = $c->config->{'perl-git'};
+    if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
+      $gitsuffix = "@".substr($gitsuffix,0,6);
+    } else {
+      if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
+	chdir $srcdir;
+	$gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
+	chdir $root;
+      }
+      $gitsuffix =~ s/^smoke-me\///;
+      $gitsuffix =~ s/\W//; # collapse non-word chars
+      $gitsuffix = "@".substr($gitsuffix,0,12);
+    }
+    $p .= $gitsuffix unless $p =~ /@/;
+  }
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
@@ -794,25 +812,7 @@ sub build
 	}
       } else { # mksymlink for blead or branches
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
-	if ($gitsuffix =~ /^blead|HEAD$/ and !$dryrun) {
-	  chdir $srcdir;
-	  $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
-	}
-	$c->_system1( "chdir", $builddir);
-      }
-
-      if ($gitsuffix) {
-	if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
-	  $gitsuffix = "@".substr($gitsuffix,0,6);
-	} else {
-	  $gitsuffix =~ s/^smoke-me\///;
-	  $gitsuffix =~ s/\W//; # collapse non-word chars
-          # for blead or HEAD replace by id, a moving target
-          if ($gitsuffix =~ /^blead|HEAD$/ and !$dryrun) {
-	    $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
-	  }
-	  $gitsuffix = "@".substr($gitsuffix,0,12);
-	}
+	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
       }
 
       # XXX backport various Configure and hints patches from blead
@@ -908,7 +908,7 @@ sub build
   # with git branches prefer to cp to keep the debugging src,
   # no mksymlinks. --link only if you have not enough space.
   if ($gitsuffix and !$c->options->{link}) {
-    $c->_system1( "cp", "-r", "$srcdir/*", ".");
+    $c->_system1( "cp -r $srcdir/* ." );
     $conf[1] = "Configure";
   }
   $c->_system1( @conf);

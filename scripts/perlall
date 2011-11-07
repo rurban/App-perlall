@@ -927,7 +927,7 @@ sub build
     $c->debug("post-configure archname fixes");
     my $arch = `$^X -ne"if (/^archname='(.+?)'/){print \$1}" config.sh` unless $dryrun;
     #my $arch = `grep ^archname= config.sh|cut -c10-` unless $dryrun;
-    #chomp $arch;
+    chomp $arch;
     $arch = "fake-arch" if $dryrun;
     $arch =~ s/'//g;
     my $new = $arch;
@@ -938,6 +938,7 @@ sub build
 	# XXX parse and set
 	$new = $d;
 	$new =~ s/^archname=//;
+	$new =~ s/'//g;
       }
     }
     $c->_fail("Configure failed") unless $arch;

@@ -821,7 +821,7 @@ sub build
 
   # Backport various Configure and hints patches from blead
   # via Devel::PatchPerl
-  Devel::PatchPerl::patch_source($ps);
+  Devel::PatchPerl::patch_source($ps) unless $dryrun;
 
   $c->_system( $make, @j, "clean") if -f "Makefile" and -f 'miniperl';
   $c->_system( $rm, "config.h") if -f "config.h";
@@ -919,7 +919,7 @@ sub build
     $conf[1] = "Configure";
   }
   $c->_system1( @conf);
-  $c->_fail("Configure failed") unless -f 'config.sh';
+  $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
 
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug or $^O eq 'darwin') {

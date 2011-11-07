@@ -13,5 +13,5 @@ use Test::More tests => 5;
   like( $c, qr/received parameters: 5.15.4 blead/m, "params" );
   # if $perl-git/.git exists check more
   like( $c, qr/post-configure archname fixes/m, "almost through" );
-  like( $c, qr/5.15.4 faked$/m, "fake end" );
+  like( $c, qr/5.15.4\@blead faked$/m, "fake end" );
 }

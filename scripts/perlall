@@ -4,9 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   stable .lock file handling
-#   special build patches: dbm, ... See bisect-runner.pl
-#   build --cont
+#   check stable .lock file handling (looks better now)
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...

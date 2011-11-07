@@ -666,13 +666,19 @@ sub build
   my $p = $args[0];
   if ($p =~ /^(perl)?5\./ ) {
     shift @args;
+  } elsif ($p =~ /^blead/ ) {
+    my $srcdir = $c->config->{'perl-git'} or $c->_fail("blead needs perl-git");
+    my $v = `$^X -ane'print \$F[2] if /PERL_API_VERSION/' $srcdir/patchlevel.h`;
+    my $sv = `$^X -ane'print \$F[2] if /PERL_API_SUBVERSION/' $srcdir/patchlevel.h`;
+    $p = "5.$v.$sv".substr($p,5); 
+    $args[0] = 'blead'; # set $from
   } else {
     $c->output("perlall build missing perlversion argument\n");
     $c->execute('help') and return undef;
   }
   $p =~ s/^perl//;
   $p =~ s/^-//;
-  if ($p =~ /[\*\?\[]/ or $p !~ /^5\./) {
+  if ($p =~ /[\*\?\[]/ or $p !~ /^5\.\d/) {
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }

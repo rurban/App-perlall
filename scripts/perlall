@@ -6,6 +6,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 # TODO:
 #   stable .lock file handling
 #   special build patches: dbm, ... See bisect-runner.pl
+#   build --cont
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
@@ -565,6 +566,20 @@ sub _grep {
   select(STDOUT);
 }
 
+# takes path to file and applies all os patches from HEAD up to blead
+sub _patch {
+  my ($c, $file) = @_;
+  $c->_system("git show HEAD..blead $file | patch -N -p1") 
+    and warn("patch HEAD..blead $file had some errors\n");
+}
+
+# like Porting/bisect-runner.pl apply_commit
+sub _apply_commit {
+  my ($c, $commit, @files) = @_;
+  $c->_system("git show $commit @files | patch -N -p1") 
+    and warn("cannot apply commit $commit".(@files ? " to @files":"")."\n");
+}
+
 sub _teardown {
   my $c = shift;
   close $c->stash->{log_fh} if $c->stash->{log_fh};
@@ -792,6 +807,11 @@ sub build
 	  }
 	  $gitsuffix = "@".substr($gitsuffix,0,12);
 	}
+      }
+
+      # XXX backport various Configure and hints patches from blead
+      if (-f "hints/$^O.sh") { # and $c->_older($ps,"5.10"))
+	$c->_patch("hints/$^O.sh");
       }
     }
   }

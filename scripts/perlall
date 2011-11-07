@@ -20,6 +20,7 @@ use Cwd ();
 use File::Basename 'basename';
 use IO::Tee;
 use Devel::Platform::Info;
+use Devel::PatchPerl;
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -814,13 +815,12 @@ sub build
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
 	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
       }
-
-      # XXX backport various Configure and hints patches from blead
-      if ($srcdir eq "." and -f "hints/$^O.sh") { # and $c->_older($ps,"5.10"))
-	$c->_patch("hints/$^O.sh");
-      }
     }
   }
+
+  # Backport various Configure and hints patches from blead
+  # via Devel::PatchPerl
+  Devel::PatchPerl::patch_source($ps);
 
   $c->_system( $make, @j, "clean") if -f "Makefile" and -f 'miniperl';
   $c->_system( $rm, "config.h") if -f "config.h";
@@ -904,6 +904,12 @@ sub build
   }
   # XXX new cc with <5.8.9: error: unrecognized option '-no-cpp-precomp'
   # XXX <= 5.10.1 debian: empty perllibs in config.sh and thus libs in Makefile
+  # XXX darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
+  if ($^O eq 'darwin') {
+    my $conf = join(" ",@conf);
+    push @conf, "-Aldflags=-flat_namespace"
+      if $conf =~ /ccflags=-m64/ or $conf =~ /ccflags=-m32/;
+  }
 
   # with git branches prefer to cp to keep the debugging src,
   # no mksymlinks. --link only if you have not enough space.
@@ -924,6 +930,7 @@ sub build
     my $new = $arch;
     $new .= "-debug" if $debug and $arch !~ /-debug/;
     # XXX strip -2level if -m32 or -m64
+    # => ldflags -flat-namespace
     $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
     if ($c->options->{D} =~ /^archname/) {
       # XXX parse and set
@@ -1405,7 +1412,7 @@ sub initvm
     $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
   }
   $c->_system1("ssh",$m,"perl","-MCPAN",
-	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info'");
+	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info Devel::PatchPerl'");
   # XXX we are not sure if bin is in the PATH
   #$c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
   "initvm done on ".$m

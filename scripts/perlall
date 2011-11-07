@@ -4,7 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   implement smoke, uninstall, selfupgrade
+#   implement smoke, selfupgrade
 #   check stable .lock file handling (looks better now)
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
@@ -1022,9 +1022,18 @@ Uninstalls the given version.
 =cut
 
 sub uninstall
-  :Help('sudo rm /usr/local/bin/perl <arg> and its libs')
+  :Help('sudo rm /usr/local/bin/perl<arg> and its archlibs')
 {
-  "unimplemented";
+  my $c = shift;
+  #my @argv = @{$c->argv};
+  my $p = shift @{$c->stash->{perlall}};
+  my $bindir = $c->config->{PERLALL_BINDIR};
+  $bindir = "/usr/local/bin" unless $bindir;
+  my $archlib = `$p -MConfig -e'print $Config{archlibexp}'`;
+  my $sitearch = `$p -MConfig -e'print $Config{sitearchexp}'`; # may be empty
+  $c->_system0("sudo rm -rf $bindir/$p $archlib $sitearch")
+    if $c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib);
+  "perl$p uninstalled"
 }
 
 =item B<smoke> [OPTIONS] perl<version><suffix> [ from ]

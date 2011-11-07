@@ -1411,8 +1411,7 @@ sub initvm
   unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
     $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
   }
-  $c->_system1("ssh",$m,"perl","-MCPAN",
-	  "-e","install 'App::Rad IO::Tee Devel::Platform::Info Devel::PatchPerl'");
+  $c->_system1("ssh $m 'perl -MCPAN -e\"install qw/App::Rad IO::Tee Devel::Platform::Info Devel::PatchPerl/\"'");
   # XXX we are not sure if bin is in the PATH
   #$c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
   "initvm done on ".$m

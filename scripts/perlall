@@ -10,6 +10,8 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
 #   tests: check opts-mix with hardlinks cmd, opts vs params (if config->linked)
+#   git-branch globbing (smoke bleadd smoke-me/*)
+#   metacpan globbing (cpan Devel::*)
 
 use strict;
 use App::Rad;
@@ -903,7 +905,6 @@ sub build
       last;
     }
   }
-  # XXX new cc with <5.8.9: error: unrecognized option '-no-cpp-precomp'
   # XXX <= 5.10.1 debian: empty perllibs in config.sh and thus libs in Makefile
   # XXX darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
   if ($^O eq 'darwin') {

@@ -598,7 +598,7 @@ sub _fail {
 
 =over
 
-=item B<build> [OPTIONS] perl<version><suffix> [ from ]
+=item B<build> [OPTIONS] <version><suffix> [ from ]
 
 Build and install the given version of perl.
 
@@ -608,7 +608,8 @@ The branchname or commit-id is added to the archname and dll suffix, such as
 C<@sproututf8> for C<sprout/utf8>, the binary name is taken from the
 first argument. All unreleased git versions, like C<blead> or C<smoke-me>
 branches get a C<@gitid> suffix. C<smoke-me/> is stripped from the
-suffix.
+suffix. The special version "blead" denotes the latest version.
+E.g. C<perlall build blead-nt> builds latest non-threaded.
 
 If the checkout from a bit branch is not a release, the suffix will be
 marked with C<@> and the sources are copied to the
@@ -653,7 +654,7 @@ Specific OPTIONS:
 
     perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
 
-    Certain special switches are merged from F</usr/local/bin/perl>.
+    Certain special switches are merged from F</usr/local/bin/perl> or F</usr/bin/perl>
 
 =cut
 
@@ -778,21 +779,26 @@ sub build
       $c->_fail( "invalid builddir $builddir") if !-d $builddir and !$dryrun;
       $c->_system($sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
 
-      # mksymlink for blead or branches
       if (!$gitsuffix and !$c->options->{link}) { # cp anew
 	$c->debug("copy full git tree anew for $from, no gitsuffix");
 	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
 	# unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
 	$c->_system1( @cmd);
 	$srcdir = "."; # clean copy
-      } else {
+
+	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
+	$c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
+	$c->_fail("git checkout -f $from") if !-f "Configure" and !$dryrun;
+	if ($srcdir eq "." and !$gitsuffix) {
+	  $c->_system1( "git","reset","--hard");
+	}
+      } else { # mksymlink for blead or branches
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
-      }
-      $c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
-      $c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
-      $c->_fail("git checkout -f $from") if !-f "Configure" and !$dryrun;
-      if ($srcdir eq "." and !$gitsuffix) {
-	$c->_system1( "git","reset","--hard");
+	if ($gitsuffix =~ /^blead|HEAD$/ and !$dryrun) {
+	  chdir $srcdir;
+	  $gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
+	}
+	$c->_system1( "chdir", $builddir);
       }
 
       if ($gitsuffix) {
@@ -810,7 +816,7 @@ sub build
       }
 
       # XXX backport various Configure and hints patches from blead
-      if (-f "hints/$^O.sh") { # and $c->_older($ps,"5.10"))
+      if ($srcdir eq "." and -f "hints/$^O.sh") { # and $c->_older($ps,"5.10"))
 	$c->_patch("hints/$^O.sh");
       }
     }

@@ -3,11 +3,9 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # TODO:
-#   stable .lock file handling (SIG traps, custom end blocks)
+#   stable .lock file handling
 #   special build patches: dbm, ... See bisect-runner.pl
-#   testvm (from perltestvm bash script, with load balancing)
-#   trap Ctrl-Break in subprocesses
-#   more args (as,force,j,...)
+#   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
 #   tests: check opts-mix with hardlinks cmd, opts vs params (if config->linked)

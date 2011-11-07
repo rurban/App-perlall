@@ -974,18 +974,20 @@ sub build
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
   # do we need sudo? check writable
-  my @c = ($cp, "$root/inst-$p/usr/local/bin/perl$ps","$prefix/bin/perl$p");
-  $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
-  unshift @c, $sudo if $sudo;
-  $c->_system1( @c);
+  if (-f "$root/inst-$p/usr/local/bin/perl$ps") {
+    my @c = ($cp, "$root/inst-$p/usr/local/bin/perl$ps","$prefix/bin/perl$p");
+    $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
+    unshift @c, $sudo if $sudo;
+    $c->_system1( @c);
 
-  @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
-  # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
-  unshift @c, $sudo if $sudo;
-  $c->_system1( @c);
+    @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
+    # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
+    unshift @c, $sudo if $sudo;
+    $c->_system1( @c);
 
-  if (!$gitsuffix and $srcdir eq "." and -d '.git') {
-    $c->_system1( "rm","-rf",".git");
+    if (!$testerr and !$gitsuffix and $srcdir eq "." and -d '.git') {
+      $c->_system1( "rm","-rf",".git");
+    }
   }
 
   chdir $cwd;

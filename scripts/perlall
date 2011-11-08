@@ -4,16 +4,14 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   logfile should be verbose, STDOUT and STDERR, use native tee, use right dir
 #   implement smoke, selfupgrade
 #   check stable .lock file handling (looks better now). use better dirs
 #   init-modules: shell expansion, \ handling
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   git-branch globbing (smoke bleadd smoke-me/*)
+#   --skip=outdated (5.14.1, 5.10.0, 5.15.1, ...)
 #   metacpan globbing (cpan Devel::*)
-#   older: check non-version suffix also if provided? or use skip for this?
 
 use strict;
 use App::Rad;

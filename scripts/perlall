@@ -214,7 +214,7 @@ sub pre_process {
       print LOCK $$,"\n";
       close LOCK;
 
-      $SIG{INT} = $SIG{TERM} = sub {my $l="perlall.lock"; unlink $l if -f $l };
+      $SIG{INT} = $SIG{TERM} = sub {my $l="perlall.lock"; unlink $l if -f $l; exit 1; };
     
       END {
 	my $l = "perlall.lock";
@@ -282,13 +282,13 @@ sub App::Rad::_get_input {
 	warn "invalid link $base: unknown Command $cmd\n"; 
 	return;
       }
-      $c->config->{linked} = $cmd;
+      $c->config->{linked} = $cmd; # yet unused
     }
-    for (my $i=0; $i<@ARGV; $i++) {
+    for (my $i=0; $i<@ARGV; $i++) { # the first non-option is the cmd, the rest its args
       if (defined ($ARGV[$i]) and substr($ARGV[$i], 0, 1) ne '-') {
 	$c->{'cmd'} = $ARGV[$i] unless $cmd;
-	@params = @ARGV[$i..$#ARGV];
-	shift @params;
+	@params = (@ARGV[$i..$#ARGV]);
+	shift @params unless $c->config->{linked};
 	last;
       }
       push @options, ($ARGV[$i]);

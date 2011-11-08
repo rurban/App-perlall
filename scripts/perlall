@@ -155,7 +155,7 @@ F<status_upd> and F<store_rpt> for those generated logfiles.
 sub setup { 
   $_[0]->register_commands( {-ignore_prefix => '_'} );
   $_[0]->register('install', \&build, "alias to build");
-  $_[0]->register('smoke', \&build, "smoke [ perl<version><suffix> from ]");
+  $_[0]->register('smoke', \&build, "smoke [ perl<version><suffix> branch ]");
   $_[0]->unregister('basename'); #imported (bug)
 }
 
@@ -632,11 +632,47 @@ sub _fail {
   die "@_\n";
 }
 
+sub _glob_git {
+  my $c = shift;
+  my $git = shift;
+  return qw(smoke-me/scream smoke-me/taint.t ) if $c->options->{dryrun};
+  my $srcdir = $c->config->{'perl-git'};
+  my @all = split /\n/, `GIT_DIR=$srcdir/.git git branch -a`;
+  # glob it
+  my $root = $c->config->{PERLALL_BUILDROOT};
+  my $tmp = '.branches';
+  # use File::Path ?
+  my @sudo = ();
+  if (-w $tmp) { 
+    $c->_system("mkdir",$tmp);
+  } else {
+    @sudo = ("sudo");
+    $c->_system("sudo","mkdir",$tmp);
+    $c->_system("sudo","chown",$<,'-R',$tmp);
+    $c->_system("sudo","chmod",'u+rwx','-R',$tmp);
+  }
+  chdir "$root/$tmp" or die;
+  for (@all) {
+    chomp;
+    s|remotes/origin/||;
+    s|.+ -> .+||;
+    s|[\s\*\?]||g;
+    s|\.\./||g;
+    system("mkdir","-p",$_) if $_;
+  }
+  # how to expand subdirs with glob? sm*/s* and smoke-me/s/r => smoke-me/s
+  # XXX find
+  my @git = grep {-d $_ } glob $git;
+  chdir $root or die;
+  $c->_system(@sudo,"rm","-rf",$tmp);
+  return @git;
+}
+
 =head2 COMMANDS
 
 =over
 
-=item B<build> [OPTIONS] <version><suffix> [ from ]
+=item B<build> [OPTIONS] <version><suffix> [ branch|from ]
 
 Build and install the given version of perl.
 
@@ -657,8 +693,9 @@ specified.
 On cygwin and windows the F<perl*.dll> also gets the suffix, because they
 are stored globally. (NOT YET)
 
-The specified perl is taken from a perl git repo 
-(specified via perl-git in ~/.perlall), or downloaded via CPAN. (not yet)
+The specified perl is taken from a perl git repo (version or tag or branch)
+(specified via perl-git in ~/.perlall), or downloaded
+via CPAN. (not yet)
 
 C<man> files are not installed. This is the job for the default 
 /usr/local/bin/perl or /usr/bin/perl.
@@ -697,7 +734,7 @@ Specific OPTIONS:
 =cut
 
 sub build
-  :Help('build [opts] perl<version><suffix> [ from ]')
+  :Help('build [opts] perl<version><suffix> [ branch|from ]')
 {
   my $c = shift;
   # special build options (after the cmd)
@@ -723,8 +760,12 @@ sub build
     my $srcdir = $c->config->{'perl-git'} or $c->_fail("blead needs perl-git");
     my $v = `$^X -ane'print \$F[2] if /PERL_API_VERSION/' $srcdir/patchlevel.h`;
     my $sv = `$^X -ane'print \$F[2] if /PERL_API_SUBVERSION/' $srcdir/patchlevel.h`;
-    $p = "5.$v.$sv".substr($p,5); 
-    $args[0] = 'blead'; # set $from
+    $p = "5.$v.$sv".substr($p,5);
+    if (@args > 1) { 
+      shift @args;
+    } else {
+      $args[0] = 'blead'; # set $from
+    }
   } else {
     $c->output("perlall build missing perlversion argument\n");
     $c->execute('help') and return undef;
@@ -738,7 +779,6 @@ sub build
   # $c->stash->{log} = $c->stash->{logprefix} . $p;
   # $c->_log("perlall",_opts($c->options),"build",$p,@args);
   $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
-  my $srcdir;
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd }
 
@@ -751,6 +791,66 @@ sub build
     $c->_system1( "mkdir",$root) 
       and $c->_fail("Cannot create PERLALL_BUILDROOT $root");
   }
+  my $dryrun = $c->options->{dryrun};
+  my $from = shift @args ; # might be empty
+  my $ps = $p;
+  $ps =~ s/\-.+$//;
+  $ps =~ s/@.+$//;
+  $ps =~ s/thr$// if $c->config->{usethrsuffix};
+  $ps =~ s/d$//;
+
+  unless ($from) {
+    # XXX git only at first
+    if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
+      $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
+    } else {
+      $c->_fail ("could not determine from/branch argument for $p. perl-git missing?");
+    }
+  }
+  $c->_log("chdir $root") unless $c->options->{quiet};
+  chdir $root unless $dryrun;
+
+  my $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
+  if ($gitsuffix) {
+    if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
+      $gitsuffix = "@".substr($gitsuffix,0,6);
+      $p .= $gitsuffix unless $p =~ /@/;
+    } else {
+      # symbolic names default to --link
+      $c->options->{link} = 1 unless exists $c->options->{link};
+      if ($gitsuffix =~ /\*/) { #expand branch glob-style
+	my $result = '';
+	my @git = $c->_glob_git($gitsuffix);
+	_print0("perlall build $p $gitsuffix => ",@git);
+	for my $git (@git) {
+	  my $pg = $p;
+	  my $s = $git;
+	  $s =~ s/^smoke-me\///;
+	  $s =~ s/\W//; # collapse non-word chars
+	  $pg = $p."@".substr($s,0,12);
+	  $result .= $c->_build($pg, $from, $ps, $git, $root, $prefix, $cwd);
+	}
+	return $result;
+      }
+      my $srcdir = $c->config->{'perl-git'};
+      if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
+	chdir $srcdir;
+	$gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
+	chdir $root;
+      }
+      my $git = $gitsuffix;
+      $git =~ s/^smoke-me\///;
+      $git =~ s/\W//; # collapse non-word chars
+      $git = "@".substr($gitsuffix,0,12);
+      $p .= $git unless $p =~ /@/;
+    }
+  } 
+  return $c->_build($p, $from, $ps, $gitsuffix, $root, $prefix, $cwd);
+}
+
+sub _build {
+  my ($c, $p, $from, $ps, $gitsuffix, $root, $prefix, $cwd) = @_;
+
   my $make = $Config{make};
   my $sed = $Config{sed};
   $sed = "sed" unless $sed;
@@ -760,52 +860,16 @@ sub build
   $rm = "rm" unless $rm;
   my $sudo = $c->config->{sudo};
   $sudo = "" unless $<; # already sudo
-
-  my $from = shift @args ; # might be empty
-  my $gitsuffix;
-  my $ps = $p;
-  my $dryrun = $c->options->{dryrun};
-  $ps =~ s/\-.+$//;
-  $ps =~ s/@.+$//;
-  $ps =~ s/thr$// if $c->config->{usethrsuffix};
-  $ps =~ s/d$//;
   # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
 
-  unless ($from) {
-    # XXX git only at first
-    if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
-      $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
-    } else {
-      $c->_fail ("could not determine from argument for $p. perl-git missing?");
-    }
-  }
-  $c->_log("chdir $root") unless $c->options->{quiet};
-  chdir $root unless $dryrun;
-
-  $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
-  if ($gitsuffix) {
-    $srcdir = $c->config->{'perl-git'};
-    if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
-      $gitsuffix = "@".substr($gitsuffix,0,6);
-    } else {
-      # symbolic names default to --link
-      $c->options->{link} = 1 unless exists $c->options->{link};
-      if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
-	chdir $srcdir;
-	$gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
-	chdir $root;
-      }
-      $gitsuffix =~ s/^smoke-me\///;
-      $gitsuffix =~ s/\W//; # collapse non-word chars
-      $gitsuffix = "@".substr($gitsuffix,0,12);
-    }
-    $p .= $gitsuffix unless $p =~ /@/;
-  }
+  my $dryrun = $c->options->{dryrun};
+  my $srcdir = $c->config->{'perl-git'};
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
-  $c->_log("perlall",_opts($c->options),"build",$p,@args);
+  $c->_log("perlall",_opts($c->options),"build",$p,
+           $gitsuffix ? $gitsuffix : $from);
   $c->_check_lock();
   
   my $builddir = "build-".$p;
@@ -834,9 +898,7 @@ sub build
       $c->_system1( "chdir", $builddir);
     }
     else { # git, much better
-      $srcdir = $c->config->{'perl-git'};
       $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
-      # $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
       my @cmd = ("mkdir", $builddir);
       unshift @cmd, $sudo if $sudo and !-w $builddir;
       $c->_system1( @cmd) unless -d $builddir;
@@ -1082,7 +1144,7 @@ sub uninstall
   "perl$p uninstalled"
 }
 
-=item B<smoke> [OPTIONS] perl<version><suffix> [ from ]
+=item B<smoke> [OPTIONS] perl<version><suffix> [ branch|from ]
 
 Same as C<build>, but reports the testresults to the smokers mailing list.
 

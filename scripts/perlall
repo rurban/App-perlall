@@ -20,6 +20,7 @@ use Config;
 use Cwd ();
 use File::Basename 'basename';
 use IO::Tee;
+use IO::Scalar;
 use Devel::Platform::Info;
 use Devel::PatchPerl;
 
@@ -545,29 +546,42 @@ sub _log {
   }
 }
 
+# -i inplace editing or just grep
 # print unless /<command-line>/
 # s,$dll,$newdll,; print
 sub _grep {
   my $c = shift;
   my $cmd = shift;
-  # -i inplace
-  $c->_log("perl -i -ne'$cmd' ",join(" ",@_));
+  my ($inplace, $out);
+  if (substr($cmd,0,3) eq '-i ') {
+    $inplace = '-i ';
+    $cmd = substr($cmd,3);
+  }
+  $c->_log("perl -i -ne'$cmd' ",join(" ",@_)) if $inplace;
   return if $c->options->{dryrun};
+  my $catch = '';
   while (my $f = shift @_) {
     next unless -f $f;
-    my $b = $f."~";
-    unlink $b if -e $b;
-    rename($f, $b);
+    my $b = $f;
+    if ($inplace) {
+      $b .= "~";
+      unlink $b if -e $b; # does this work on windows?
+      rename($f, $b);
+      open($out, ">", $f);
+      select $out;
+    } else {
+      $out = IO::Scalar->new(\$catch);
+      select $out;
+    }
     open(IN, "<", $b);
-    open(OUT, ">", $f);
-    select(OUT);
   LINE: while (<IN>) {
       eval $cmd;
     }
     close IN;
-    close OUT;
+    close $out;
   }
   select(STDOUT);
+  $catch;
 }
 
 # takes path to file and applies all os patches from HEAD up to blead
@@ -675,7 +689,7 @@ sub build
        [ "A=s@",     "./configure option" ],
        [ "U=s@",     "./configure option" ],
        [ "j=n",      "parallel make (>5.10)" ],
-       [ "link",     "make symlinks with git" ],
+       [ "link!",    "make symlinks with git" ],
        [ "notest|n", "skip the test suite on build and makeinstall" ],
        [ "force|f",  "force install" ]
       );
@@ -811,23 +825,30 @@ sub build
 	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
 	$c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
 	$c->_fail("git checkout -f $from") if !-f "Configure" and !$dryrun;
-	if ($srcdir eq "." and !$gitsuffix) {
-	  $c->_system1( "git","reset","--hard");
-	}
+	$c->_system1( "git","reset","--hard");
       } else { # mksymlink for blead or branches
-	$c->debug("working symlinked to perl-git tree \@$gitsuffix");
-	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
+	$c->debug("working symlinked to perl-git tree \@$gitsuffix") if $c->options->{link};
+	$c->_system1( "chdir", $builddir);
+	$c->_fail( "not existing builddir $builddir")
+	  if basename(Cwd::getcwd()) ne $builddir;
+        $c->_system1( "rm -rf * .config") 
+	  if -f 'Configure' and !-l "Configure";
       }
     }
   }
 
   # Backport various Configure and hints patches from blead
   # via Devel::PatchPerl
-  Devel::PatchPerl::patch_source($ps) unless $dryrun;
+  if ($srcdir eq ".") {
+    $c->_log("Devel::PatchPerl::patch_source($ps)");
+    Devel::PatchPerl::patch_source($ps) unless $dryrun;
+  } elsif (!$dryrun) {
+    warn "Warning: Building -Dmksymlink (--link) with no build patches applied.\n"
+      ."Use --no-link if this fails.\n";
+  }
 
-  $c->_system( $make, @j, "clean") if -f "Makefile" and -f 'miniperl';
+  # $c->_system( $make, @j, "clean") if -f "Makefile" and -f 'miniperl';
   $c->_system( $rm, "config.h") if -f "config.h";
-  $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->_system( $rm, "Policy.sh") if -f "Policy.sh";
   $c->_system( $rm, "-rf", "UU") if -d "UU";
   $c->_system( $rm, "-rf", ".config") if -d ".config";
@@ -838,7 +859,6 @@ sub build
 	      "-Dinstallsiteman1dir=none","-Dinstallsiteman3dir=none");
   # we cannot force archname, because we don't know the resulting name yet
   # we fix that post-configure
-  # XXX However we should honor -Darchname
   my $debug = $p =~ /\dd-?/;
   my $ithreads = $p !~ /\dd?-nt/;
   my $multi = $p !~ /\dd?-m/;
@@ -846,7 +866,7 @@ sub build
   if ($c->config->{usethrsuffix}) {
     $ithreads = $p =~ /\dd?thr/; # perl5.14.2dthr
   }
-  push @conf, "-Dmksymlinks" if $srcdir ne "." and (!$gitsuffix or $c->options->{link});
+  push @conf, "-Dmksymlinks" if $srcdir ne ".";
   push @conf, "-DEBUGGING" if $debug;
   push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion}; #-g is lame
   push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
@@ -858,8 +878,8 @@ sub build
   if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh'
       and ($gitsuffix or $debug or !$ithreads))
   {
-    my $dll = `$^X -ne"if (/libperl='(.+)'/){print \$1}" config.sh` unless $dryrun;
-    $dll = "fake.dll" if $dryrun;
+    my $dll = $dryrun ? "fake.dll"
+      : $c->_grep("/^libperl='(.+)'\$/ and print \$1","config.sh");
     $libperl = $olddll = $dll;
     my $suff = "";
     $suff .= "d" if $debug;
@@ -869,6 +889,7 @@ sub build
     $libperl =~ s/(\d)\.dll/$1$suff.dll/ if $suff;
     push @conf, "-Dlibperl=$libperl" if $libperl;
   }
+  $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
   for my $tryperl ("/usr/local/bin/perl", "/usr/bin/perl") {
     if (-e $tryperl) { # use tryperl as template and merge options
@@ -905,37 +926,26 @@ sub build
       last;
     }
   }
-  # XXX <= 5.10.1 debian: empty perllibs in config.sh and thus libs in Makefile
-  # XXX darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
+  # darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
   if ($^O eq 'darwin') {
     my $conf = join(" ",@conf);
     push @conf, "-Aldflags=-flat_namespace"
-      if $conf =~ /ccflags=-m64/ or $conf =~ /ccflags=-m32/;
+      if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
   }
 
-  # with git branches prefer to cp to keep the debugging src,
-  # no mksymlinks. --link only if you have not enough space.
-  if ($gitsuffix and !$c->options->{link}) {
-    $c->_system1( "cp -r $srcdir/* ." );
-    $conf[1] = "Configure";
-  }
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
 
   # fix libs on debug and git-stuff
   if ($gitsuffix or $debug or $^O eq 'darwin') {
     $c->debug("post-configure archname fixes");
-    my $arch = `$^X -ne"if (/^archname='(.+?)'/){print \$1}" config.sh` unless $dryrun;
-    #my $arch = `grep ^archname= config.sh|cut -c10-` unless $dryrun;
-    chomp $arch;
-    $arch = "fake-arch" if $dryrun;
-    $arch =~ s/'//g;
+    my $arch = $dryrun ? "fake-arch"
+      : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh");
     my $new = $arch;
     $new .= "-debug" if $debug and $arch !~ /-debug/;
     $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
     for my $d (@{$c->options->{D}}) {
       if ($d =~ /^archname/) {
-	# XXX parse and set
 	$new = $d;
 	$new =~ s/^archname=//;
 	$new =~ s/'//g;
@@ -943,17 +953,18 @@ sub build
     }
     $c->_fail("Configure failed") unless $arch;
     # XXX This is very fragile!
-    $c->_grep( "s,$arch,$new,; print", "config.h", "config.sh", "Policy.sh", "myconfig")
+    $c->_grep("-i s,$arch,$new,; print", 
+	      "config.h", "config.sh", "Policy.sh", "myconfig")
       if $arch and $arch ne $new;
   }
   if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or !$ithreads)) {
     $c->debug("post-configure perl.dll fixes");
-    my $dll = `$^X -ne"if (/^libperl='(.+?)'/){print \$1}" config.sh` unless $dryrun;
-    $dll = "fake.dll" if $dryrun;
+    my $dll = $dryrun ? "fake.dll"
+      : $c->_grep("/^libperl='(.+?)'\$/ and print \$1", "config.sh");
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
     } else {
-      $c->_grep("s,$olddll,$libperl,", 
+      $c->_grep("-i s,$olddll,$libperl,", 
 		"config.h", "Makefile", "GNUmakefile", "myconfig")
 	if $libperl and $olddll;
     }
@@ -961,19 +972,19 @@ sub build
   if ($^O eq 'darwin') { # darwin hints overwrote ld
     $c->debug("post-configure darwin ld fixes");
     my $ld = $dryrun ? "env MACOSX_DEPLOYMENT_TARGET=10.3 cc" 
-      : `$^X -ne"if (/^ld='(.+?)'/){print \$1}" config.sh`;
-    my $cc = $dryrun ? "cc" : `$^X -ne"if (/^cc='(.+?)'/){print \$1}" config.sh`;
+      : $c->_grep("/^ld='(.+?)'/ and print \$1", "config.sh");
+    my $cc = $dryrun ? "cc" :  $c->_grep("/^cc='(.+?)'/ and print \$1", "config.sh");
     if ($ld ne $cc) {  # XXX and honor cmdline -Dld=
-      $c->_grep( "s,^ld='$ld',ld='$cc',; print", "config.sh");
+      $c->_grep("-i s,^ld='$ld',ld='$cc',; print", "config.sh");
     }
   }
   $c->debug("post-configure startperl fixes");
-  $c->_grep( "s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
+  $c->_grep("-i s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
     if $ps and $ps ne $p;
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?
     $c->debug("post-configure old-perl Makefile fixes");
-    $c->_grep( "print unless /<command-line>/", $makefile, "x2p/$makefile");
+    $c->_grep("-i print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 
   $c->_system1( $make, @j); 
@@ -1413,6 +1424,7 @@ sub initvm
   _print0("perlall initvm $m ",@{$c->argv})
     if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
+  $c->options->{verbose} = 1 unless $c->options->{quiet};
   unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
     for my $t (/ecdsa dsa rsa /) {
       if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
@@ -1424,12 +1436,15 @@ sub initvm
       }
     }
   }
+  # XXX To ~/bin/ or /usr/local/bin/ make install puts it into /usr/local/bin/
   $c->_system1("rsync","-avzL",$0,"$m:bin/perlall");
   # check .perlall, and cpan deps
   unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
     $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
   }
-  $c->_system1("ssh $m 'perl -MCPAN -e\"install qw/App::Rad IO::Tee Devel::Platform::Info Devel::PatchPerl/\"'");
+  $c->_system1("ssh $m "
+    ."'perl -MCPAN -e\"install "
+    ."qw/App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   # XXX we are not sure if bin is in the PATH
   #$c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
   "initvm done on ".$m

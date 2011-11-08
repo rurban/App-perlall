@@ -16,6 +16,7 @@ my %WriteMakefileArgs =
 		    'Devel::Platform::Info' => '0',
 		    'IO::Tee' => '0.64',
 		    'Devel::PatchPerl' => "0.46",
+		    'IO::Scalar' => '0',
 		    'Pod::Usage' => "1.33",
 		    'File::Basename' => "2.74",
 		    'Cwd' => "3.33",

@@ -7,6 +7,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   logfile should be verbose, STDOUT and STDERR, use native tee.
 #   implement smoke, selfupgrade
 #   check stable .lock file handling (looks better now)
+#   init-modules: shell expansion, \ handling
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
@@ -775,6 +776,8 @@ sub build
     if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
       $gitsuffix = "@".substr($gitsuffix,0,6);
     } else {
+      # symbolic names default to --link
+      $c->options->{link} = 1 unless exists $c->options->{link};
       if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
 	chdir $srcdir;
 	$gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
@@ -814,7 +817,7 @@ sub build
     else { # git, much better
       $srcdir = $c->config->{'perl-git'};
       $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
-      $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
+      # $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
       my @cmd = ("mkdir", $builddir);
       unshift @cmd, $sudo if $sudo and !-w $builddir;
       $c->_system1( @cmd) unless -d $builddir;
@@ -957,8 +960,8 @@ sub build
 	$new =~ s/'//g;
       }
     }
-    $c->_fail("Configure failed") unless $arch;
-    # This was very fragile: archname=darwin or mach
+    $c->_fail("archname not detected in config.sh") unless $arch;
+    # This was very fragile: e.g. archname=darwin or mach
     if ($arch and $arch ne $new) { # Time to make this stable
       $c->_grep("-i s,/$arch',/$new',;"
 		. " s,/$arch\",/$new\",;"
@@ -984,7 +987,7 @@ sub build
     my $ld = $dryrun ? "env MACOSX_DEPLOYMENT_TARGET=10.3 cc" 
       : $c->_grep("/^ld='(.+?)'/ and print \$1", "config.sh");
     my $cc = $dryrun ? "cc" :  $c->_grep("/^cc='(.+?)'/ and print \$1", "config.sh");
-    if ($ld ne $cc) {  # XXX and honor cmdline -Dld=
+    if ($ld ne $cc) {  # XXX check cmdline -Dld=
       $c->_grep("-i s,^ld='$ld',ld='$cc',; print", "config.sh");
     }
   }
@@ -1014,6 +1017,7 @@ sub build
     $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
     unshift @c, $sudo if $sudo;
     $c->_system1( @c);
+    # XXX symlink to symbolic name (blead, smoke-me, ...)
 
     @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
     # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong

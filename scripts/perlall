@@ -893,7 +893,7 @@ sub _build {
 	$c->_system1( "chdir", $builddir);
 	$c->_fail( "not existing builddir $builddir")
 	  if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
-        $c->_system1( "rm -rf * .config") 
+        $c->_system1( "rm -rf * .config")
 	  if -f 'Configure' and !-l "Configure";
       } else { # cp anew
 	$c->debug("copy git tree for $from");
@@ -906,6 +906,7 @@ sub _build {
 	$c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
 	$c->_fail( "git checkout -f $from") if !-f "Configure" and !$dryrun;
 	$c->_system1( "git","reset","--hard");
+	$c->_system1( "git","clean","-dxf");
 
 	# on versions rf .git now
 	if ( !$gitsuffix ) {

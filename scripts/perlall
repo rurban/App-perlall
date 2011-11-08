@@ -830,7 +830,7 @@ sub build
 	$c->debug("working symlinked to perl-git tree \@$gitsuffix") if $c->options->{link};
 	$c->_system1( "chdir", $builddir);
 	$c->_fail( "not existing builddir $builddir")
-	  if basename(Cwd::getcwd()) ne $builddir;
+	  if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
         $c->_system1( "rm -rf * .config") 
 	  if -f 'Configure' and !-l "Configure";
       }
@@ -995,7 +995,7 @@ sub build
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  my $testerr = $c->_system( $make, @j, "test") unless $c->options->{notest};
+  my $testerr = $c->_system1( $make, @j, "test") unless $c->options->{notest};
   $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")
     if !$testerr or $c->options->{force};
 

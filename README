@@ -1,8 +1,31 @@
 This archive contains the distribution App::perlall
 
-Create perls and test with all perls
+Build, test and do with all perls
 
 perlall -v help
+
+    perlall build perl5.15.4d-nt
+    perlall build perl5.15.4
+    perlall build perl5.14.2-nt
+    perlall -v build -j4 5.15.4d-nt@khw-tk smoke-me/khw-tk
+    perlall uninstall perl5.15.4d-nt@khw-tk
+
+    perlall init perl5.15.4d-nt DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
+
+    perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
+    perlall --older 5.12 make -Mblib t/0basic.t
+    perlall=5.15.4  perlall maketest  	# test with version as ENV
+    perlall="5.14*" perlall makeinstall
+    perlall cpan My::Module
+    perlall cpanm More::Modules
+
+    perlall maketest "5.*.d*" # test with all debugging
+
+    for m in centos4 centos5 solaris10; do
+      perlall initvm -v $m
+    done
+    perlall testvm centos4 centos5 solaris10
+    perlall testvm --all -c=init # see testvm in .perlall
 
 Naming scheme: d DEBUGGING, -nt non-threaded, -m multi, @ git id
 
@@ -10,7 +33,6 @@ Configuration in source-able shell script ~/.perlall
 
 You might want to link perlall to a valid command with "-command" appended
   perlall-make perlall-do perlall-cpan perlall-maketest...
-but options handling is tricky then.
 
 I always disliked perlbrew, this is better.
 

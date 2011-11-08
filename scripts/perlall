@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   logfile should be verbose, STDOUT and STDERR, use native tee.
 #   implement smoke, selfupgrade
 #   check stable .lock file handling (looks better now)
 #   testvm load balancing
@@ -12,6 +13,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   tests: check opts-mix with hardlinks cmd, opts vs params (if config->linked)
 #   git-branch globbing (smoke bleadd smoke-me/*)
 #   metacpan globbing (cpan Devel::*)
+#   older: check non-version suffix also if provided? or use skip for this?
 
 use strict;
 use App::Rad;
@@ -42,7 +44,7 @@ App::Rad->run();
 
 =head1 NAME
 
-perlall - Create perls and test with all perls
+perlall - Build, test and do with all perls
 
 =head1 SYNOPSIS
 
@@ -50,6 +52,7 @@ perlall - Create perls and test with all perls
     perlall build perl5.15.4
     perlall build perl5.14.2-nt
     perlall -v build -j4 5.15.4d-nt@khw-tk smoke-me/khw-tk
+    perlall uninstall perl5.15.4d-nt@khw-tk
 
     perlall init perl5.15.4d-nt DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
 
@@ -70,10 +73,9 @@ perlall - Create perls and test with all perls
 
 =head2 Planned Features
 
-    perlall smoke -j4 blead smoke-me/*
+    perlall smoke -j4 bleadd smoke-me/*
     perlall cpan Devel::*
     perlall selfupgrade
-    perlall uninstall perl5.15.4d-nt@khw-tk
 
 =head1 OPTIONS
 
@@ -90,11 +92,11 @@ perlall - Create perls and test with all perls
 	  "version|V"
 
 build only:
-	  "D=s",      "./configure option"
-	  "A=s",      "./configure option"
-	  "U=s",      "./configure option"
-	  "j=n",      "parallel make" (NOT YET)
-	  "link",     "-Dmksymlinks with git, otherwise copy"
+	  "D=s",      "Configure option"
+	  "A=s",      "Configure option"
+	  "U=s",      "Configure option"
+	  "j=n",      "parallel make"
+	  "link!",    "-Dmksymlinks with git, otherwise copy"
 
 build and makeinstall
 	  "notest|n", "skip the test suite on build and makeinstall"
@@ -105,13 +107,13 @@ testvm: see L</testvm>
 =head1 DESCRIPTION
 
 B<perlall> is a better L<perlbrew> with perls in the default
-F</usr/local/bin/>, and F</usr/local/lib/perl5/VERSION>, instead of
-locally. You need write access to the default PREFIX
-F</usr/local>, e.g. via C<sudo>. 
+F</usr/local/bin/>, and F</usr/local/lib/perl5/VERSION> paths, 
+instead of locally. You need write access to the default PREFIX
+F</usr/local>, e.g. via C<sudo>.
 It does not use L<local::lib>, does not mangle C<PERL5LIB> and builds 
 and keeps sane global perl installations with special suffices,
 without the need to save and restore internal states.
-The suffices are used in postprocessing scripts to keep arch-features together.
+The suffices are used in postprocessing scripts.
 
 The currently used perl together with more options is stored as alias 
 C<p> in F<~/.perlall>, which can be sourced by your F<.profile>.
@@ -127,7 +129,7 @@ Version numbers look like C<5.xx.x> and the perl C<suffix> can be any of:
   C<-m>   multi
   C<@xxxxxx> git ids / branch names
 
-You want to switch to using a "thr" suffix, then the default
+You want to switch to use the "thr" suffix, then the default
 is non-threaded. This behaviour is controlled via the config setting 
 C<usethrsuffix=1>.
 
@@ -316,7 +318,7 @@ sub _get_perlall {
   $prefix = "/usr/local/bin" unless $prefix;
   my @p;
   if ($c->options->{dryrun} and $ENV{HARNESS_ACTIVE}) { # testing only
-    @p = map{"$prefix/perl$_"} qw(5.8.9d 5.12.1-nt 5.14.2 5.15.4@ababab);
+    @p = map{"/usr/local/bin/perl$_"} qw(5.8.9d 5.12.1-nt 5.14.2 5.15.4@ababab);
   } else {
     @p = glob "$prefix/perl$glob";
   }
@@ -328,7 +330,7 @@ sub _get_perlall {
     %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
   }
   if ($c->options->{older}) {
-    # XXX if last char is non-decimal match this suffix filter also
+    # XXX? if last char is non-decimal match this suffix filter also. or use skip
     my $ver = $c->options->{older};
     for (@p) {
       $skip{$_}++ unless $c->_older( $_, $ver);
@@ -336,7 +338,6 @@ sub _get_perlall {
   }
   if ($c->options->{newer}) { #or same
     my $ver = $c->options->{newer};
-    # XXX if last char is non-decimal match this suffix filter also
     for (@p) {
       $skip{$_}++ if $c->_older( $_, $ver);
     }
@@ -1141,9 +1142,9 @@ sub list
   return join "\n", @{$c->stash->{perlall}};
 }
 
-=item B<do> command
+=item B<do> [<version>] commands...
 
-Execute commands with all perls from $ENV{perlall}.
+Execute commands with all perls.
 
 For example, run a Hello program:
 
@@ -1209,7 +1210,7 @@ sub do
 
 =item B<cpan> modules
 
-like C<perlall do>, but calls perl5.* -S cpan args... for all perls
+like C<perlall do>, but calls C<perl5.* -S cpan args...> for all perls
 
 =cut
 
@@ -1228,7 +1229,7 @@ sub cpan
 
 =item B<cpanm> modules
 
-like C<perlall cpan>, but uses cpanm.
+like C<perlall cpan>, but uses C<cpanm>.
 
 =cut
 
@@ -1265,8 +1266,8 @@ sub _make {
     $c->_system( $p, "Makefile.PL");
     $c->_system0( $make);
   } elsif (-f "Build.PL") {
-    # this is broken and needs a realclean
-    $c->_system( "./Build", "realclean") if -f "Build" and $^O ne 'MSWin32';
+    # This is broken and needs a realclean
+    $c->_system( "./Build", "realclean") if -f "Build";# and $^O ne 'MSWin32';
     $c->_system( "rm", "-rf", "blib", "_Build", "Build" ) if $^O ne 'MSWin32';
     $c->_system( $p, "Build.PL");
     $c->_system0( $p, "Build");
@@ -1328,7 +1329,7 @@ sub makeinstall
 {
   my $c = shift;
   my $make = $Config{make};
-  # XXX check MyCPAN.pm for sudo
+  # XXX check CPAN/MyConfig.pm for sudo
   warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
@@ -1417,6 +1418,7 @@ sub testvm
     $c->_system("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
 		'.', "$m:$prefix/$base/");
+    # XXX TODO fork (parallel), and collect logfiles
     $c->_system1("ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
       unless $c->options->{up};
   }
@@ -1428,8 +1430,9 @@ sub testvm
 copies pubkey to host:.ssh/authorized_keys if not exists
 
 copies perlall to host:bin/
+(if perlbin is installed at /usr/local/bin/ then symlink to it)
 
-ssh hostname perlall init MODULES
+ssh hostname perlall -v init App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl
 
 =cut
 
@@ -1446,7 +1449,7 @@ sub initvm
   $c->stash->{log} = $c->stash->{logprefix};
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
-    for my $t (/ecdsa dsa rsa /) {
+    for my $t (/ecdsa dsa rsa/) {
       if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
 	_print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys"
 	  unless $c->options->{quiet};

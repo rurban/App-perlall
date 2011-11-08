@@ -314,7 +314,12 @@ sub _get_perlall {
   die "invalid version $glob" if $glob !~ /^5\./ or $glob =~ /[!"';,\(\)]/;
   my $prefix = $c->config->{PERLALL_BINDIR};
   $prefix = "/usr/local/bin" unless $prefix;
-  my @p = glob "$prefix/perl$glob";
+  my @p;
+  if ($c->options->{dryrun} and $ENV{HARNESS_ACTIVE}) { # testing only
+    @p = map{"$prefix/perl$_"} qw(5.8.9d 5.12.1-nt 5.14.2 5.15.4@ababab);
+  } else {
+    @p = glob "$prefix/perl$glob";
+  }
   # do the filtering
   @p = grep !/\@/,@p if $c->options->{nogit};
   # glob-style
@@ -326,14 +331,14 @@ sub _get_perlall {
     # XXX if last char is non-decimal match this suffix filter also
     my $ver = $c->options->{older};
     for (@p) {
-      $skip{$_}++ if $c->_older( $_, $ver);
+      $skip{$_}++ unless $c->_older( $_, $ver);
     }
   }
   if ($c->options->{newer}) { #or same
     my $ver = $c->options->{newer};
     # XXX if last char is non-decimal match this suffix filter also
     for (@p) {
-      $skip{$_}++ unless $c->_older( $_, $ver);
+      $skip{$_}++ if $c->_older( $_, $ver);
     }
   }
   %skip ? grep(!$skip{$_},@p) : @p;

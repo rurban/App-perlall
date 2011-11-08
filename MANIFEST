@@ -8,6 +8,7 @@ scripts/perlall
 t/00-compile.t
 t/01-build.t
 t/01-linked.t
+t/01-options.t
 t/02-init.t
 t/03-do.t
 t/04-make.t

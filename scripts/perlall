@@ -1116,7 +1116,7 @@ sub init
       if ($? >> 8) {
 	my $nosql = "$ENV{HOME}/.cpan/CPAN/nosqlite.pm";
 	unless ( -f $nosql ) {
-	  system("cp $ENV{HOME}/.cpan/CPAN/MyConfig.pm $nosql");
+	  $c->_system("cp","$ENV{HOME}/.cpan/CPAN/MyConfig.pm", $nosql);
 	  $c->_grep("-i s/'use_sqlite' => q\[1\]/'use_sqlite' => q\[0\]/; print", $nosql);
 	}
 	# XXX only newer cpan's can do -j

@@ -4,14 +4,13 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   logfile should be verbose, STDOUT and STDERR, use native tee.
+#   logfile should be verbose, STDOUT and STDERR, use native tee, use right dir
 #   implement smoke, selfupgrade
-#   check stable .lock file handling (looks better now)
+#   check stable .lock file handling (looks better now). use better dirs
 #   init-modules: shell expansion, \ handling
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   tests: check opts-mix with hardlinks cmd, opts vs params (if config->linked)
 #   git-branch globbing (smoke bleadd smoke-me/*)
 #   metacpan globbing (cpan Devel::*)
 #   older: check non-version suffix also if provided? or use skip for this?
@@ -206,35 +205,14 @@ sub pre_process {
       # "we should not disturb a running perlall in this dir"
       my $d = Devel::Platform::Info->new->get_info();
       my $s = $d->{oslabel}.$d->{osvers}; $s=~s/\s//g;
+      if ($^O eq 'cygwin') {
+	my $s = $d->{source}->{uname}->[2];
+	$s =~ s/\(.+$//;
+	$s = 'cygwin'.$s;
+      }
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
-      if (-f "perlall.lock") {
-	print "perlall.lock exists. Probably perlall still running.\n";
-	system("pgrep","-fl","perlall");
-	exit 1;
-      }
-      open LOCK,">","perlall.lock";# XXX where? for build in the builddir
-      print LOCK $$,"\n";
-      close LOCK;
-
-      $SIG{INT} = $SIG{TERM} = sub {my $l="perlall.lock"; unlink $l if -f $l; exit 1; };
-    
-      END {
-	my $l = "perlall.lock";
-	if (-f $l) { # do not override other locks
-	  open LOCK,"<",$l;
-	  my $pid = <LOCK>;
-	  chomp $pid;
-	  close LOCK;
-	  if ($$ == $pid) {
-	    unlink $l;
-	  } else {
-	    warn "Other perlall process $pid still running. perlall.lock kept\n";
-	    #warn `pgrep -Ll $pid`,"\n";
-	    # unlink $l;
-	  }
-	}
-      }
+      $c->_check_lock() unless $cmd =~ /build|smoke/;
     }
   }
 
@@ -484,6 +462,10 @@ sub __system {
       eval "$cmd('$what')";
       # print $! if $!; return 0 if $!;
     } else {
+      if ($c->cmd =~ /build|smoke/) {
+	push @_, "2>&1 | tee -a ".$c->stash->{log}
+	  if $c->stash->{log} and $^O ne 'MSWin32';
+      }
       $c->options->{verbose} ? system(@_) : qx(@_);
     }
   }
@@ -510,6 +492,37 @@ sub _system1 {
     _print1(@_);
   }
   $c->__system(@_);
+}
+
+sub _check_lock {
+  my $lock = Cwd::getcwd()."/perlall.lock";
+  if (-f $lock) {
+    print "$lock exists. Probably perlall still running.\n";
+    system("pgrep","-fl","perlall");
+    exit 1;
+  }
+  open LOCK,">",$lock;# XXX where? for build in the builddir
+  print LOCK $$,"\n";
+  close LOCK;
+  
+  $SIG{INT} = $SIG{TERM} = sub {my $l=$lock; unlink $l if -f $l; exit 1; };
+    
+  END {
+    my $l = $lock;
+    if (-f $l) { # do not override other locks
+      open LOCK,"<",$l;
+      my $pid = <LOCK>;
+      chomp $pid;
+      close LOCK;
+      if ($$ == $pid) {
+	unlink $l;
+      } else {
+	warn "Other perlall process $pid still running. perlall.lock kept\n";
+	#warn `pgrep -Ll $pid`,"\n";
+	# unlink $l;
+      }
+    }
+  }
 }
 
 sub _loginit {
@@ -722,8 +735,8 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  $c->stash->{log} = $c->stash->{logprefix} . $p;
-  $c->_log("perlall",_opts($c->options),"build",$p,@args);
+  # $c->stash->{log} = $c->stash->{logprefix} . $p;
+  # $c->_log("perlall",_opts($c->options),"build",$p,@args);
   $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $srcdir;
   my $cwd = Cwd::getcwd();
@@ -789,6 +802,12 @@ sub build
     }
     $p .= $gitsuffix unless $p =~ /@/;
   }
+  my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
+  # assert $p = $ps . $suffix;
+  $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
+  $c->_log("perlall",_opts($c->options),"build",$p,@args);
+  $c->_check_lock();
+  
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
   if ($from) { # looks like a file/url or more like a git branch/tag/commit
@@ -845,14 +864,14 @@ sub build
       }
     }
   }
-
+  
   # Backport various Configure and hints patches from blead
   # via Devel::PatchPerl
   if ($srcdir eq ".") {
     $c->_log("Devel::PatchPerl::patch_source($ps)");
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
   } elsif (!$dryrun) {
-    warn "Warning: Building -Dmksymlink (--link) with no build patches applied.\n"
+    warn "Warning: Building -Dmksymlink (--link) with no Devel::PatchPerl patches applied.\n"
       ."Use --no-link if this fails.\n";
   }
 
@@ -868,34 +887,27 @@ sub build
 	      "-Dinstallsiteman1dir=none","-Dinstallsiteman3dir=none");
   # we cannot force archname, because we don't know the resulting name yet
   # we fix that post-configure
-  my $debug = $p =~ /\dd-?/;
-  my $ithreads = $p !~ /\dd?-nt/;
-  my $multi = $p !~ /\dd?-m/;
+  my $debug = substr($suffix,0,1) eq 'd';
+  my $ithreads = $suffix !~ /^d?-nt/;
+  my $multi = $suffix =~ /^d?-m/;
   my ($libperl, $olddll);
   if ($c->config->{usethrsuffix}) {
-    $ithreads = $p =~ /\dd?thr/; # perl5.14.2dthr
+    $ithreads = $suffix =~ /^d?thr/; # perl5.14.2dthr
   }
   push @conf, "-Dmksymlinks" if $srcdir ne ".";
   push @conf, "-DEBUGGING" if $debug;
   push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion}; #-g is lame
-  push @conf, "-Dusemultiplicity" if $p =~ /\dd?-m/;
+  push @conf, "-Dusemultiplicity" if $multi;
   push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
   push @conf, "-D'".$_."'" for @{$c->options->{D}};
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
   # special *perl<xxx>.dll if non-default
-  if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh'
-      and ($gitsuffix or $debug or !$ithreads))
-  {
+  if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh' and $suffix) {
     my $dll = $dryrun ? "fake.dll"
       : $c->_grep("/^libperl='(.+)'\$/ and print \$1","config.sh");
     $libperl = $olddll = $dll;
-    my $suff = "";
-    $suff .= "d" if $debug;
-    $suff .= "-nt" if $ithreads;
-    $suff .= "-m" if $multi;
-    $suff .= "@$gitsuffix" if $gitsuffix;
-    $libperl =~ s/(\d)\.dll/$1$suff.dll/ if $suff;
+    $libperl =~ s/(\d)\.dll/$1$suffix.dll/;
     push @conf, "-Dlibperl=$libperl" if $libperl;
   }
   $c->_system( $rm, "config.sh") if -f "config.sh";
@@ -970,7 +982,7 @@ sub build
 		"config.h", "config.sh", "Policy.sh", "myconfig");
     }
   }
-  if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or !$ithreads)) {
+  if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or $multi or !$ithreads)) {
     $c->debug("post-configure perl.dll fixes");
     my $dll = $dryrun ? "fake.dll"
       : $c->_grep("/^libperl='(.+?)'\$/ and print \$1", "config.sh");
@@ -1058,6 +1070,7 @@ sub uninstall
   my $bindir = $c->config->{PERLALL_BINDIR};
   $bindir = "/usr/local/bin" unless $bindir;
   $c->_fail("$bindir/$p does not exist") unless -e "$bindir/$p";
+
   my $archlib = `$bindir/$p -MConfig -e'print $Config{archlibexp}'`;
   $archlib = `$bindir/$p -MConfig -e'print $Config{archlib}'` unless $archlib;
   my $sitearch = `$bindir/$p -MConfig -e'print $Config{sitearchexp}'`; # may be empty
@@ -1072,6 +1085,7 @@ sub uninstall
 =item B<smoke> [OPTIONS] perl<version><suffix> [ from ]
 
 Same as C<build>, but reports the testresults to the smokers mailing list.
+
 C<from> may be a wildcard for multiple smoke branches, as C<smoke-me/*>.
 
 Description and OPTIONS see L</build>.
@@ -1080,6 +1094,7 @@ Description and OPTIONS see L</build>.
 
 sub _smoke
 {
+  my ($c, $p, $from, @j) = @_;
   return "unimplemented";
 }
 

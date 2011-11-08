@@ -952,10 +952,14 @@ sub build
       }
     }
     $c->_fail("Configure failed") unless $arch;
-    # XXX This is very fragile!
-    $c->_grep("-i s,$arch,$new,; print", 
-	      "config.h", "config.sh", "Policy.sh", "myconfig")
-      if $arch and $arch ne $new;
+    # This was very fragile: archname=darwin or mach
+    if ($arch and $arch ne $new) { # Time to make this stable
+      $c->_grep("-i s,/$arch',/$new',;"
+		. " s,/$arch\",/$new\",;"
+		. " s/archname=$arch,/archname=$new,/;"
+		. " s,archname='$arch',archname='$new',; print", 
+		"config.h", "config.sh", "Policy.sh", "myconfig");
+    }
   }
   if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or !$ithreads)) {
     $c->debug("post-configure perl.dll fixes");

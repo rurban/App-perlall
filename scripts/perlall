@@ -1001,8 +1001,10 @@ sub build
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
   my $testerr = $c->_system1( $make, @j, "test") unless $c->options->{notest};
-  $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")
-    if !$testerr or $c->options->{force};
+  if (!$testerr or $c->options->{force}) {
+    $c->_system1( "rm","-rf","$root/inst-$p");
+    $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")
+  }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
   # do we need sudo? check writable
@@ -1106,13 +1108,22 @@ sub init
   $c->options->{verbose} = 1;
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    # XXX if App::cpan exists and works ok, -S cpan
-    #     otherwise need -MCPAN -e'install qw(mods)'
-    # use_sqlite bootstrap: YAML DBI DBD::SQLite CPAN::SQLite
-    qx($p -MCPAN::SQLite -e0); if ($!)  {# okay
-      $c->_system( $p, "-MCPAN", '-e"install qw(DBI DBD::SQLite)"');
+    if ($cpan eq 'cpan') { # XXX and use_sqlite
+      # if App::cpan exists and works ok, -S cpan
+      #     otherwise need -MCPAN -e'install qw(mods)'
+      # use_sqlite bootstrap: YAML DBI DBD::SQLite CPAN::SQLite
+      qx($p -MCPAN::SQLite -e'CPAN::SQLite->query(mode=>"dist",name=>"CPAN")' 2>/dev/null); 
+      if ($? >> 8) {
+	my $nosql = "$ENV{HOME}/.cpan/CPAN/nosqlite.pm";
+	unless ( -f $nosql ) {
+	  system("cp $ENV{HOME}/.cpan/CPAN/MyConfig.pm $nosql");
+	  $c->_grep("-i s/'use_sqlite' => q\[1\]/'use_sqlite' => q\[0\]/; print", $nosql);
+	}
+	# XXX only newer cpan's can do -j
+	$c->_system1( $p, "-S", "cpan", "-j", $nosql, 'DBI', 'DBD::SQLite');
+      }
     }
-    $c->_system( $p, "-S", $cpan, split / /,$mods);
+    $c->_system1( $p, "-S", $cpan, split(//,$mods));
   }
   $c->_set_alias();
 }

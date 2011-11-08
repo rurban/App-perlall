@@ -212,7 +212,7 @@ sub pre_process {
       }
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
-      $c->_check_lock() unless $cmd =~ /build|smoke/;
+      $c->_check_lock() unless $cmd =~ /build|smoke|initvm/;
     }
   }
 

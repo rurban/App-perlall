@@ -91,12 +91,12 @@ perlall - Build, test and do with all perls
 	  "debug|d",  "lots of internal debugging output"
 	  "version|V"
 
-build only:
+build and smoke only:
 	  "D=s",      "Configure option"
 	  "A=s",      "Configure option"
 	  "U=s",      "Configure option"
 	  "j=n",      "parallel make"
-	  "link!",    "-Dmksymlinks with git, otherwise copy"
+	  "link",    "-Dmksymlinks with blead, otherwise copy"
 
 build and makeinstall
 	  "notest|n", "skip the test suite on build and makeinstall"
@@ -637,34 +637,17 @@ sub _glob_git {
   my $git = shift;
   return qw(smoke-me/scream smoke-me/taint.t ) if $c->options->{dryrun};
   my $srcdir = $c->config->{'perl-git'};
-  my @all = split /\n/, `GIT_DIR=$srcdir/.git git branch -a`;
+  my $cwd = Cwd::getcwd;
+  chdir "$srcdir/.git/refs/heads" or die;
   # glob it
-  my $root = $c->config->{PERLALL_BUILDROOT};
-  my $tmp = '.branches';
-  # use File::Path ?
-  my @sudo = ();
-  if (-w $tmp) { 
-    $c->_system("mkdir",$tmp);
-  } else {
-    @sudo = ("sudo");
-    $c->_system("sudo","mkdir",$tmp);
-    $c->_system("sudo","chown",$<,'-R',$tmp);
-    $c->_system("sudo","chmod",'u+rwx','-R',$tmp);
-  }
-  chdir "$root/$tmp" or die;
-  for (@all) {
-    chomp;
-    s|remotes/origin/||;
-    s|.+ -> .+||;
-    s|[\s\*\?]||g;
-    s|\.\./||g;
-    system("mkdir","-p",$_) if $_;
-  }
   # how to expand subdirs with glob? sm*/s* and smoke-me/s/r => smoke-me/s
   # XXX find
-  my @git = grep {-d $_ } glob $git;
-  chdir $root or die;
-  $c->_system(@sudo,"rm","-rf",$tmp);
+  my @git = glob $git;
+  chdir "../remotes/origin" or die;
+  push @git, glob $git;
+  chdir "../../tags" or die;
+  push @git, glob $git;
+  chdir $cwd or die;
   return @git;
 }
 
@@ -687,7 +670,8 @@ E.g. C<perlall build blead-nt> builds latest non-threaded.
 
 If the checkout from a bit branch is not a release, the suffix will be
 marked with C<@> and the sources are copied to the
-builddir. C<-Dmksymlinks> is not used, unless the option C<--link> is
+builddir. 
+C<-Dmksymlinks> is used for blead, unless the option C<--link> is
 specified.
 
 On cygwin and windows the F<perl*.dll> also gets the suffix, because they
@@ -717,8 +701,8 @@ Specific OPTIONS:
 
                 perlall build -j5 perl5.12.3
 
-  --link        Force -Dmksymlinks to the srcdir. Otherwise releases from git 
-                are copied anew.
+  --link        Force -Dmksymlinks to the srcdir for blead only.
+                Otherwise releases from git are copied anew.
   -n|--notest   Skip the test suite
   --as name     Install a given perl under the given name.
 
@@ -746,7 +730,7 @@ sub build
        [ "A=s@",     "./configure option" ],
        [ "U=s@",     "./configure option" ],
        [ "j=n",      "parallel make (>5.10)" ],
-       [ "link!",    "make symlinks with git" ],
+       [ "link",     "make symlinks with blead from git" ],
        [ "notest|n", "skip the test suite on build and makeinstall" ],
        [ "force|f",  "force install" ]
       );
@@ -764,7 +748,7 @@ sub build
     if (@args > 1) { 
       shift @args;
     } else {
-      $args[0] = 'blead'; # set $from
+      $args[0] = 'blead'; # set $from, allows --link
     }
   } else {
     $c->output("perlall build missing perlversion argument\n");
@@ -816,8 +800,6 @@ sub build
       $gitsuffix = "@".substr($gitsuffix,0,6);
       $p .= $gitsuffix unless $p =~ /@/;
     } else {
-      # symbolic names default to --link
-      $c->options->{link} = 1 unless exists $c->options->{link};
       if ($gitsuffix =~ /\*/) { #expand branch glob-style
 	my $result = '';
 	my @git = $c->_glob_git($gitsuffix);
@@ -828,7 +810,7 @@ sub build
 	  $s =~ s/^smoke-me\///;
 	  $s =~ s/\W//; # collapse non-word chars
 	  $pg = $p."@".substr($s,0,12);
-	  $result .= $c->_build($pg, $from, $ps, $git, $root, $prefix, $cwd);
+	  $result .= $c->_build($pg, $git, $ps, '@'.$git, $root, $prefix, $cwd);
 	}
 	return $result;
       }
@@ -843,6 +825,7 @@ sub build
       $git =~ s/\W//; # collapse non-word chars
       $git = "@".substr($gitsuffix,0,12);
       $p .= $git unless $p =~ /@/;
+      $gitsuffix = "@".$gitsuffix;
     }
   } 
   return $c->_build($p, $from, $ps, $gitsuffix, $root, $prefix, $cwd);
@@ -868,8 +851,7 @@ sub _build {
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
-  $c->_log("perlall",_opts($c->options),"build",$p,
-           $gitsuffix ? $gitsuffix : $from);
+  $c->_log("perlall",_opts($c->options),"build",$p,$from);
   $c->_check_lock();
   
   my $builddir = "build-".$p;
@@ -895,7 +877,7 @@ sub _build {
 	  and $c->_fail("Cannot create $builddir."
 		    ." Check your PERLALL_BUILDROOT in ~/.perlall");
       }
-      $c->_system1( "chdir", $builddir);
+      $c->_system1( "chdir", $builddir );
     }
     else { # git, much better
       $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
@@ -905,8 +887,16 @@ sub _build {
       $c->_fail( "invalid builddir $builddir") if !-d $builddir and !$dryrun;
       $c->_system($sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
 
-      if (!$gitsuffix and !$c->options->{link}) { # cp anew
-	$c->debug("copy full git tree anew for $from, no gitsuffix");
+      if ( $from eq 'blead' and $c->options->{link} ) { # mksymlink for blead only
+	$c->debug("working symlinked to perl-git tree \@$gitsuffix")
+	  if $c->options->{link};
+	$c->_system1( "chdir", $builddir);
+	$c->_fail( "not existing builddir $builddir")
+	  if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
+        $c->_system1( "rm -rf * .config") 
+	  if -f 'Configure' and !-l "Configure";
+      } else { # cp anew
+	$c->debug("copy git tree for $from");
 	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
 	# unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
 	$c->_system1( @cmd);
@@ -914,26 +904,24 @@ sub _build {
 
 	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
 	$c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
-	$c->_fail("git checkout -f $from") if !-f "Configure" and !$dryrun;
+	$c->_fail( "git checkout -f $from") if !-f "Configure" and !$dryrun;
 	$c->_system1( "git","reset","--hard");
-      } else { # mksymlink for blead or branches
-	$c->debug("working symlinked to perl-git tree \@$gitsuffix") if $c->options->{link};
-	$c->_system1( "chdir", $builddir);
-	$c->_fail( "not existing builddir $builddir")
-	  if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
-        $c->_system1( "rm -rf * .config") 
-	  if -f 'Configure' and !-l "Configure";
+
+	# on versions rf .git now
+	if ( !$gitsuffix ) {
+	  $c->_system1( "rm","-rf",".git");
+	}
       }
     }
   }
   
   # Backport various Configure and hints patches from blead
   # via Devel::PatchPerl
-  if ($srcdir eq ".") {
+  if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log("Devel::PatchPerl::patch_source($ps)");
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
   } elsif (!$dryrun) {
-    warn "Warning: Building -Dmksymlink (--link) with no Devel::PatchPerl patches applied.\n"
+    warn "Warning: Building -Dmksymlink with no Devel::PatchPerl patches applied.\n"
       ."Use --no-link if this fails.\n";
   }
 
@@ -1098,7 +1086,7 @@ sub _build {
     unshift @c, $sudo if $sudo;
     $c->_system1( @c);
 
-    if (!$testerr and !$gitsuffix and $srcdir eq "." and -d '.git') {
+    if (!$testerr and $srcdir eq "." and -d '.git') {
       $c->_system1( "rm","-rf",".git");
     }
   }

@@ -293,7 +293,7 @@ sub App::Rad::_get_input {
       }
       push @options, ($ARGV[$i]);
     }
-    @{$c->argv} = @params;
+    @{$c->argv} = (@params);
     my $parser = new Getopt::Long::Parser;
     $parser->configure( qw(bundling) );
     @ARGV = @options; # getoptions eats @ARGV

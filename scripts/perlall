@@ -703,7 +703,17 @@ The intermediate "make install DESTDIR" as "inst-E<lt>versionE<gt>E<lt>suffixE<g
 
 Specific OPTIONS:
 
-  -f|--force    Force installation if make test fails.
+  -D.. -U.. -A..  pass through switches to the perl Configure script.
+
+    perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
+
+    Certain special switches are merged from F</usr/local/bin/perl> or F</usr/bin/perl>
+
+  --as name     Install a given perl under the given name.
+
+    perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
+    perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
+
   -jnum         Enable parallel make and test (if supported by the target perl)
 
                 perlall build -j5 perl5.12.3
@@ -711,16 +721,8 @@ Specific OPTIONS:
   --link        Force -Dmksymlinks to the srcdir for blead only.
                 Otherwise releases from git are copied anew.
   -n|--notest   Skip the test suite
-  --as name     Install a given perl under the given name.
-
-    perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
-    perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
-
-  -D.. -U.. -A..  pass through switches to the perl Configure script.
-
-    perlall build perl5.10.1-nt -Dusemymalloc -Uuselargefiles
-
-    Certain special switches are merged from F</usr/local/bin/perl> or F</usr/bin/perl>
+  -f|--force    Force installation if make test fails.
+  --install     skip Configure, make, make test. make install only.
 
 =cut
 

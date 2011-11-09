@@ -320,15 +320,13 @@ sub _get_perlall {
   }
   @p = grep !/\@/,@p if $c->options->{nogit};
   # glob-style
-  if ($c->options->{older}) {
+  if (my $ver = $c->options->{older}) {
     # XXX? if last char is non-decimal match this suffix filter also. or use skip
-    my $ver = $c->options->{older};
     for (@p) {
       $skip{$_}++ unless $c->_older( $_, $ver);
     }
   }
-  if ($c->options->{newer}) { #or same
-    my $ver = $c->options->{newer};
+  if (my $ver = $c->options->{newer}) { #or same
     for (@p) {
       $skip{$_}++ if $c->_older( $_, $ver);
     }

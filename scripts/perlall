@@ -9,7 +9,6 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   --skip=outdated (only 5.14.2, 5.12.4, 5.10.1, 5.15.4, 5.6.2, 5.8.[4589])
 #   build --install (or --cont)
 #   metacpan globbing (cpan Devel::*)
 
@@ -29,10 +28,11 @@ BEGIN { # autoinstall the non-core modules
 
 push @App::Rad::ISA, 'main';
 our @opts = (
-	  [ "skip=s",   "skip versions (glob-style)" ],
+	  [ "skip=s",   "skip versions (glob-style) or --skip=outdated" ],
 	  [ "newer=s",  "only newer and same versions (glob-style)" ],
 	  [ "older=s",  "only older versions (glob-style)" ],
 	  [ "nogit",    "skip @ git versions" ],
+	  [ "main",     "same as --skip=outdated" ],
 	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
@@ -303,12 +303,13 @@ sub _get_perlall {
     @p = glob "$prefix/perl$glob";
   }
   # XXX resolve symlinks: @blead => @id, use source then (@blead)
+
   # do the filtering
   my %skip;
-  if ($c->options->{skip}) {
-    if ($c->options->{skip} eq 'outdated') {
+  if ($c->options->{skip} or $c->options->{main}) {
+    if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
       @p = map { glob "$prefix/perl$_*" } # only keep those
-	qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
+      qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
     } else {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }
@@ -1063,8 +1064,10 @@ sub _build {
     }
     $c->_fail("archname not detected in config.sh") unless $arch;
     # This was very fragile: e.g. archname=darwin or mach
+    # FIXME libpth was changed to /usr/lib/x86_64-linux-debug-gnu
     if ($arch and $arch ne $new) { # Time to make this stable
       $new =~ s/([\$\%\@])/\\$1/g;
+      # which keys exactly? only those keys. maybe redo the whole Configure step again
       $c->_grep("-i s,/$arch',/$new',;"
 		. " s,/$arch\",/$new\",;"
 		. " s/archname=$arch,/archname=$new,/;"
@@ -1244,7 +1247,7 @@ sub init
 	$c->_system1( $p, "-S", "cpan", "-j", $nosql, 'DBI', 'DBD::SQLite');
       }
     }
-    $c->_system1( $p, "-S", $cpan, split(//,$mods));
+    $c->_system1( $p, "-S", $cpan, split(/\s+/,$mods));
   }
   $c->_set_alias();
 }
@@ -1342,6 +1345,7 @@ sub cpan
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
+  $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
     $c->_system0($p, "-S", "cpan", @{$c->argv});
@@ -1361,6 +1365,7 @@ sub cpanm
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
+  $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
     $c->_system0($p, "-S", "cpanm", @{$c->argv});

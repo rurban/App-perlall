@@ -1078,7 +1078,7 @@ sub _build {
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  my $testerr = $c->_system1(join(" ",$make, @j, "test", "|tee log.test"))
+  my $testerr = $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"))
     unless $c->options->{notest};
   system("tail log.test");
   if (!$testerr or $c->options->{force}) {

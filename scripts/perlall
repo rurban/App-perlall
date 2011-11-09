@@ -1083,6 +1083,7 @@ sub _build {
       # which keys exactly? only those keys. maybe redo the whole Configure step again
       $c->_grep("-i s,/$arch',/$new',;"
 		. " s,/$arch\",/$new\",;"
+		. " s,$arch/CORE,$new/CORE,"
 		. " s/archname=$arch,/archname=$new,/;"
 		. " s,archname='$arch',archname='$new',; print", 
 		qw(config.h config.sh Policy.sh myconfig));

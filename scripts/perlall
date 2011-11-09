@@ -1120,7 +1120,7 @@ sub _build {
   }
   unless ($c->options->{notest}) {
     $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
-    system("tail log.test") unless $dryrun;
+    system("tail -n30 log.test") unless $dryrun;
     # XXX system is not giving me back the errcode
     $testerr = `grep "All tests successful." log.test` ? undef : 1;
   }

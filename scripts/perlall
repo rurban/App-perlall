@@ -10,6 +10,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
 #   --skip=outdated (only 5.14.2, 5.12.4, 5.10.1, 5.15.4, 5.6.2, 5.8.[4589])
+#   build --install (or --cont)
 #   metacpan globbing (cpan Devel::*)
 
 use strict;
@@ -183,7 +184,7 @@ sub pre_process {
 	.join(" ",File::Slurp::read_file("t/top100"));
     }
   }
-  my $sudo = $^O =~ /freebsd|cygwin|msys|MSWin32/ ? "" : "sudo";
+  my $sudo = $^O =~ /cygwin|msys|MSWin32/ ? "" : "sudo";
   $c->config->{sudo} = $sudo;
 
   # read .perlall config. cpan/cpanm not
@@ -731,14 +732,15 @@ sub build
   if (@{$c->argv}) {
     my @build_opts =
       (
-       [ "as=s",     "install perl under given name" ],
+      #[ "as=s",     "install perl under given name" ],
        [ "D=s@",     "./configure option" ],
        [ "A=s@",     "./configure option" ],
        [ "U=s@",     "./configure option" ],
        [ "j=n",      "parallel make (>5.10)" ],
        [ "link",     "make symlinks (blead only) from git" ],
        [ "notest|n", "skip the test suite on build and makeinstall" ],
-       [ "force|f",  "force install" ]
+       [ "force|f",  "force install" ],
+       [ 'install',  'only do install' ],
       );
     $c->addopts( map {$_->[0]} @build_opts );
   }
@@ -852,15 +854,22 @@ sub _build {
   $sudo = "" unless $<; # already sudo
   # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
+  my $testerr;
 
   my $dryrun = $c->options->{dryrun};
   my $srcdir = $c->config->{'perl-git'};
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
-  $c->_log("perlall",_opts($c->options),"build",$p,$from);
+  _print0("perlall",_opts($c->options),"build",$p,$from);
+  # $c->_log("perlall",_opts($c->options),"build",$p,$from);
   
   my $builddir = "build-".$p;
+  if ($c->options->{install}) {
+    $c->_system1( "chdir", $builddir );
+    $c->_check_lock();
+    goto INSTALL;
+  }
   # XXX maybe it already exists and is not empty
   if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
     warn "XXX build from file very very unstable.\n"
@@ -1078,9 +1087,10 @@ sub _build {
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  my $testerr = $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"))
+  $testerr = $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"))
     unless $c->options->{notest};
   system("tail log.test");
+INSTALL:
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
     $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")

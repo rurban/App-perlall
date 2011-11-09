@@ -14,15 +14,18 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   metacpan globbing (cpan Devel::*)
 
 use strict;
-use App::Rad;
 our $VERSION = '0.01';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
-use IO::Tee;
-use IO::Scalar;
-use Devel::Platform::Info;
-use Devel::PatchPerl;
+BEGIN { # autoinstall the non-core modules
+  for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
+    no strict 'refs';
+    unless (eval "require $_;") { 
+      my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); }
+    $_->import;
+  }
+}
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -458,11 +461,12 @@ sub __system {
       my $cmd = shift @_;
       my $what = join "','",@_;
       eval "$cmd('$what')";
-      # print $! if $!; return 0 if $!;
     } else {
-      if ($c->cmd =~ /build|smoke/) {
-	push @_, "2>&1 | tee -a ".$c->stash->{log}
-	  if $c->stash->{log} and $^O ne 'MSWin32';
+      if ($c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
+	  and $c->stash->{log} and $^O ne 'MSWin32'
+	 ) {
+	push @_, "2>&1 | tee -a ".$c->stash->{log};
+	@_ = (join " ",@_);
       }
       $c->options->{verbose} ? system(@_) : qx(@_);
     }
@@ -814,15 +818,15 @@ sub build
       }
       my $srcdir = $c->config->{'perl-git'};
       if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
-	chdir $srcdir;
-	$gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
-	chdir $root;
+	$gitsuffix = substr(`GIT_DIR=$srcdir/.git git rev-parse $gitsuffix`,0,8);
       }
-      my $git = $gitsuffix;
-      $git =~ s/^smoke-me\///;
-      $git =~ s/\W//; # collapse non-word chars
-      $git = "@".substr($gitsuffix,0,12);
-      $p .= $git unless $p =~ /@/;
+      unless ($p =~ /@/) {
+	my $git = $gitsuffix;
+	$git =~ s/^smoke-me\///;
+	$git =~ s/\W//; # collapse non-word chars
+	$git = "@".substr($gitsuffix,0,12);
+	$p .= $git;
+      }
       $gitsuffix = "@".$gitsuffix;
     }
   } 

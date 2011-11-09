@@ -9,7 +9,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   --skip=outdated (5.14.1, 5.10.0, 5.15.1, ...)
+#   --skip=outdated (only 5.14.2, 5.12.4, 5.10.1, 5.15.4, 5.6.2, 5.8.[4589])
 #   metacpan globbing (cpan Devel::*)
 
 use strict;
@@ -79,7 +79,7 @@ perlall - Build, test and do with all perls
 
 =head1 OPTIONS
 
-	  "skip=s",   "skip versions (glob-style)"
+	  "skip=s",   "skip versions (glob-style) or --skip=outdated"
 	  "newer=s",  "only newer and same versions (glob-style)"
 	  "older=s",  "only older versions (glob-style)"
 	  "nogit",    "skip @ git versions"
@@ -301,13 +301,19 @@ sub _get_perlall {
   } else {
     @p = glob "$prefix/perl$glob";
   }
+  # XXX resolve symlinks: @blead => @id, use source then (@blead)
   # do the filtering
-  @p = grep !/\@/,@p if $c->options->{nogit};
-  # glob-style
   my %skip;
   if ($c->options->{skip}) {
-    %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
+    if ($c->options->{skip} eq 'outdated') {
+      @p = map { glob "$prefix/perl$_*" } # only keep those
+	qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
+    } else {
+      %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
+    }
   }
+  @p = grep !/\@/,@p if $c->options->{nogit};
+  # glob-style
   if ($c->options->{older}) {
     # XXX? if last char is non-decimal match this suffix filter also. or use skip
     my $ver = $c->options->{older};

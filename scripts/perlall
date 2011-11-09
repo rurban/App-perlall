@@ -487,11 +487,8 @@ sub _system {
 }
 sub _system0 {
   my $c = shift;
-  unless ($c->options->{quiet}) {
-    $c->_loginit() if $c->stash->{log} and !$c->stash->{log_fh};
-    _print0(@_);
-  }
-  $c->__system(@_); 
+  $c->_log0(@_);
+  $c->__system(@_);
 }
 sub _system1 {
   my $c = shift;
@@ -549,6 +546,29 @@ sub _loginit {
     select $fh if $q;
   }
   $c->stash->{log_fh} = $fh;
+}
+
+sub _log0 {
+  my $c = shift;
+  my $q = $c->options->{quiet};
+  my $v = $c->options->{verbose};
+  my $dryrun = $c->options->{dryrun};
+  my $log = $c->stash->{log};
+  my $fh  = $c->stash->{log_fh};
+  local $| = 1;
+  if ($log) {
+    $c->_loginit unless $fh;
+    if (!$q) {
+      if ($fh) {
+	print $fh join(" ",@_),"\n";
+	$fh->flush;
+      } else {
+	_print0 @_;
+      }
+    }
+  } else {
+    _print0 @_ unless $q;
+  }
 }
 
 sub _log {
@@ -863,8 +883,7 @@ sub _build {
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
-  _print0("perlall",_opts($c->options),"build",$p,$from);
-  # $c->_log("perlall",_opts($c->options),"build",$p,$from);
+  $c->_log0("perlall",_opts($c->options),"build",$p,$from);
   
   my $builddir = "build-".$p;
   if ($c->options->{install}) {
@@ -1064,6 +1083,7 @@ sub _build {
       $c->_grep("-i s,$olddll,$libperl,", 
 		"config.h", "Makefile", "GNUmakefile", "myconfig")
 	if $libperl and $olddll;
+      # XXX fix config_args also
     }
   }
   if ($^O eq 'darwin') { # darwin hints overwrote ld
@@ -1079,9 +1099,11 @@ sub _build {
   my $qp = $p; $qp =~ s/([\$\%\@])/\\$1/g;
   $c->_grep("-i s,bin/perl$ps,bin/perl$qp,; print", "config.h", "config.sh")
     if $ps and $ps ne $p;
+  # XXX fix config_args also
+
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?
-    $c->debug("post-configure old-perl Makefile fixes");
+    $c->debug("post-configure old-perl Makefile <command-line> fixes");
     $c->_grep("-i print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 

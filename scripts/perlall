@@ -6,10 +6,10 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 # TODO:
 #   implement smoke, selfupgrade
 #   init-modules: shell expansion, \ handling
+#   resolve symlinks: @blead => @id, use source then (@blead)
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   build --install (or --cont)
 #   metacpan globbing (cpan Devel::*)
 
 use strict;
@@ -36,7 +36,7 @@ our @opts = (
 	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
-	  [ "nolog",    "skip writing log files" ],
+	  [ "nolog",    "skip writing log file(s)" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
 	  [ "version|V" ]);
@@ -52,7 +52,7 @@ perlall - Build, test and do with all perls
     perlall build perl5.15.4d-nt
     perlall build perl5.15.4
     perlall build perl5.14.2-nt
-    perlall -v build -j4 5.15.4d-nt@khw-tk smoke-me/khw-tk
+    perlall -v build -j4 5.15.4d-nt smoke-me/khw-tk
     perlall uninstall perl5.15.4d-nt@khw-tk
 
     perlall init perl5.15.4d-nt DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
@@ -84,10 +84,13 @@ perlall - Build, test and do with all perls
 	  "newer=s",  "only newer and same versions (glob-style)"
 	  "older=s",  "only older versions (glob-style)"
 	  "nogit",    "skip @ git versions"
+          "main",     "same as --skip=outdated, 
+                       only 5.6.2 5.8.[4589] 5.10.1 5.12.4 5.14.2 5.15.4"
+
 	  "quiet|q",  "Make perlall command quieter"
 	  "verbose|v","Make perlall command say more"
 	  "dryrun!",  "do not execute commands, only print"
-	  "log!",     "skip writing to the log file"
+	  "nolog",    "skip writing log file(s)"
 	  "help|h",   "commands and options"
 	  "debug|d",  "lots of internal debugging output"
 	  "version|V"
@@ -97,7 +100,8 @@ build and smoke only:
 	  "A=s",      "Configure option"
 	  "U=s",      "Configure option"
 	  "j=n",      "parallel make"
-	  "link",    "-Dmksymlinks with blead, otherwise copy"
+	  "link",     "-Dmksymlinks with blead, otherwise copy"
+	  "install",  "skip Configure && make, only do make install" 
 
 build and makeinstall
 	  "notest|n", "skip the test suite on build and makeinstall"

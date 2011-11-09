@@ -1111,16 +1111,19 @@ sub _build {
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  $testerr = $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"))
-    unless $c->options->{notest};
-  system("tail log.test");
+  unless ($c->options->{notest}) {
+    $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"))
+      system("tail log.test");
+    # XXX system is not giving me back the errcode
+    $testerr = `grep "All tests successful." log.test` ? undef : 1;
+  }
 INSTALL:
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
     $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")
   }
 
-  # XXX on freebsd and windows there's no sudo. well in freebsd ports there is
+  # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable
   if (-f "$root/inst-$p/usr/local/bin/perl$ps") {
     my @c = ($cp, "$root/inst-$p/usr/local/bin/perl$ps","$prefix/bin/perl$p");

@@ -1112,8 +1112,8 @@ sub _build {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
   unless ($c->options->{notest}) {
-    $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"))
-      system("tail log.test");
+    $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
+    system("tail log.test") unless $dryrun;
     # XXX system is not giving me back the errcode
     $testerr = `grep "All tests successful." log.test` ? undef : 1;
   }
@@ -1251,7 +1251,8 @@ sub init
 
 =item B<list> [version*]
 
-List all installed perlall versions
+List all installed perlall versions.
+Note that options after list are ignored.
 
 =cut
 
@@ -1259,6 +1260,7 @@ sub list
   :Help('List all installed perlall versions')
 {
   my $c = shift;
+  warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   return join "\n", @{$c->stash->{perlall}};
 }
 
@@ -1366,7 +1368,7 @@ sub cpanm
   $c->_set_alias();
 }
 
-=item B<make> args
+=item B<make> [commands...]
 
 like C<perlall do>, but prepends C<make -s clean; $perl Makefile.PL; make> 
 before executing the arguments.
@@ -1409,7 +1411,7 @@ sub make
   $c->_set_alias();
 }
 
-=item B<maketest>
+=item B<maketest> [commands...]
 
 like C<perlall make>, but runs C<make test TEST_VERBOSE=1> after C<make>.
 This is the most used feature.
@@ -1423,7 +1425,6 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
-  warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_make($p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
@@ -1434,27 +1435,32 @@ sub maketest
     } else {
       $c->_system0( $make, @opts);
     }
+    # optionally additional tests
+    $c->_system0( $p, @{$c->argv}) if @{$c->argv};
   }
   $c->_set_alias();
 }
 
-=item B<makeinstall>
+=item B<makeinstall> [commands...]
 
 like C<perlall maketest>, but runs C<sudo make install> after C<make test>.
 
 =cut
 
 sub makeinstall
-  :Help('Do make test && sudo make install for all perls') 
+  :Help('Do make test && sudo make install for all perls')
 {
   my $c = shift;
   my $make = $Config{make};
   # XXX check CPAN/MyConfig.pm for sudo
-  warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
+  #warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_make($p);
     $c->_system0( "$make test && $sudo $make install"); # csh?
+
+    # optionally additional tests
+    $c->_system0( $p, @{$c->argv}) if @{$c->argv};
   }
   $c->_set_alias();
 }

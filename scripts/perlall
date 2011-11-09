@@ -5,7 +5,6 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
 #   implement smoke, selfupgrade
-#   check stable .lock file handling (looks better now). use better dirs
 #   init-modules: shell expansion, \ handling
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
@@ -21,7 +20,7 @@ use File::Basename 'basename';
 BEGIN { # autoinstall the non-core modules
   for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
     no strict 'refs';
-    unless (eval "require $_;") { 
+    unless (eval "require $_;") {
       my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); }
     $_->import;
   }
@@ -213,7 +212,7 @@ sub pre_process {
       }
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
-      $c->_check_lock() unless $cmd =~ /build|smoke|initvm/;
+      $c->_check_lock() if $cmd =~ /^do|make|testvm/;
     }
   }
 
@@ -854,7 +853,6 @@ sub _build {
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
   $c->_log("perlall",_opts($c->options),"build",$p,$from);
-  $c->_check_lock();
   
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
@@ -878,6 +876,7 @@ sub _build {
 		      ." Check your PERLALL_BUILDROOT in ~/.perlall");
     }
     $c->_system1( "chdir", $builddir );
+    $c->_check_lock();
   }
   else { # git, much better
     $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
@@ -893,6 +892,7 @@ sub _build {
       $c->_system1( "chdir", $builddir);
       $c->_fail( "not existing builddir $builddir")
 	if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
+      $c->_check_lock();
       $c->_system1( "rm -rf * .config")
 	if -f 'Configure' and !-l "Configure";
     } else { # cp anew
@@ -902,7 +902,10 @@ sub _build {
       $c->_system1( @cmd);
       $srcdir = "."; # clean copy
       
-      $c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
+      $c->_system1( "chdir", $builddir);
+      $c->_fail( "not existing builddir $builddir")
+	if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
+      $c->_check_lock();
       $c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
       $c->_fail( "git checkout -f $from") if !-f "Configure" and !$dryrun;
       $c->_system1( "git","reset","--hard");

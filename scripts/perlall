@@ -254,7 +254,7 @@ sub App::Rad::addopts {
 sub App::Rad::_get_input {
     my $c = shift;
     require Getopt::Long;
-    Carp::croak "Getopt::Long needs to be version 2.36 or above"
+    die "Getopt::Long needs to be version 2.36 or above"
         unless $Getopt::Long::VERSION >= 2.36;
 
     my (@options, @params);
@@ -333,7 +333,9 @@ sub _get_perlall {
       $skip{$_}++ if $c->_older( $_, $ver);
     }
   }
-  %skip ? grep(!$skip{$_},@p) : @p;
+  @p = grep(!$skip{$_},@p) if %skip;
+  # sort reverse numerically, newest first
+  sort { _strip2float($b) <=> _strip2float($a) } @p;
 }
 
 # string of hash key=val...
@@ -353,6 +355,15 @@ sub _opts {
   substr($s,1);
 }
 
+sub _strip2float {
+  my $p = shift;
+  $p =~ s/^.*perl5\.//;
+  $p =~ s/^5\.//;
+  $p =~ s/(\.\d+)\D.*$/$1/;
+  $p
+}
+
+# if p is older then ver
 # $p gets full path
 sub _older {
   my $c = shift;
@@ -1002,7 +1013,7 @@ sub _build {
       : $c->_grep("/^libperl='(.+)'\$/ and print \$1","config.sh");
     $libperl = $olddll = $dll;
     $libperl =~ s/(\d)\.dll/$1$suffix.dll/;
-    push @conf, "-Dlibperl=$libperl" if $libperl;
+    push @conf, "-Dlibperl=$libperl" if $libperl ;
   }
   $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
@@ -1076,10 +1087,10 @@ sub _build {
 		. " s,/$arch\",/$new\",;"
 		. " s/archname=$arch,/archname=$new,/;"
 		. " s,archname='$arch',archname='$new',; print", 
-		"config.h", "config.sh", "Policy.sh", "myconfig");
+		qw(config.h config.sh Policy.sh myconfig));
     }
   }
-  if ($^O =~ /cygwin|MSWin32/ and ($gitsuffix or $debug or $multi or !$ithreads)) {
+  if ($^O =~ /cygwin|MSWin32/ and $suffix) {
     $c->debug("post-configure perl.dll fixes");
     my $dll = $dryrun ? "fake.dll"
       : $c->_grep("/^libperl='(.+?)'\$/ and print \$1", "config.sh");
@@ -1088,7 +1099,7 @@ sub _build {
     } else {
       $libperl =~ s/([\$\%\@])/\\$1/g;
       $c->_grep("-i s,$olddll,$libperl,", 
-		"config.h", "Makefile", "GNUmakefile", "myconfig")
+		qw(config.sh config.h Makefile GNUmakefile myconfig))
 	if $libperl and $olddll;
       # XXX fix config_args also
     }
@@ -1104,7 +1115,7 @@ sub _build {
   }
   $c->debug("post-configure startperl fixes");
   my $qp = $p; $qp =~ s/([\$\%\@])/\\$1/g;
-  $c->_grep("-i s,bin/perl$ps,bin/perl$qp,; print", "config.h", "config.sh")
+  $c->_grep("-i s,bin/perl$ps,bin/perl$qp,; print", qw(config.h config.sh))
     if $ps and $ps ne $p;
   # XXX fix config_args also
 

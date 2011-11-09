@@ -1061,32 +1061,47 @@ sub _build {
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
 
   # fix libs on debug and git-stuff
-  if ($gitsuffix or $debug or $^O eq 'darwin') {
-    $c->debug("post-configure archname fixes");
-    my $arch = $dryrun ? "fake-arch"
-      : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh");
-    my $new = $arch;
-    $new .= "-debug" if $debug and $arch !~ /-debug/;
-    $new .= $gitsuffix if $gitsuffix  and $arch !~ /$gitsuffix$/;
-    for my $d (@{$c->options->{D}}) {
-      if ($d =~ /^archname/) {
-	$new = $d;
-	$new =~ s/^archname=//;
-	$new =~ s/'//g;
-      }
+  my $archname = $dryrun ? "fake-arch"
+    : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh");
+  my $new = $archname;
+  for my $d (@{$c->options->{D}}) {
+    if ($d =~ /^archname/) {
+      $new = $d;
+      $new =~ s/^archname=//;
+      $new =~ s/'//g;
     }
-    $c->_fail("archname not detected in config.sh") unless $arch;
+  }
+  if (($new ne $archname) or $gitsuffix or $debug) {
+    if ($new eq $archname) {
+      $new .= "-debug" if $debug and $archname !~ /-debug/;
+      $new .= $gitsuffix if $gitsuffix  and $archname !~ /$gitsuffix$/;
+    }
+    $c->debug("post-configure archname fixes: $archname => $new");
+    $c->_fail("archname not detected in config.sh") unless $archname;
     # This was very fragile: e.g. archname=darwin or mach
     # FIXME libpth was changed to /usr/lib/x86_64-linux-debug-gnu
-    if ($arch and $arch ne $new) { # Time to make this stable
+    if ($archname and $archname ne $new) { # Time to make this stable
       $new =~ s/([\$\%\@])/\\$1/g;
-      # which keys exactly? only those keys. maybe redo the whole Configure step again
-      $c->_grep("-i s,/$arch',/$new',;"
-		. " s,/$arch\",/$new\",;"
-		. " s,$arch/CORE,$new/CORE,"
-		. " s/archname=$arch,/archname=$new,/;"
-		. " s,archname='$arch',archname='$new',; print", 
+      # which keys exactly? only those keys.
+      # maybe redo the whole Configure step again
+      $c->_grep("-i s|(\\d)/$archname'|\\1/$new'|;"
+		. " s|(\\d)/$archname\"|\\1/$new\"|;"
+		. " s|/$archname/CORE|/$new/CORE|;"
+		. " s|archname=$archname,|archname=$new,|;"
+		. " s|archname='$archname'|archname='$new'|; print", 
 		qw(config.h config.sh Policy.sh myconfig));
+    }
+  }
+  if (!$dryrun and $c->_older($p,'5.14')) { #seems to be <=5.6.2 only
+    # remove archs from inc_version_list
+    if ($c->_grep("m|inc_version_list.+(\d\.\d\d?\.\d\d?)/$archname | and print \$1",
+		  "config.sh"))
+    {
+      $c->debug("post-configure remove archlibs from inc_version_list");
+      $c->_grep("-i s|(\d\.\d\d?\.\d\d?)/$archname ||;"
+		. ' s|"(\d\.\d\d?\.\d\d?)/'.$archname.'",||;'
+		. " print",
+		qw(config.h config.sh));
     }
   }
   if ($^O =~ /cygwin|MSWin32/ and $suffix) {
@@ -1096,7 +1111,7 @@ sub _build {
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
     } else {
-      $libperl =~ s/([\$\%\@])/\\$1/g;
+      $libperl =~ s/([\.\$\%\@])/\\$1/g;
       $c->_grep("-i s,$olddll,$libperl,", 
 		qw(config.sh config.h Makefile GNUmakefile myconfig))
 	if $libperl and $olddll;
@@ -1137,7 +1152,9 @@ sub _build {
 INSTALL:
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
-    $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")
+    # 5.6.2 needs sudo, as it doesn't do DESTDIR
+    $c->_system1( $c->_older($p,'5.7') ? ("sudo") : (),
+		  $make, @j, "install", "DESTDIR=$root/inst-$p");
   }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.

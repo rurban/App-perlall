@@ -1065,7 +1065,9 @@ sub _build {
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
-  my $testerr = $c->_system1( $make, @j, "test") unless $c->options->{notest};
+  my $testerr = $c->_system1(join(" ",$make, @j, "test", "|tee log.test"))
+    unless $c->options->{notest};
+  system("tail log.test");
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
     $c->_system1( $make, @j, "install", "DESTDIR=$root/inst-$p")

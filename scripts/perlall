@@ -1028,6 +1028,7 @@ sub _build {
     $c->_fail("archname not detected in config.sh") unless $arch;
     # This was very fragile: e.g. archname=darwin or mach
     if ($arch and $arch ne $new) { # Time to make this stable
+      $new =~ s/([\$\%\@])/\\$1/g;
       $c->_grep("-i s,/$arch',/$new',;"
 		. " s,/$arch\",/$new\",;"
 		. " s/archname=$arch,/archname=$new,/;"
@@ -1042,6 +1043,7 @@ sub _build {
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
     } else {
+      $libperl =~ s/([\$\%\@])/\\$1/g;
       $c->_grep("-i s,$olddll,$libperl,", 
 		"config.h", "Makefile", "GNUmakefile", "myconfig")
 	if $libperl and $olddll;
@@ -1057,7 +1059,8 @@ sub _build {
     }
   }
   $c->debug("post-configure startperl fixes");
-  $c->_grep("-i s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
+  my $qp = $p; $qp =~ s/([\$\%\@])/\\$1/g;
+  $c->_grep("-i s,bin/perl$ps,bin/perl$qp,; print", "config.h", "config.sh")
     if $ps and $ps ne $p;
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?

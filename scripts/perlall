@@ -5,24 +5,26 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
 #   implement smoke, selfupgrade
-#   check stable .lock file handling (looks better now). use better dirs
 #   init-modules: shell expansion, \ handling
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   --skip=outdated (5.14.1, 5.10.0, 5.15.1, ...)
+#   --skip=outdated (only 5.14.2, 5.12.4, 5.10.1, 5.15.4, 5.6.2, 5.8.[4589])
 #   metacpan globbing (cpan Devel::*)
 
 use strict;
-use App::Rad;
 our $VERSION = '0.01';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
-use IO::Tee;
-use IO::Scalar;
-use Devel::Platform::Info;
-use Devel::PatchPerl;
+BEGIN { # autoinstall the non-core modules
+  for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
+    no strict 'refs';
+    unless (eval "require $_;") {
+      my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); }
+    $_->import;
+  }
+}
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -77,7 +79,7 @@ perlall - Build, test and do with all perls
 
 =head1 OPTIONS
 
-	  "skip=s",   "skip versions (glob-style)"
+	  "skip=s",   "skip versions (glob-style) or --skip=outdated"
 	  "newer=s",  "only newer and same versions (glob-style)"
 	  "older=s",  "only older versions (glob-style)"
 	  "nogit",    "skip @ git versions"
@@ -210,7 +212,7 @@ sub pre_process {
       }
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
-      $c->_check_lock() unless $cmd =~ /build|smoke|initvm/;
+      $c->_check_lock() if $cmd =~ /^do|make|testvm/;
     }
   }
 
@@ -299,13 +301,19 @@ sub _get_perlall {
   } else {
     @p = glob "$prefix/perl$glob";
   }
+  # XXX resolve symlinks: @blead => @id, use source then (@blead)
   # do the filtering
-  @p = grep !/\@/,@p if $c->options->{nogit};
-  # glob-style
   my %skip;
   if ($c->options->{skip}) {
-    %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
+    if ($c->options->{skip} eq 'outdated') {
+      @p = map { glob "$prefix/perl$_*" } # only keep those
+	qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
+    } else {
+      %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
+    }
   }
+  @p = grep !/\@/,@p if $c->options->{nogit};
+  # glob-style
   if ($c->options->{older}) {
     # XXX? if last char is non-decimal match this suffix filter also. or use skip
     my $ver = $c->options->{older};
@@ -458,11 +466,12 @@ sub __system {
       my $cmd = shift @_;
       my $what = join "','",@_;
       eval "$cmd('$what')";
-      # print $! if $!; return 0 if $!;
     } else {
-      if ($c->cmd =~ /build|smoke/) {
-	push @_, "2>&1 | tee -a ".$c->stash->{log}
-	  if $c->stash->{log} and $^O ne 'MSWin32';
+      if ($c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
+	  and $c->stash->{log} and $^O ne 'MSWin32'
+	 ) {
+	push @_, "2>&1 | tee -a ".$c->stash->{log};
+	@_ = (join " ",@_);
       }
       $c->options->{verbose} ? system(@_) : qx(@_);
     }
@@ -572,10 +581,10 @@ sub _grep {
   my $cmd = shift;
   my ($inplace, $out);
   if (substr($cmd,0,3) eq '-i ') {
-    $inplace = '-i ';
+    $inplace = 1;
     $cmd = substr($cmd,3);
   }
-  $c->_log("perl -i -ne'$cmd' ",join(" ",@_)) if $inplace;
+  $c->_log("perl -i -ne'$cmd'",join(" ",@_)) if $inplace;
   return if $c->options->{dryrun};
   my $catch = '';
   while (my $f = shift @_) {
@@ -637,9 +646,8 @@ sub _glob_git {
   my $srcdir = $c->config->{'perl-git'};
   my $cwd = Cwd::getcwd;
   chdir "$srcdir/.git/refs/heads" or die;
-  # glob it
-  # how to expand subdirs with glob? sm*/s* and smoke-me/s/r => smoke-me/s
-  # XXX find
+  # XXX expand subdirs with glob. smoke-me/s*: smoke-me/s/r => smoke-me/s
+  # => File::Find
   my @git = glob $git;
   chdir "../remotes/origin" or die;
   push @git, glob $git;
@@ -728,7 +736,7 @@ sub build
        [ "A=s@",     "./configure option" ],
        [ "U=s@",     "./configure option" ],
        [ "j=n",      "parallel make (>5.10)" ],
-       [ "link",     "make symlinks with blead from git" ],
+       [ "link",     "make symlinks (blead only) from git" ],
        [ "notest|n", "skip the test suite on build and makeinstall" ],
        [ "force|f",  "force install" ]
       );
@@ -781,14 +789,15 @@ sub build
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
   $ps =~ s/d$//;
 
-  unless ($from) {
-    # XXX git only at first
+  unless ($from) { # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
       $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
     } else {
       $c->_fail ("could not determine from/branch argument for $p. perl-git missing?");
     }
   }
+  warn "--link ignored. Only valid with blead.\n" 
+    if $c->options->{link} and $from eq 'blead';
   $c->_log("chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
 
@@ -814,15 +823,15 @@ sub build
       }
       my $srcdir = $c->config->{'perl-git'};
       if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
-	chdir $srcdir;
-	$gitsuffix = substr(`git rev-parse $gitsuffix`,0,8);
-	chdir $root;
+	$gitsuffix = substr(`GIT_DIR=$srcdir/.git git rev-parse $gitsuffix`,0,8);
       }
-      my $git = $gitsuffix;
-      $git =~ s/^smoke-me\///;
-      $git =~ s/\W//; # collapse non-word chars
-      $git = "@".substr($gitsuffix,0,12);
-      $p .= $git unless $p =~ /@/;
+      unless ($p =~ /@/) {
+	my $git = $gitsuffix;
+	$git =~ s/^smoke-me\///;
+	$git =~ s/\W//; # collapse non-word chars
+	$git = "@".substr($gitsuffix,0,12);
+	$p .= $git;
+      }
       $gitsuffix = "@".$gitsuffix;
     }
   } 
@@ -850,66 +859,67 @@ sub _build {
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
   $c->_log("perlall",_opts($c->options),"build",$p,$from);
-  $c->_check_lock();
   
   my $builddir = "build-".$p;
   # XXX maybe it already exists and is not empty
-  if ($from) { # looks like a file/url or more like a git branch/tag/commit
-    # file
-    if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
-      warn "XXX build from file very very unstable.\n"
-	.  "No idea how to know the resulting srcdir yet";
-      if (!-f $from) {
-	# try CPAN instead?
-	$c->_system1( "wget","-O","perl-$ps.tgz",$from) 
-	  and $c->_fail("downloading $from failed");
-	$from = "perl-$ps.tgz";
-      }
-      my @tarx = (($^O eq 'solaris' ? 'gtar' : 'tar'),
-	  ($from =~ m/bz2$/ ? 'xjf' : 'xzf' ));
-      $c->_system1( @tarx, $from) and _fail("extracting the tarball $from failed");
-      $srcdir = $root."/perl-$ps";
-      if (! -d $builddir) {
-	# OOPS LOOKS LIKE AN ERROR
-	$c->_system("mkdir", $builddir)
-	  and $c->_fail("Cannot create $builddir."
-		    ." Check your PERLALL_BUILDROOT in ~/.perlall");
-      }
-      $c->_system1( "chdir", $builddir );
+  if (-f $from or $from =~ /^https?:|ftp:|rsync:/) {
+    warn "XXX build from file very very unstable.\n"
+      .  "No idea how to know the resulting srcdir yet";
+    if (!-f $from) {
+      # try CPAN instead?
+      $c->_system1( "wget","-O","perl-$ps.tgz",$from) 
+	and $c->_fail("downloading $from failed");
+      $from = "perl-$ps.tgz";
     }
-    else { # git, much better
-      $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
-      my @cmd = ("mkdir", $builddir);
-      unshift @cmd, $sudo if $sudo and !-w $builddir;
-      $c->_system1( @cmd) unless -d $builddir;
-      $c->_fail( "invalid builddir $builddir") if !-d $builddir and !$dryrun;
-      $c->_system($sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
-
-      if ( $from eq 'blead' and $c->options->{link} ) { # mksymlink for blead only
-	$c->debug("working symlinked to perl-git tree \@$gitsuffix")
-	  if $c->options->{link};
-	$c->_system1( "chdir", $builddir);
-	$c->_fail( "not existing builddir $builddir")
-	  if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
-        $c->_system1( "rm -rf * .config")
-	  if -f 'Configure' and !-l "Configure";
-      } else { # cp anew
-	$c->debug("copy git tree for $from");
-	@cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
-	# unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
-	$c->_system1( @cmd);
-	$srcdir = "."; # clean copy
-
-	$c->_system1( "chdir", $builddir);# and $c->_fail( "invalid builddir $builddir");
-	$c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
-	$c->_fail( "git checkout -f $from") if !-f "Configure" and !$dryrun;
-	$c->_system1( "git","reset","--hard");
-	$c->_system1( "git","clean","-dxf");
-
-	# on versions rf .git now
-	if ( !$gitsuffix ) {
-	  $c->_system1( "rm","-rf",".git");
-	}
+    my @tarx = (($^O eq 'solaris' ? 'gtar' : 'tar'),
+		($from =~ m/\.bz2$/ ? 'xjf' : 'xzf' ));
+    $c->_system1( @tarx, $from) and _fail("extracting the tarball $from failed");
+    $srcdir = $root."/perl-$ps";
+    if (! -d $builddir) {
+      # OOPS LOOKS LIKE AN ERROR
+      $c->_system("mkdir", $builddir)
+	and $c->_fail("Cannot create $builddir."
+		      ." Check your PERLALL_BUILDROOT in ~/.perlall");
+    }
+    $c->_system1( "chdir", $builddir );
+    $c->_check_lock();
+  }
+  else { # git, much better
+    $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
+    my @cmd = ("mkdir", $builddir);
+    unshift @cmd, $sudo if $sudo and !-w $builddir;
+    $c->_system1( @cmd) unless -d $builddir;
+    $c->_fail( "invalid builddir $builddir") if !-d $builddir and !$dryrun;
+    $c->_system($sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
+    
+    if ( $from eq 'blead' and $c->options->{link} ) { # mksymlink for blead only
+      $c->debug("working symlinked to perl-git tree \@$gitsuffix")
+	if $c->options->{link};
+      $c->_system1( "chdir", $builddir);
+      $c->_fail( "not existing builddir $builddir")
+	if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
+      $c->_check_lock();
+      $c->_system1( "rm -rf * .config")
+	if -f 'Configure' and !-l "Configure";
+    } else { # cp anew
+      $c->debug("copy git tree for $from");
+      @cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
+      # unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
+      $c->_system1( @cmd);
+      $srcdir = "."; # clean copy
+      
+      $c->_system1( "chdir", $builddir);
+      $c->_fail( "not existing builddir $builddir")
+	if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
+      $c->_check_lock();
+      $c->_system1( "git","checkout","-f",$from); # git returns strange values, ignore
+      $c->_fail( "git checkout -f $from") if !-f "Configure" and !$dryrun;
+      $c->_system1( "git","reset","--hard");
+      $c->_system1( "git","clean","-dxf");
+      
+      # on versions rf .git now
+      if ( !$gitsuffix ) {
+	$c->_system1( "rm","-rf",".git");
       }
     }
   }
@@ -1024,6 +1034,7 @@ sub _build {
     $c->_fail("archname not detected in config.sh") unless $arch;
     # This was very fragile: e.g. archname=darwin or mach
     if ($arch and $arch ne $new) { # Time to make this stable
+      $new =~ s/([\$\%\@])/\\$1/g;
       $c->_grep("-i s,/$arch',/$new',;"
 		. " s,/$arch\",/$new\",;"
 		. " s/archname=$arch,/archname=$new,/;"
@@ -1038,6 +1049,7 @@ sub _build {
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
     } else {
+      $libperl =~ s/([\$\%\@])/\\$1/g;
       $c->_grep("-i s,$olddll,$libperl,", 
 		"config.h", "Makefile", "GNUmakefile", "myconfig")
 	if $libperl and $olddll;
@@ -1053,7 +1065,8 @@ sub _build {
     }
   }
   $c->debug("post-configure startperl fixes");
-  $c->_grep("-i s,bin/perl$ps,bin/perl$p,; print", "config.h", "config.sh")
+  my $qp = $p; $qp =~ s/([\$\%\@])/\\$1/g;
+  $c->_grep("-i s,bin/perl$ps,bin/perl$qp,; print", "config.h", "config.sh")
     if $ps and $ps ne $p;
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?

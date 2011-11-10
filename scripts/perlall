@@ -333,6 +333,17 @@ sub _get_perlall {
   }
   @p = grep(!$skip{$_},@p) if %skip;
   # resolve symlinks: @blead => @id (just to simplify implementation)
+  # XXX: we really should keep the -l and remove the target if also in the list
+  #for (grep {-l} @p) {
+  #  @p = grep {
+  #    my $b = readlink($_); 
+  #    if (basename($b) eq $b) { # -> perl5.some
+  #	$b ne basename($_) ? $_ : 0 
+  #    } else {                  # /usr/bin/perl5.some
+  #	$b ne $_ ? $_ : 0 
+  #    }
+  #  } @p;
+  #}
   @p = grep { 
     (-l $_ and (readlink($_) =~ m|$prefix/perl5\..*|)) ? 0 : $_
   } @p;
@@ -997,7 +1008,7 @@ sub _build {
   my $debug = substr($suffix,0,1) eq 'd';
   my $ithreads = $suffix !~ /^d?-nt/;
   my $multi = $suffix =~ /^d?-m/;
-  my ($libperl, $olddll);
+  my ($libperl);
   if ($c->config->{usethrsuffix}) {
     $ithreads = $suffix =~ /^d?thr/; # perl5.14.2dthr
   }
@@ -1010,12 +1021,18 @@ sub _build {
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
   # special *perl<xxx>.dll if non-default
-  if ($^O =~ /cygwin|MSWin32/ and -f 'config.sh' and $suffix) {
-    my $dll = $dryrun ? "fake.dll"
-      : $c->_grep("/^libperl='(.+)'\$/ and print \$1","config.sh");
-    $libperl = $olddll = $dll;
-    $libperl =~ s/(\d)\.dll/$1$suffix.dll/;
-    push @conf, "-Dlibperl=$libperl" if $libperl ;
+  if ($^O =~ /cygwin|MSWin32/ and $suffix) {
+    if ($^O eq 'cygwin') {
+      $libperl = $ps;
+      $libperl =~ s/\./_/g;
+      $libperl = 'cygperl'.$libperl.$suffix.'.dll';
+      push @conf, "-Dlibperl=$libperl";
+    } else {
+      $libperl = $ps;
+      $libperl =~ s/\.//g;
+      $libperl = 'perl'.$libperl.$suffix.'.dll';
+      push @conf, "-Dlibperl=$libperl";
+    }
   }
   $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
@@ -1110,15 +1127,16 @@ sub _build {
   }
   if ($^O =~ /cygwin|MSWin32/ and $suffix) {
     $c->debug("post-configure perl.dll fixes");
+    # libperl really is libperl.a. Should be libperl.dll.a at least. we use the dll.
     my $dll = $dryrun ? "fake.dll"
       : $c->_grep("/^libperl='(.+?)'\$/ and print \$1", "config.sh");
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
     } else {
       $libperl =~ s/([\.\$\%\@])/\\$1/g;
-      $c->_grep("-i s,$olddll,$libperl,", 
+      $c->_grep("-i s,$dll,$libperl,", 
 		qw(config.sh config.h Makefile GNUmakefile myconfig))
-	if $libperl and $olddll;
+	if $libperl and $dll;
       # XXX fix config_args also
     }
   }
@@ -1156,8 +1174,14 @@ sub _build {
 INSTALL:
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
-    # 5.6.2 needs sudo, as it doesn't do DESTDIR
-    $c->_system1( $c->_older($p,'5.7') ? ("sudo") : (),
+    # XXX <= 5.8.0 needs sudo, as it doesn't do DESTDIR
+    # it also doesn't do lib on versiononly (i.e. usedevel)
+    # we better patch installperl
+    if ($c->_older($p,'5.8.1')) {
+      $c->debug("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
+      ;
+    }
+    $c->_system1( $c->_older($p,'5.8.1') ? ("sudo") : (),
 		  $make, @j, "install", "DESTDIR=$root/inst-$p");
   }
 

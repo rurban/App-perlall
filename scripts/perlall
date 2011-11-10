@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke, selfupgrade
 #   init-modules: shell expansion, \ handling
 #   resolve symlinks: @blead => @id, use source then (@blead)
@@ -1357,9 +1358,10 @@ sub do
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
+  $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->stash->{log} = $c->stash->{logprefix} . _short($p);
-    $c->_system( $p, @{$c->argv});
+    $c->_system( "$p @{$c->argv}");
   }
   $c->_set_alias();
 }
@@ -1441,7 +1443,8 @@ sub make
   for my $p (@{$c->stash->{perlall}}) {
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
-      $c->_system0( $p, @{$c->argv});
+      local $c->options->{verbose} = 1 unless $c->options->{quiet};
+      $c->_system0( "$p $argv");
     }
   }
   $c->_set_alias();
@@ -1471,8 +1474,11 @@ sub maketest
     } else {
       $c->_system0( $make, @opts);
     }
-    # optionally additional tests
-    $c->_system0( $p, @{$c->argv}) if @{$c->argv};
+    if (@{$c->argv}) {
+      local $c->options->{verbose} = 1 unless $c->options->{quiet};
+      # optionally additional tests
+      $c->_system0( "$p @{$c->argv}");
+    }
   }
   $c->_set_alias();
 }
@@ -1495,8 +1501,11 @@ sub makeinstall
     $c->_make($p);
     $c->_system0( "$make test && $sudo $make install"); # csh?
 
-    # optionally additional tests
-    $c->_system0( $p, @{$c->argv}) if @{$c->argv};
+    if (@{$c->argv}) {
+      local $c->options->{verbose} = 1 unless $c->options->{quiet};
+      # optionally additional tests
+      $c->_system0( "$p @{$c->argv}");
+    }
   }
   $c->_set_alias();
 }
@@ -1714,10 +1723,12 @@ For C<build>, this prints the whole build and test process to STDOUT.
 
 =head1 CONFIGURATION
 
-B<~/.perlall> or F</etc/perlall>
+Stored in F<~/.perlall> or F</etc/perlall>
 
 This is shell-script syntax with ENV vars and aliases.
 C<alias p=$perlall> is also written by C<perlall>.
+
+It is recommended to source this from your F<.profile> for the handy aliases.
 
 =over 4
 
@@ -1764,7 +1775,7 @@ List of CPAN module names for C<init>
 
 =item sudo
 
-Default: "sudo". Or "" on freebsd|cygwin|msys|MSWin32
+Default: "sudo". Or "" on cygwin|msys|MSWin32
 
 =item testvm
 

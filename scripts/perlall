@@ -293,6 +293,7 @@ sub App::Rad::_get_input {
     return $c;
 }
 
+# from cmdline arg or ENV perlall
 sub _get_perlall {
   my ($c, $glob) = @_;
   unless ($glob) {
@@ -307,8 +308,6 @@ sub _get_perlall {
   } else {
     @p = glob "$prefix/perl$glob";
   }
-  # XXX resolve symlinks: @blead => @id, use source then (@blead)
-
   # do the filtering
   my %skip;
   if ($c->options->{skip} or $c->options->{main}) {
@@ -333,6 +332,10 @@ sub _get_perlall {
     }
   }
   @p = grep(!$skip{$_},@p) if %skip;
+  # resolve symlinks: @blead => @id (just to simplify implementation)
+  @p = grep { 
+    (-l $_ and (readlink($_) =~ m|$prefix/perl5\..*|)) ? 0 : $_
+  } @p;
   # sort reverse numerically, newest first
   sort { _strip2float($b) <=> _strip2float($a) } @p;
 }

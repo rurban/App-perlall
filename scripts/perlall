@@ -4,10 +4,10 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke, selfupgrade
 #   init-modules: shell expansion, \ handling
-#   resolve symlinks: @blead => @id, use source then (@blead)
 #   testvm load balancing
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
@@ -33,7 +33,7 @@ our @opts = (
 	  [ "newer=s",  "only newer and same versions (glob-style)" ],
 	  [ "older=s",  "only older versions (glob-style)" ],
 	  [ "nogit",    "skip @ git versions" ],
-	  [ "main",     "same as --skip=outdated" ],
+	  [ "main|m",   "same as --skip=outdated" ],
 	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
@@ -85,7 +85,7 @@ perlall - Build, test and do with all perls
 	  "newer=s",  "only newer and same versions (glob-style)"
 	  "older=s",  "only older versions (glob-style)"
 	  "nogit",    "skip @ git versions"
-          "main",     "same as --skip=outdated, 
+          "main|m",   "same as --skip=outdated, 
                        only 5.6.2 5.8.[4589] 5.10.1 5.12.4 5.14.2 5.15.4"
 
 	  "quiet|q",  "Make perlall command quieter"

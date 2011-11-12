@@ -33,7 +33,7 @@ cpan=cpan
 # testvm settings taken from default perl (/usr/local/bin/perl, /usr/bin/perl)
 # and remote perlall. e.g. freebsd make=gmake
 # valid [user@]hostnames (manipulate your /etc/hosts)
-testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 winxp solaris"
+testvm=centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 winxp solaris
 # where modules are:
 testvm_prefix=Perl
 # TODO: control balancing? (virsh, xen-shell, vmrun, VBoXManage)

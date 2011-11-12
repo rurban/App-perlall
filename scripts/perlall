@@ -1197,7 +1197,16 @@ INSTALL:
     $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
     unshift @c, $sudo if $sudo;
     $c->_system1( @c);
-    # XXX symlink to symbolic name (blead, smoke-me, ...)
+
+    # symlink to symbolic name (blead, smoke-me, ...)
+    if ($from eq 'blead' and $^O ne 'MSWin32') {
+      my $s = $p;
+      $s =~ /\@.*/;
+      my @c = ('ln', '-sf', "/usr/local/bin/perl$p", "/usr/local/bin/perl$s\@blead");
+      $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
+      unshift @c, $sudo if $sudo;
+      $c->_system1( @c);
+    }
 
     @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
     # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
@@ -1589,7 +1598,7 @@ sub testvm
   $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s"); #, "max|j=n" );
 
   my ($prefix, $base);
-  my @testvm = split //,$c->config->{testvm};
+  my @testvm = split / /,$c->config->{testvm};
   my @machines = $c->options->{all} ? @testvm : @{$c->argv};
   return "missing args" unless @machines;
 
@@ -1628,7 +1637,7 @@ sub testvm
   "testvm done on @machines"
 }
 
-=item B<initvm> user@[hostname] [MODULES]
+=item B<initvm> [--all] user@[hostname]...
 
 copies pubkey to host:.ssh/authorized_keys if not exists
 
@@ -1644,36 +1653,36 @@ sub initvm
 {
   my $c = shift;
 
-  my $m = shift @{$c->argv};
-  return "missing host" unless $m;
+  $c->addopts( "all|a");
+  my @m = $c->options->{all} ? split(/ /,$c->config->{testvm}) : @{$c->argv};
+  return "missing host" unless @m;
 
-  _print0("perlall initvm $m ",@{$c->argv})
-    if $c->options->{verbose};
   $c->stash->{log} = $c->stash->{logprefix};
-  $c->options->{verbose} = 1 unless $c->options->{quiet};
-  unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
-    for my $t (/ecdsa dsa rsa/) {
-      if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
-	_print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys"
-	  unless $c->options->{quiet};
-	qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
-	qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
-	last
+  for my $m (@m) {
+    _print0("perlall initvm $m") if $c->options->{verbose};
+    local $c->options->{verbose} = 1 unless $c->options->{quiet};
+    unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
+      for my $t (/ecdsa dsa rsa/) {
+	if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
+	  _print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys"
+	    unless $c->options->{quiet};
+	  qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
+	  qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);
+	  last
+	}
       }
     }
+    # XXX To ~/bin/ or /usr/local/bin/ make install puts it into /usr/local/bin/
+    $c->_system1("rsync","-avzL",$0,"$m:bin/perlall") and next;
+    # check .perlall, and cpan deps
+    unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
+      $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
+    }
+    $c->_system1("ssh $m "
+		 ."'perl -MCPAN -e\"install "
+		 ."qw/App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   }
-  # XXX To ~/bin/ or /usr/local/bin/ make install puts it into /usr/local/bin/
-  $c->_system1("rsync","-avzL",$0,"$m:bin/perlall");
-  # check .perlall, and cpan deps
-  unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
-    $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
-  }
-  $c->_system1("ssh $m "
-    ."'perl -MCPAN -e\"install "
-    ."qw/App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
-  # XXX we are not sure if bin is in the PATH
-  #$c->_system1("ssh",$m,"'bin/perlall -v init ".join(" ",@{$c->argv})."'");
-  "initvm done on ".$m
+  "initvm done on ".@m
 }
 
 =item B<selfupgrade>

@@ -920,7 +920,7 @@ sub _build {
   
   my $builddir = "build-".$p;
   if ($c->options->{install}) {
-    $c->_system1( "chdir", $builddir );
+    $c->_system1( "chdir", $root.'/'.$builddir );
     $c->_check_lock();
     goto INSTALL;
   }
@@ -944,7 +944,7 @@ sub _build {
 	and $c->_fail("Cannot create $builddir."
 		      ." Check your PERLALL_BUILDROOT in ~/.perlall");
     }
-    $c->_system1( "chdir", $builddir );
+    $c->_system1( "chdir", $root.'/'.$builddir );
     $c->_check_lock();
   }
   else { # git, much better
@@ -958,7 +958,7 @@ sub _build {
     if ( $from eq 'blead' and $c->options->{link} ) { # mksymlink for blead only
       $c->debug("working symlinked to perl-git tree \@$gitsuffix")
 	if $c->options->{link};
-      $c->_system1( "chdir", $builddir);
+      $c->_system1( "chdir", $root.'/'.$builddir);
       $c->_fail( "not existing builddir $builddir")
 	if basename(Cwd::getcwd()) ne $builddir and !$dryrun;
       $c->_check_lock();

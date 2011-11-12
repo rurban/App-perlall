@@ -1132,11 +1132,16 @@ sub _build {
       : $c->_grep("/^libperl='(.+?)'\$/ and print \$1", "config.sh");
     if ($libperl eq $dll) {
       $c->_log("configure did keep our libperl, good");
-    } else {
+    } elsif ($libperl and $dll) {
       $libperl =~ s/([\.\$\%\@])/\\$1/g;
       $c->_grep("-i s,$dll,$libperl,", 
-		qw(config.sh config.h Makefile GNUmakefile myconfig))
-	if $libperl and $dll;
+		qw(config.sh config.h Makefile GNUmakefile myconfig));
+      if ($^O eq 'cygwin') {
+	$c->_grep("-i s,libperl='libperl\.a',libperl='$libperl',", 
+		  qw(config.sh));
+	$c->_grep("-i s,libperl=libperl\.a,libperl=$libperl,", 
+		  qw(myconfig));
+      }
       # XXX fix config_args also
     }
   }
@@ -1167,7 +1172,7 @@ sub _build {
   }
   unless ($c->options->{notest}) {
     $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
-    system("tail -n30 log.test") unless $dryrun;
+    system("tail -30 log.test") unless $dryrun;
     # XXX system is not giving me back the errcode
     $testerr = `grep "All tests successful." log.test` ? undef : 1;
   }

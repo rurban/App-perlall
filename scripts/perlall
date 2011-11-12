@@ -430,12 +430,16 @@ sub _dot_perlall {
     }
     elsif ( m/^([^\=\:\s]+)          # key
 	      (?:                    # (value is optional)
-		(?:\s*[\=\:]\s*|\s+) # separator ('=', ':' or whitespace)
+		(?:\s*[\=\:]\s*|\s+) # separator ('=', ':', '"' or whitespace)
 		(.+)                 # value
 	      )?
 	     /x
 	  ) {
-      $c->config->{$1} = $2;
+      my $v = $2;
+      if (substr($v,0,1) eq '"' and substr($v,-1,1) eq '"') {
+	$v = substr($v,1,-1);
+      }
+      $c->config->{$1} = $v;
       print $NEW $s if $write;
     } elsif ($write) {
       print $NEW $s;

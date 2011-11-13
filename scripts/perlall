@@ -22,7 +22,12 @@ BEGIN { # autoinstall the non-core modules
   for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
     no strict 'refs';
     unless (eval "require $_;") {
-      my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); }
+      require CPAN; CPAN->import;
+      # XXX check the API
+      warn "CPAN->install($_)\n"; CPAN->install($_);
+      # This failed on windows
+      # my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); 
+    }
     $_->import;
   }
 }

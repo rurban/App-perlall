@@ -1055,7 +1055,8 @@ sub _build {
 	next if grep /^$f[= ]/, @{$c->options->{D}}
 	     or grep /^$f[= ]/, @{$c->options->{A}}
 	     or grep /^$f[= ]/, @{$c->options->{U}};
-	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) /;
+	# -Dlibpth=/usr/local/lib64 /lib64 /usr/lib64 -D
+	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -/; # until - or $
 	if ($f =~ /^use/ and !$v) {
 	  my ($u) = $tryargs =~ /-([DU])$f /;
 	  $c->debug("-$u$f") if $u;

@@ -210,7 +210,12 @@ sub pre_process {
       # logging + locking
       # "we should not disturb a running perlall in this dir"
       my $d = Devel::Platform::Info->new->get_info();
-      my $s = $d->{oslabel}.$d->{osvers}; $s=~s/\s//g;
+      my $s = $d->{oslabel};
+      my $v = $d->{osvers}; 
+      $v =~ s/^\D*//;
+      $v =~ s/[\D\.]//g; # only numbers
+      $s = $s . $v;
+      $s =~ s/[\s\(\)\[\}\[\]]//g;
       if ($^O eq 'cygwin') {
 	my $s = $d->{source}->{uname}->[2];
 	$s =~ s/\(.+$//;

@@ -23,7 +23,7 @@ BEGIN { # autoinstall the non-core modules
     no strict 'refs';
     unless (eval "require $_;") {
       require CPAN; CPAN->import;
-      # XXX check the API
+      # XXX check the API, since when supported?
       warn "CPAN->install($_)\n"; CPAN->install($_);
       # This failed on windows
       # my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); 
@@ -1566,6 +1566,52 @@ sub makeinstall
   $c->_set_alias();
 }
 
+# may return undef if not possible to start it (not yet)
+sub _startvm {
+  my $c = shift;
+  my $m = shift or die "_startvm missing vm name";
+  # XXX only virsh supported so far.
+  my $ctl = $c->config->{testvm_ctl} || 'virsh';
+  $c->_fail("Unsupported testvm_ctl='$ctl' in .perlall. Only virsh.") if $ctl ne 'virsh';
+  my $status = `sudo virsh list --all`;
+  my $test = '
+   Id Name                 State
+----------------------------------
+ 14 win                  running
+ 15 freebsd7             paused
+ 18 centos6              paused
+ 22 centos5              paused
+ 24 centos4              paused
+ 25 solaris              running
+  - freebsd8             shut off
+  - openbsd49            shut off';
+  for (split/\n/,$status) {
+    my @v = split /\s+/;
+    shift @v if $v[0] eq '';
+    if ($v[1] eq $m) {
+      if ($v[2] eq 'running') { # running,idle,paused,shutdown,shut off,crashed,dying
+	return 1;
+      }
+      elsif ($v[2] eq 'paused') { 
+	$c->_system(qw(sudo virsh resume), $m);
+	# XXX --max: check if others should be suspend instead (prev. checked vm)
+	sleep 0.1;
+	return 1;
+      }
+      elsif ($v[2] eq 'shut off') {
+	$c->_system(qw(sudo virsh start), $m);
+	sleep 10;
+	# XXX --max: check if others should be shut off instead (prev. checked vm)
+	return 1;
+      }
+      else {
+	$c->_fail("vm $m in invalid state $v[2]");
+	return;
+      }
+    }
+  }
+  return; # not found, skip to next
+}
 
 =item B<testvm> [OPTIONS] [user@]hostname...
 
@@ -1642,6 +1688,7 @@ sub testvm
   $prefix = $c->options->{prefix} || "Perl";
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
+    $c->_startvm($m) or next;
     $c->_system("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
 		'.', "$m:$prefix/$base/");
@@ -1676,6 +1723,7 @@ sub initvm
   for my $m (@m) {
     _print0("perlall initvm $m") if $c->options->{verbose};
     local $c->options->{verbose} = 1 unless $c->options->{quiet};
+    $c->_startvm($m) or next;
     unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
       for my $t (/ecdsa dsa rsa/) {
 	if (-f "$ENV{HOME}/.ssh/id_$t.pub") {

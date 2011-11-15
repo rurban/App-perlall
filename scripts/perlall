@@ -861,7 +861,7 @@ sub build
     }
   }
   warn "--link ignored. Only valid with blead.\n" 
-    if $c->options->{link} and $from eq 'blead';
+    if $c->options->{link} and $from ne 'blead';
   $c->_log("chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
 

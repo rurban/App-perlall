@@ -8,10 +8,10 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke, selfupgrade
 #   init-modules: shell expansion, \ handling
-#   testvm load balancing
+#   testvm load balancing (keep mro of used vm's)
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   metacpan globbing (cpan Devel::*)
+#   CPAN::Shell->expand("Devel::*"), not easy todo with metacpan.
 
 use strict;
 use 5.006;
@@ -20,7 +20,6 @@ use Config;
 use Cwd ();
 use File::Basename 'basename';
 BEGIN { # autoinstall the non-core modules
-  # $DB::single=1;
   my @m;
   for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
     push @m, $_ unless eval "require $_;" }

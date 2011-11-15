@@ -1570,7 +1570,7 @@ sub makeinstall
 sub _startvm {
   my $c = shift;
   my $m = shift or die "_startvm missing vm name";
-  # XXX only virsh supported so far.
+  # XXX only virsh supported so far. BTW, we do not want to use the Libvirt XML module
   my $ctl = $c->config->{testvm_ctl} || 'virsh';
   $c->_fail("Unsupported testvm_ctl='$ctl' in .perlall. Only virsh.") if $ctl ne 'virsh';
   my $status = `sudo virsh list --all`;

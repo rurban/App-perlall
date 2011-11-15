@@ -8,28 +8,25 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke, selfupgrade
 #   init-modules: shell expansion, \ handling
-#   testvm load balancing
+#   testvm load balancing (keep mro of used vm's)
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...
-#   metacpan globbing (cpan Devel::*)
+#   CPAN::Shell->expand("Devel::*"), not easy todo with metacpan.
 
 use strict;
+use 5.006;
 our $VERSION = '0.01';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
 BEGIN { # autoinstall the non-core modules
+  my @m;
   for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
-    no strict 'refs';
-    unless (eval "require $_;") {
-      require CPAN; CPAN->import;
-      # XXX check the API, since when supported?
-      warn "CPAN->install($_)\n"; CPAN->install($_);
-      # This failed on windows
-      # my $c = "$^X -MCPAN -e'install qw($_)'"; warn "$c\n"; system($c); 
-    }
-    $_->import;
-  }
+    push @m, $_ unless eval "require $_;" }
+  if (@m) { # Checked the API back to 1.76_01 (v5.8.4)
+    require CPAN; CPAN->import;
+    warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
+  $_->import for @m;
 }
 
 push @App::Rad::ISA, 'main';

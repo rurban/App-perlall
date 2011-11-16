@@ -1758,16 +1758,13 @@ sub selfupgrade
 {
   my $c = shift;
   $c->addopts('latest|l');
-  if ($c->options->{latest}) {
-    $c->_system("wget --no-check-certificate -O perlall.tmp http://github.com/rurban/App-perlall/raw/master/scripts/perlall");
-    if (-s "perlall.tmp" > 5000) {
-      $c->_system("chmod 0755 perlall.tmp");
-      $c->_system("mv perlall.tmp $0");
-    } else {
-      "wget download from github failed"
-    }
+  my $branch = $c->options->{latest} ? 'master' : 'release';
+  $c->_system("wget","--no-check-certificate","-O","perlall.tmp","http://github.com/rurban/App-perlall/raw/$branch/scripts/perlall");
+  if (-s "perlall.tmp" > 5000) {
+    $c->_system("chmod","0755","perlall.tmp");
+    $c->_system("mv","perlall.tmp",$0);
   } else {
-    "no stable release yet" # see perlbrew
+    "wget download from github failed"
   }
 }
 

@@ -742,7 +742,7 @@ C<-Dmksymlinks> is used for blead, unless the option C<--link> is
 specified.
 
 On cygwin and windows the F<perl*.dll> also gets the suffix, because they
-are stored globally. (NOT YET)
+are stored globally.
 
 The specified perl is taken from a perl git repo (version or tag or branch)
 (specified via perl-git in ~/.perlall), or downloaded

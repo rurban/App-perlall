@@ -36,6 +36,6 @@ cpan=cpan
 testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 winxp solaris"
 # where modules are:
 testvm_prefix=Perl
-# TODO: control balancing? (virsh, xen-shell, vmrun, VBoXManage)
+# TODO: control balancing (virsh, xen-shell, vmrun, VBoXManage)
 #testvm_max=4
 #testvm_ctl=virsh

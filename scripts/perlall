@@ -69,17 +69,16 @@ perlall - Build, test and do with all perls
 
     perlall maketest "5.*.d*" # test with all debugging, version as option
 
-    for m in centos4 centos5 solaris10; do
-      perlall initvm -v $m
-    done
+    for m in centos4 centos5 solaris10; do perlall initvm $m; done
     perlall testvm centos4 centos5 solaris10
+    perlall initvm --all $m
     perlall testvm --all -c=init # see testvm in .perlall
+    perlall selfupgrade
 
 =head2 Planned Features
 
     perlall smoke -j4 bleadd-nt smoke-me/*
     perlall cpan Devel::*
-    perlall selfupgrade
 
 =head1 OPTIONS
 
@@ -168,7 +167,7 @@ sub setup {
 }
 
 sub App::Rad::Help::usage {
-    return "Usage: $0 [options] command [arguments]";
+    return "Usage: ".basename($0)." [options] command [arguments]";
 }
 
 sub pre_process {
@@ -213,7 +212,7 @@ sub pre_process {
       # "we should not disturb a running perlall in this dir"
       my $d = Devel::Platform::Info->new->get_info();
       my $s = $d->{oslabel};
-      my $v = $d->{osvers}; 
+      my $v = $d->{osvers};
       $v =~ s/^\D*//;
       $v =~ s/[\D\.]//g; # only numbers
       $s = $s . $v;
@@ -288,6 +287,7 @@ sub App::Rad::_get_input {
       push @options, ($ARGV[$i]);
     }
     @{$c->argv} = (@params);
+    $c->{'cmd'} = '' unless $c->{'cmd'};
     my $parser = new Getopt::Long::Parser;
     $parser->configure( qw(bundling) );
     @ARGV = @options; # getoptions eats @ARGV
@@ -374,7 +374,7 @@ sub _opts {
   }
   substr($s,1);
 }
-
+# perl5.14.2d-nt => 14.2
 sub _strip2float {
   my $p = shift;
   $p =~ s/^.*perl5\.//;

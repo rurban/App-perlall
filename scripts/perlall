@@ -6,7 +6,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 # TODO:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
-#   implement smoke, selfupgrade
+#   implement smoke
 #   init-modules: shell expansion, \ handling
 #   testvm load balancing (keep mro of used vm's)
 #   build perlbrew and HOME friendly (not hardcoded paths)

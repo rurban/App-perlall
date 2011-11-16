@@ -1747,14 +1747,14 @@ sub initvm
   "initvm done on ".@m
 }
 
-=item B<selfupgrade>
+=item B<selfupgrade> [ --latest ]
 
-This command upgrades perlall to its latest version.
+This command upgrades perlall to its latest or stable version.
 
 =cut
 
 sub selfupgrade
-  :Help('Upgrade perlall to its latest version')
+  :Help('Upgrade perlall to its latest or stable version')
 {
   my $c = shift;
   $c->addopts('latest|l');

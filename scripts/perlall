@@ -1847,7 +1847,7 @@ It is recommended to source this from your F<.profile> for the handy aliases.
 
 =item alias p=perl5.15.4d-nt
 
-Save current perl.
+Save current perl in shell alias form.
 
 This is stored after each perlall execution.
 Dependend on p there are several other handy p aliases,
@@ -1856,9 +1856,10 @@ See F<.perlall>
 
 =item alias perl-git="cd /usr/src/perl/blead/perl-git"
 
-git repo to avoid downloading perl-*.tar.gz from CPAN.
+Directory with a perl5 git repo to avoid downloading perl-*.tar.gz from CPAN, 
+in shell alias form.
 
-C<perl-git> stores the perl git root, and is also a handy alias to cd into it.
+C<perl-git> stores the perl git workdir, and is also a handy alias to cd into it.
 
 =item PERLALL_PREFIX
 

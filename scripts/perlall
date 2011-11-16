@@ -1762,7 +1762,7 @@ sub selfupgrade
   $c->_system("wget","--no-check-certificate","-O","perlall.tmp","http://github.com/rurban/App-perlall/raw/$branch/scripts/perlall");
   if (-s "perlall.tmp" > 5000) {
     $c->_system("chmod","0755","perlall.tmp");
-    $c->_system("mv","perlall.tmp",$0);
+    $c->_system("mv","perlall.tmp",-l $0 ? readlink($0) : $0);
   } else {
     "wget download from github failed"
   }

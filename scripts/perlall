@@ -55,10 +55,10 @@ perlall - Build, test and do with all perls
     perlall build perl5.15.4d-nt
     perlall build perl5.15.4
     perlall build perl5.14.2-nt
-    perlall -v build -j4 5.15.4d-nt smoke-me/khw-tk
+    perlall -v build -j4 bleadd-nt smoke-me/khw-tk
     perlall uninstall perl5.15.4d-nt@khw-tk
 
-    perlall init perl5.15.4d-nt DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
+    perlall init perl5.15.4d-nt@blead DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
 
     perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
     perlall --older 5.12 make -Mblib t/0basic.t
@@ -77,7 +77,7 @@ perlall - Build, test and do with all perls
 
 =head2 Planned Features
 
-    perlall smoke -j4 bleadd smoke-me/*
+    perlall smoke -j4 bleadd-nt smoke-me/*
     perlall cpan Devel::*
     perlall selfupgrade
 
@@ -1128,8 +1128,7 @@ sub _build {
   if (!$dryrun and $c->_older($p,'5.14')) { #seems to be <=5.6.2 only
     # remove archs from inc_version_list
     if ($c->_grep("m|inc_version_list.+(\d\.\d\d?\.\d\d?)/$archname | and print \$1",
-		  "config.sh"))
-    {
+		  "config.sh")) {
       $c->debug("post-configure remove archlibs from inc_version_list");
       $c->_grep("-i s|(\d\.\d\d?\.\d\d?)/$archname ||;"
 		. ' s|"(\d\.\d\d?\.\d\d?)/'.$archname.'",||;'
@@ -1563,7 +1562,7 @@ sub makeinstall
   $c->_set_alias();
 }
 
-# may return undef if not possible to start it (not yet)
+# may return undef if not possible to start it
 sub _startvm {
   my $c = shift;
   my $m = shift or die "_startvm missing vm name";
@@ -1641,6 +1640,9 @@ VM Balancing:
 
     If the remote hosts are VM's on this machine, you can control how many
     VM's should run in parallel, and how they are started and stopped.
+
+    Currently only C<virsh> is supported to resume a paused vm and start 
+    a stopped vm. C<--max> is yet ignored.
 
     If C<testvm_ctl> is not set, no balancing - start+stop - will be done,
     such as on physical hosts or enough VM power.

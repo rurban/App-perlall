@@ -214,7 +214,7 @@ sub pre_process {
       my $v = $d->{osvers};
       if ($^O eq 'solaris' and !$s) {
 	$s = "solaris";
-	$v = $d->{kvers} unless $v;
+	$v = $d->{kvers} if $v eq 'SunOS';
       }
       $v =~ s/^\D*//;
       $v =~ s/[\D\.]//g; # only numbers

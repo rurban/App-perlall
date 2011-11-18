@@ -4,10 +4,13 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
+#   fix logging (IPC::Open3 with IO::Tee on -v)
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke
+#   maketest -all (locally and testvm --all)
 #   init-modules: shell expansion, \ handling
+# non-critical:
+#   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
 #   testvm load balancing (keep mro of used vm's)
 #   build perlbrew and HOME friendly (not hardcoded paths)
 #   windows support (paths, tee, tools), die on VMS, beos, ...

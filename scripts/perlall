@@ -4,7 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   fix logging (IPC::Open3 with IO::Tee on -v)
+#   fix logging (IPC::Run with IO::Tee on -v)
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke
 #   maketest -all (locally and testvm --all)
@@ -12,8 +12,8 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 # non-critical:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
 #   testvm load balancing (keep mro of used vm's)
-#   build perlbrew and HOME friendly (not hardcoded paths)
-#   windows support (paths, tee, tools), die on VMS, beos, ...
+#   build: perlbrew and HOME friendly (no hardcoded paths)
+#   windows support (paths, tee, tools), die on other non-POSIX exots (VMS)...
 #   CPAN::Shell->expand("Devel::*"), not easy todo with metacpan.
 
 use strict;
@@ -22,9 +22,23 @@ our $VERSION = '0.01';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
-BEGIN { # autoinstall the non-core modules
+BEGIN { # check platform support: perldoc perlport
+  if ($^O !~ /^linux|freebsd|darwin|solaris|openbsd|cygwin$/) {
+    if ($^O =~ /^vms|dos|bsdos$/) {
+      die "unsupported OS $^O"; # fixes welcome
+    } elsif ($^O eq 'MSWin32') {
+      warn "$^O support planned but not yet enabled";
+    } else { # should theoretically work: 
+             #        netbsd sunos aix haiku hpux irix next svr4 unicos* plan9
+             # scary: VOS os390 os400 posix-bc vmesa riscos amigaos beos mpeix
+      warn "untested OS $^O. Feedback welcome";
+      # VOS forbids slashes in filenames. no big deal
+    }
+  } 
+  # autoinstall the non-core modules
   my @m;
-  for (qw(App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl)) {
+  for (qw(App::Rad IPC::Run IO::Tee IO::Scalar 
+          Devel::Platform::Info Devel::PatchPerl)) {
     push @m, $_ unless eval "require $_;" }
   if (@m) { # Checked the API back to 1.76_01 (v5.8.4)
     require CPAN; CPAN->import;
@@ -39,6 +53,7 @@ our @opts = (
 	  [ "older=s",  "only older versions (glob-style)" ],
 	  [ "nogit",    "skip @ git versions" ],
 	  [ "main|m",   "same as --skip=outdated" ],
+	  [ "reverse|r","reverse, oldest first" ],
 	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
@@ -91,6 +106,7 @@ perlall - Build, test and do with all perls
 	  "nogit",    "skip @ git versions"
           "main|m",   "same as --skip=outdated, 
                        only 5.6.2 5.8.[4589] 5.10.1 5.12.4 5.14.2 5.15.4"
+	  "reverse|r" "oldest first. default is sorted by newest first"
 
 	  "quiet|q",  "Make perlall command quieter"
 	  "verbose|v","Make perlall command say more"
@@ -328,7 +344,9 @@ sub _get_perlall {
   if ($c->options->{skip} or $c->options->{main}) {
     if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
       @p = map { glob "$prefix/perl$_*" } # only keep those
-      qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
+               qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
+      # XXX --main: no @git releases only blead
+      #             no d if non-debug exists
     } else {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }
@@ -362,8 +380,12 @@ sub _get_perlall {
   @p = grep { 
     (-l $_ and (readlink($_) =~ m|$prefix/perl5\..*|)) ? 0 : $_
   } @p;
-  # sort reverse numerically, newest first
-  sort { _strip2float($b) <=> _strip2float($a) } @p;
+  if ($c->options->{reverse}) { # oldest first
+    sort { _strip2float($a) <=> _strip2float($b) } @p;
+  } else {
+    # sort reverse numerically, newest first
+    sort { _strip2float($b) <=> _strip2float($a) } @p;
+  }
 }
 
 # string of hash key=val...
@@ -576,6 +598,21 @@ sub _check_lock {
       }
     }
   }
+}
+
+sub _lognew {
+  my $c = shift;
+  my $p = shift;
+  if ($p) {
+    $c->stash->{log} = $c->stash->{logprefix} . $p;
+  } else {
+    $c->stash->{log} = substr($c->stash->{logprefix},0,-1); # strip last -
+  }
+  if ($c->stash->{log_fh}) {
+    close $c->stash->{log_fh};
+    undef $c->stash->{log_fh};
+  }
+  $c->_loginit();
 }
 
 sub _loginit {
@@ -838,7 +875,6 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  # $c->stash->{log} = $c->stash->{logprefix} . $p;
   # $c->_log("perlall",_opts($c->options),"build",$p,@args);
   $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $cwd = Cwd::getcwd();
@@ -931,6 +967,10 @@ sub _build {
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
+  if ($c->stash->{log_fh}) {
+    close $c->stash->{log_fh};
+    undef $c->stash->{log_fh};
+  }
   $c->_log0("perlall",_opts($c->options),"build",$p,$from);
   
   my $builddir = "build-".$p;
@@ -1135,10 +1175,10 @@ sub _build {
   }
   if (!$dryrun and $c->_older($p,'5.14')) { #seems to be <=5.6.2 only
     # remove archs from inc_version_list
-    if ($c->_grep("m|inc_version_list.+(\d\.\d\d?\.\d\d?)/$archname | and print \$1",
+    if ($c->_grep('m|inc_version_list.+(\d\.\d\d?\.\d\d?)/'.$archname.' | and print $1',
 		  "config.sh")) {
       $c->debug("post-configure remove archlibs from inc_version_list");
-      $c->_grep("-i s|(\d\.\d\d?\.\d\d?)/$archname ||;"
+      $c->_grep('-i s|(\d\.\d\d?\.\d\d?)/'.$archname.' ||;'
 		. ' s|"(\d\.\d\d?\.\d\d?)/'.$archname.'",||;'
 		. " print",
 		qw(config.h config.sh));
@@ -1323,7 +1363,7 @@ sub init
   $cpan = 'cpan' unless $cpan;
   $c->options->{verbose} = 1;
   for my $p (@{$c->stash->{perlall}}) {
-    $c->stash->{log} = $c->stash->{logprefix} . _short($p);
+    $c->_lognew(_short($p));
     if ($cpan eq 'cpan') { # XXX and use_sqlite
       # if App::cpan exists and works ok, -S cpan
       #     otherwise need -MCPAN -e'install qw(mods)'
@@ -1420,7 +1460,7 @@ sub do
   return "missing args" unless $argv;
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
-    $c->stash->{log} = $c->stash->{logprefix} . _short($p);
+    $c->_lognew(_short($p));
     $c->_system( "$p @{$c->argv}");
   }
   $c->_set_alias();
@@ -1440,7 +1480,7 @@ sub cpan
   return "missing args" unless $argv;
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
-    $c->stash->{log} = $c->stash->{logprefix} . _short($p);
+    $c->_lognew(_short($p));
     $c->_system0($p, "-S", "cpan", @{$c->argv});
   }
   $c->_set_alias();
@@ -1460,7 +1500,7 @@ sub cpanm
   return "missing args" unless $argv;
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
-    $c->stash->{log} = $c->stash->{logprefix} . _short($p);
+    $c->_lognew(_short($p));
     $c->_system0($p, "-S", "cpanm", @{$c->argv});
   }
   $c->_set_alias();
@@ -1481,7 +1521,7 @@ sub _make {
   my $make = $Config{make};
   # checks MB
   $c->_system( $make, "-s", "clean") if -f "Makefile";
-  $c->stash->{log} = $c->stash->{logprefix} . _short($p);
+  $c->_lognew(_short($p));
   if (-f "Makefile.PL") {
     $c->_system( $p, "Makefile.PL");
     $c->_system0( $make);
@@ -1678,7 +1718,7 @@ sub testvm
   # XXX check if in core or in a module
   _print1("perlall testvm "._opts($c->options),@machines)
     if $c->options->{verbose};
-  $c->stash->{log} = $c->stash->{logprefix};
+  $c->_lognew('');
   my $cmd = $c->options->{cmd} || "maketest";
   my $opt = $c->options->{option} || '';
   my $man = 'MANIFEST';
@@ -1726,9 +1766,9 @@ sub initvm
   my @m = $c->options->{all} ? split(/ /,$c->config->{testvm}) : @{$c->argv};
   return "missing host" unless @m;
 
-  $c->stash->{log} = $c->stash->{logprefix};
+  $c->_lognew('');
   for my $m (@m) {
-    _print0("perlall initvm $m") if $c->options->{verbose};
+    _print0("perlall initvm $m") unless $c->options->{quiet};
     local $c->options->{verbose} = 1 unless $c->options->{quiet};
     $c->_startvm($m) or next;
     unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {

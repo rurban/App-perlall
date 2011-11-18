@@ -210,12 +210,15 @@ sub pre_process {
     $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
       unless $c->config->{'perl-git'};
 
-    if ($cmd !~ /^list/) {
+    if ($c->is_command($cmd) and $cmd !~ /^list/) {
       # logging + locking
-      # "we should not disturb a running perlall in this dir"
       my $d = Devel::Platform::Info->new->get_info();
       my $s = $d->{oslabel};
       my $v = $d->{osvers};
+      if ($^O eq 'solaris' and !$s) {
+	$s = "solaris";
+	$v = $d->{kvers} if $v eq 'SunOS';
+      }
       $v =~ s/^\D*//;
       $v =~ s/[\D\.]//g; # only numbers
       $s = $s . $v;
@@ -225,8 +228,10 @@ sub pre_process {
 	$s =~ s/\(.+$//;
 	$s = 'cygwin'.$s;
       }
+      $s = $^O unless $s;
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
+      # "we should not disturb a running perlall in this dir"
       $c->_check_lock() if $cmd =~ /^do|make|testvm/;
     }
   }
@@ -745,7 +750,7 @@ C<-Dmksymlinks> is used for blead, unless the option C<--link> is
 specified.
 
 On cygwin and windows the F<perl*.dll> also gets the suffix, because they
-are stored globally. (NOT YET)
+are stored globally.
 
 The specified perl is taken from a perl git repo (version or tag or branch)
 (specified via perl-git in ~/.perlall), or downloaded
@@ -1570,7 +1575,7 @@ sub _startvm {
   my $c = shift;
   my $m = shift or die "_startvm missing vm name";
   # XXX only virsh supported so far. BTW, we do not want to use the Libvirt XML module
-  my $ctl = $c->config->{testvm_ctl} || 'virsh';
+  my $ctl = $c->config->{testvm_ctl} or return 1;
   $c->_fail("Unsupported testvm_ctl='$ctl' in .perlall. Only virsh.") if $ctl ne 'virsh';
   my $status = `sudo virsh list --all`;
   my $test = '
@@ -1698,7 +1703,7 @@ sub testvm
     $c->_system1("ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
       unless $c->options->{up};
   }
-  "testvm done on @machines"
+  "testvm done on ".join(" ",@machines)
 }
 
 =item B<initvm> [--all] user@[hostname]...
@@ -1747,7 +1752,7 @@ sub initvm
 		 ."'perl -MCPAN -e\"install "
 		 ."qw/App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   }
-  "initvm done on ".@m
+  "initvm done on ".join(" ",@m)
 }
 
 =item B<selfupgrade> [ --latest ]

@@ -243,8 +243,8 @@ sub pre_process {
 	$s = "solaris";
 	$v = $d->{kvers} if $v eq 'SunOS';
       }
-      $v =~ s/^\D*//;
-      $v =~ s/[\D\.]//g; # only numbers
+      $v =~ s/^\D*//;    # strip non-number lead
+      $v =~ s/[\D\.]//g; # only numbers and dots
       $s = $s . $v;
       $s =~ s/[\s\(\)\[\}\[\]]//g;
       if ($^O eq 'cygwin') {
@@ -1174,6 +1174,7 @@ sub _build {
       $c->_grep("-i s|(\\d)/$archname'|\\1/$new'|;"
 		. " s|(\\d)/$archname\"|\\1/$new\"|;"
 		. " s|/$archname/CORE|/$new/CORE|;"
+		. " s|define ARCHNAME \"$archname\"|define ARCHNAME \"$new\"|;"
 		. " s|archname=$archname,|archname=$new,|;"
 		. " s|archname='$archname'|archname='$new'|; print", 
 		qw(config.h config.sh Policy.sh myconfig));
@@ -1237,7 +1238,7 @@ sub _build {
   }
   unless ($c->options->{notest}) {
     $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
-    system("tail -30 log.test") unless $dryrun;
+    system("tail -30 log.test") unless $dryrun or $c->options->{quiet};
     # XXX system is not giving me back the errcode
     $testerr = `grep "All tests successful." log.test` ? undef : 1;
   }

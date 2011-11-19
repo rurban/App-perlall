@@ -55,7 +55,7 @@ our @opts = (
 	  [ "nogit",    "skip @ git versions" ],
 	  [ "main|m",   "same as --skip=outdated" ],
 	  [ "reverse|r","reverse, oldest first" ],
-	  [ "quiet|q",  "no TEST_VERBOSE, no exec STDOUT" ],
+	  [ "quiet|q",  "no TEST_VERBOSE, no system >STDOUT" ],
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],   
 	  [ "nolog",    "skip writing log file(s)" ],
@@ -167,14 +167,19 @@ them. C<archname> and the archlibs are extended by C<-debug> and
 special git suffices. The installed perl binary and on windows
 the F<perl.dll> ditto.
 
+Platforms
+
 I plan to use perlall on cygwin, linux (debian+centos),
 freebsd, openbsd and solaris, with bash, dash and ksh.
 Supporting other platforms besides VMS should not be hard.
-freebsd needs sudo from ports. mingw (strawberry) support is planned.
+freebsd needs sudo from ports. mingw (strawberry) support is
+planned.
 
-The do and make* commands always create a log file with the platform 
-and version, like F<log.test-centos5-5.10.1d-nt> for C<maketest> or
-F<log.install-osx1068-5.15.4> for C<makeinstall>.
+Log Files
+
+Most commands always create a log file with the command, platform 
+and version, like F<log.maketest-centos5-5.10.1d-nt> or
+F<log.makeinstall-osx1068-5.15.4>, F<log.build-osx1068-5.15.4d-nt@30cb48da>.
 
 In L<B::C> there are post-processing scripts
 F<status_upd> and F<store_rpt> for those generated logfiles.
@@ -542,18 +547,43 @@ sub __system {
       my $what = join "','",@_;
       eval "$cmd('$what')";
     } else {
-      if (0 and $c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
-	  and $c->stash->{log} and $^O ne 'MSWin32'
-	 ) {
+      if ($c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
+	  and $c->stash->{log} and $^O ne 'MSWin32') {
 	push @_, "2>&1 | tee -a ".$c->stash->{log};
 	@_ = (join " ",@_);
+	#with IPC::Run:
+	# Configure: line 106: 1: Bad file descriptor
+	# Configure: line 1765: 1: Bad file descriptor
+	# Configure failed
+	$c->options->{verbose} ? system(@_) : qx(@_);
+      } else {
+	my $fh  = $c->stash->{log_fh};
+	# tee STDERR also to log or STDOUT
+	IPC::Run::run(\@_, \*STDIN, $fh, $fh);
       }
-      my $fh  = $c->stash->{log_fh};
-      # tee STDERR also to log or STDOUT
-      IPC::Run::run(\@_, \*STDIN, $fh, $fh);
     }
   }
 }
+# -q   only print to log, STDOUT level 0
+#      STDOUT level 1, STDOUT+STDERR >>log
+# -v   tee to STDOUT (+STDERR) and log
+sub _loginit {
+  my $c = shift;
+  my $q = $c->options->{quiet};
+  my $v = $c->options->{verbose};
+  my $dryrun = $c->options->{dryrun};
+  my $log = $c->stash->{log};
+  my $fh  = $c->stash->{log_fh};
+  if ( $v and !$dryrun ) {
+    # only with -v we print to STDOUT also, else only to the log
+    $fh = IO::Tee->new(\*STDOUT, ">$log");
+  } else {
+    $fh = $q ? IO::File->new(">>$log") : \*STDOUT;
+    select $fh if $q;
+  }
+  $c->stash->{log_fh} = $fh;
+}
+
 # $c->_log(level, @messages)
 # -q   only print to log, STDOUT level 0
 #      STDOUT level 1, STDOUT+STDERR >>log
@@ -653,26 +683,6 @@ sub _lognew {
     undef $c->stash->{log_fh};
   }
   $c->_loginit();
-}
-
-# -q   only print to log, STDOUT level 0
-#      STDOUT level 1, STDOUT+STDERR >>log
-# -v   tee to STDOUT (+STDERR) and log
-sub _loginit {
-  my $c = shift;
-  my $q = $c->options->{quiet};
-  my $v = $c->options->{verbose};
-  my $dryrun = $c->options->{dryrun};
-  my $log = $c->stash->{log};
-  my $fh  = $c->stash->{log_fh};
-  if ( $v and !$dryrun ) {
-    # only with -v we print to STDOUT also, else only to the log
-    $fh = IO::Tee->new(\*STDOUT, ">$log");
-  } else {
-    $fh = $q ? IO::File->new(">>$log") : \*STDOUT;
-    select $fh if $q;
-  }
-  $c->stash->{log_fh} = $fh;
 }
 
 # -i inplace editing or just grep

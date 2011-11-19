@@ -6,7 +6,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 # TODO:
 #   fix logging (IPC::Run with IO::Tee on -v)
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
-#   implement smoke
+#   implement smoke, bench
 #   maketest -all (locally and testvm --all)
 #   init-modules: shell expansion, \ handling
 # non-critical:
@@ -18,7 +18,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.01';
+our $VERSION = '0.01_20111118';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -70,7 +70,8 @@ perlall - Build, test and do with all perls
 
 =head1 SYNOPSIS
 
-    perlall build perl5.15.4d-nt
+    perlall [opts] cmd [ what [ how ]]
+
     perlall build perl5.15.4
     perlall build perl5.14.2-nt
     perlall -v build -j4 bleadd-nt smoke-me/khw-tk
@@ -96,6 +97,7 @@ perlall - Build, test and do with all perls
 =head2 Planned Features
 
     perlall smoke -j4 bleadd-nt smoke-me/*
+    perlall bench [ what  [ how ]]
     perlall cpan Devel::*
 
 =head1 OPTIONS
@@ -521,13 +523,14 @@ sub _short {
   $p =~ s/^.*perl//;
   return $p;
 }
-# bold green
-sub _print0 {
+
+sub _print {
+  my $level = shift;
+  if ($level == 0) { # bold green, highest level, headers
     print "\033[1;32m",join(" ",@_),"\033[0;0m\n";
-}
-# bold red/black
-sub _print1 {
+  } elsif ($level == 1) { # bold red/black, major commands
     print "\033[1;39m",join(" ",@_),"\033[0;0m\n";
+  }
 }
 sub __system {
   my $c = shift;
@@ -538,34 +541,70 @@ sub __system {
       my $what = join "','",@_;
       eval "$cmd('$what')";
     } else {
-      if ($c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
+      if (0 and $c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
 	  and $c->stash->{log} and $^O ne 'MSWin32'
 	 ) {
 	push @_, "2>&1 | tee -a ".$c->stash->{log};
 	@_ = (join " ",@_);
       }
-      $c->options->{verbose} ? system(@_) : qx(@_);
+      my $fh  = $c->stash->{log_fh};
+      # tee STDERR also to log or STDOUT
+      IPC::Run::run(\@_, \*STDIN, $fh, $fh);
     }
   }
 }
+# $c->_log(level, @messages)
+# -q   only print to log, STDOUT level 0
+#      STDOUT level 1, STDOUT+STDERR >>log
+# -v   tee to STDOUT (+STDERR) and log
+sub _log {
+  my $c = shift;
+  my $level = shift;
+  my $q = $c->options->{quiet};
+  my $v = $c->options->{verbose};
+  my $dryrun = $c->options->{dryrun};
+  my $log = $c->stash->{log};
+  my $fh  = $c->stash->{log_fh};
+  local $| = 1;
+  if ($log) {
+    $c->_loginit unless $fh;
+    $fh  = $c->stash->{log_fh};
+    if (!$q) {
+      if ($fh) {
+	print $fh join(" ",@_),"\n";
+	$fh->flush;
+      } else {
+	if ($level ne '') {
+	  _print($level,join(" ",@_),"\n");
+	} else {
+	  print join(" ",@_),"\n"; # fails on my centos5
+	}
+      }
+    } elsif ($level == 0) {
+      _print(0,join(" ",@_),"\n");
+    }
+  } elsif ($v or $level == 0) {
+    if ($level ne '') {
+      _print($level,join(" ",@_),"\n");
+    } else {
+      print join(" ",@_),"\n";
+    }
+  }
+}
+
 sub _system {
   my $c = shift;
-  unless ($c->options->{quiet}) {
-    $c->_log( @_);
-  }
-  $c->__system(@_); 
+  $c->_log('', @_) unless $c->options->{quiet};
+  $c->__system(@_);
 }
 sub _system0 {
   my $c = shift;
-  $c->_log0(@_);
+  $c->_log(0,@_);
   $c->__system(@_);
 }
 sub _system1 {
   my $c = shift;
-  unless ($c->options->{quiet}) {
-    $c->_loginit() if $c->stash->{log} and !$c->stash->{log_fh};
-    _print1(@_);
-  }
+  $c->_log(1,@_);
   $c->__system(@_);
 }
 
@@ -609,12 +648,15 @@ sub _lognew {
     $c->stash->{log} = substr($c->stash->{logprefix},0,-1); # strip last -
   }
   if ($c->stash->{log_fh}) {
-    close $c->stash->{log_fh};
+    $c->stash->{log_fh}->close() if ref($c->stash->{log_fh}) eq 'IO::File';
     undef $c->stash->{log_fh};
   }
   $c->_loginit();
 }
 
+# -q   only print to log, STDOUT level 0
+#      STDOUT level 1, STDOUT+STDERR >>log
+# -v   tee to STDOUT (+STDERR) and log
 sub _loginit {
   my $c = shift;
   my $q = $c->options->{quiet};
@@ -625,58 +667,11 @@ sub _loginit {
   if ( $v and !$dryrun ) {
     # only with -v we print to STDOUT also, else only to the log
     $fh = IO::Tee->new(\*STDOUT, ">$log");
-    # TODO tee STDERR also to log (2>&1 open3, IPC::Cmd?)
   } else {
     $fh = $q ? IO::File->new(">>$log") : \*STDOUT;
     select $fh if $q;
   }
   $c->stash->{log_fh} = $fh;
-}
-
-sub _log0 {
-  my $c = shift;
-  my $q = $c->options->{quiet};
-  my $v = $c->options->{verbose};
-  my $dryrun = $c->options->{dryrun};
-  my $log = $c->stash->{log};
-  my $fh  = $c->stash->{log_fh};
-  local $| = 1;
-  if ($log) {
-    $c->_loginit unless $fh;
-    if (!$q) {
-      if ($fh) {
-	print $fh join(" ",@_),"\n";
-	$fh->flush;
-      } else {
-	_print0 @_;
-      }
-    }
-  } else {
-    _print0 @_ unless $q;
-  }
-}
-
-sub _log {
-  my $c = shift;
-  my $q = $c->options->{quiet};
-  my $v = $c->options->{verbose};
-  my $dryrun = $c->options->{dryrun};
-  my $log = $c->stash->{log};
-  my $fh  = $c->stash->{log_fh};
-  local $| = 1;
-  if ($log) {
-    $c->_loginit unless $fh;
-    if (!$q) {
-      if ($fh) {
-	print $fh join(" ",@_),"\n";
-	$fh->flush;
-      } else {
-	print join(" ",@_),"\n"; # fails on my centos5
-      }
-    }
-  } else {
-    print join(" ",@_),"\n" if $v;
-  }
 }
 
 # -i inplace editing or just grep
@@ -690,7 +685,7 @@ sub _grep {
     $inplace = 1;
     $cmd = substr($cmd,3);
   }
-  $c->_log("perl -i -ne'$cmd'",join(" ",@_)) if $inplace;
+  $c->_log('',"perl -i -ne'$cmd'",join(" ",@_)) if $inplace;
   return if $c->options->{dryrun};
   my $catch = '';
   while (my $f = shift @_) {
@@ -875,7 +870,7 @@ sub build
     $c->output("perlall build invalid perlversion argument $p\n");
     $c->execute('help') and return undef;
   }
-  # $c->_log("perlall",_opts($c->options),"build",$p,@args);
+  # $c->_log(0,"perlall",_opts($c->options),"build",$p,@args);
   $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd }
@@ -906,7 +901,7 @@ sub build
   }
   warn "--link ignored. Only valid with blead.\n" 
     if $c->options->{link} and $from ne 'blead';
-  $c->_log("chdir $root") unless $c->options->{quiet};
+  $c->_log('',"chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
 
   my $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
@@ -918,7 +913,7 @@ sub build
       if ($gitsuffix =~ /\*/) { #expand branch glob-style
 	my $result = '';
 	my @git = $c->_glob_git($gitsuffix);
-	_print0("perlall build $p $gitsuffix => ",@git);
+	_print(0,"perlall build $p $gitsuffix => ",@git);
 	for my $git (@git) {
 	  my $pg = $p;
 	  my $s = $git;
@@ -971,7 +966,7 @@ sub _build {
     close $c->stash->{log_fh};
     undef $c->stash->{log_fh};
   }
-  $c->_log0("perlall",_opts($c->options),"build",$p,$from);
+  $c->_log(0,"perlall",_opts($c->options),"build",$p,$from);
   
   my $builddir = "build-".$p;
   if ($c->options->{install}) {
@@ -1045,7 +1040,7 @@ sub _build {
   # Backport various Configure and hints patches from blead
   # via Devel::PatchPerl
   if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
-    $c->_log("Devel::PatchPerl::patch_source($ps)");
+    $c->_log('',"Devel::PatchPerl::patch_source($ps)");
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
   } elsif (!$dryrun) {
     warn "Warning: Building -Dmksymlink with no Devel::PatchPerl patches applied.\n"
@@ -1190,7 +1185,7 @@ sub _build {
     my $dll = $dryrun ? "fake.dll"
       : $c->_grep("/^libperl='(.+?)'\$/ and print \$1", "config.sh");
     if ($libperl eq $dll) {
-      $c->_log("configure did keep our libperl, good");
+      $c->_log('',"configure did keep our libperl, good");
     } elsif ($libperl and $dll) {
       $libperl =~ s/([\.\$\%\@])/\\$1/g;
       $c->_grep("-i s,$dll,$libperl,", 
@@ -1334,7 +1329,28 @@ sub _smoke
   return "unimplemented";
 }
 
-=item B<init> [perl-<version><suffix> [<modules>...]]
+=item B<bench> [OPTIONS] <version><suffix> [ how ]
+
+Runs a short perl-core benchmark, and optionally a third-party script.
+
+Rejects statistical outliers, heavy load, and does the 
+iterations up to 2 seconds automatically.
+
+Tested are array access, hash access, s///, in a tak with 
+recursion and tail-recursion without IO to prevent too many 
+external influences, though perl typically shines on IO.
+
+=cut
+
+sub bench
+{
+  my $c = shift;
+  # http://blogs.perl.org/users/rurban/2011/11/on-simple-benchmarks.html
+  return "unimplemented";
+}
+
+
+=item B<init> [perl<version><suffix> [<modules>...]]
 
 =item perlall="5.*" B<init> [<modules>...]
 
@@ -1716,7 +1732,7 @@ sub testvm
   #       or we want to do all hosts in /etc/hosts?
   #       - check hosts in .ssh/known_hosts
   # XXX check if in core or in a module
-  _print1("perlall testvm "._opts($c->options),@machines)
+  _print(1,"perlall testvm "._opts($c->options),@machines)
     if $c->options->{verbose};
   $c->_lognew('');
   my $cmd = $c->options->{cmd} || "maketest";
@@ -1768,13 +1784,13 @@ sub initvm
 
   $c->_lognew('');
   for my $m (@m) {
-    _print0("perlall initvm $m") unless $c->options->{quiet};
+    _print(0,"perlall initvm $m") unless $c->options->{quiet};
     local $c->options->{verbose} = 1 unless $c->options->{quiet};
     $c->_startvm($m) or next;
     unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
       for my $t (/ecdsa dsa rsa/) {
 	if (-f "$ENV{HOME}/.ssh/id_$t.pub") {
-	  _print1 "rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys"
+	  _print 1,"rsync -avzL ~/.ssh/id_$t.pub >>$m:.ssh/authorized_keys"
 	    unless $c->options->{quiet};
 	  qx(rsync -avzL $ENV{HOME}/.ssh/id_$t.pub $m:.ssh/copied.pub);
 	  qx(ssh $m cat .ssh/copied.pub >> .ssh/authorized_keys);

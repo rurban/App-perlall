@@ -18,7 +18,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.01_20111118';
+our $VERSION = '0.001_20111119';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -35,15 +35,16 @@ BEGIN { # check platform support: perldoc perlport
       # VOS forbids slashes in filenames. no big deal
     }
   } 
-  # autoinstall the non-core modules
-  my @m;
-  for (qw(App::Rad IPC::Run IO::Tee IO::Scalar 
-          Devel::Platform::Info Devel::PatchPerl)) {
-    push @m, $_ unless eval "require $_;" }
-  if (@m) { # Checked the API back to 1.76_01 (v5.8.4)
-    require CPAN; CPAN->import;
-    warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
-  $_->import for @m;
+  sub _auto_use { # autoinstall the non-core modules, and use them
+    my @m;
+    for (@_) { push @m, $_ unless eval "require $_;" }
+    if (@m) { # Checked the API back to 1.76_01 (v5.8.4)
+      require CPAN; CPAN->import;
+      warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
+    $_->import for @m;
+  }
+  _auto_use(qw(App::Rad IPC::Run IO::Tee IO::Scalar 
+	       Devel::Platform::Info Devel::PatchPerl));
 }
 
 push @App::Rad::ISA, 'main';
@@ -134,14 +135,14 @@ testvm: see L</testvm>
 
 =head1 DESCRIPTION
 
-B<perlall> is a better L<perlbrew> with perls in the default
-F</usr/local/bin/>, and F</usr/local/lib/perl5/VERSION> paths, 
-instead of locally. You need write access to the default PREFIX
-F</usr/local>, e.g. via C<sudo>.
-It does not use L<local::lib>, does not mangle C<PERL5LIB> and builds 
-and keeps sane global perl installations with special suffices,
-without the need to save and restore internal states.
-The suffices are used in postprocessing scripts.
+B<perlall> is like a better L<perlbrew> with a lot of testing
+features.  The perls are in the default F</usr/local/bin/>, and
+F</usr/local/lib/perl5/VERSION> paths, instead of locally, and . You
+need write access to the default PREFIX F</usr/local>, e.g. via
+C<sudo>.  It does not use L<local::lib>, does not mangle C<PERL5LIB>
+and builds and keeps sane global perl installations with special
+suffices, without the need to save and restore internal states.  The
+suffices are used in postprocessing scripts.
 
 The currently used perl together with more options is stored as alias 
 C<p> in F<~/.perlall>, which can be sourced by your F<.profile>.
@@ -159,7 +160,7 @@ Version numbers look like C<5.xx.x> and the perl C<suffix> can be any of:
 
 You want to switch to use the "thr" suffix, then the default
 is non-threaded. This behaviour is controlled via the config setting 
-C<usethrsuffix=1>.
+C<usethrsuffix=1>. But be consistent to interpret the logfiles.
 
 For older perls special patches are applied to successfully build
 them. C<archname> and the archlibs are extended by C<-debug> and
@@ -206,7 +207,7 @@ sub pre_process {
       .' YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Modern::Perl'
       .' Task::Kensho';
     if (basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
-      require File::Slurp;
+      _auto_use("File::Slurp");
       $c->config->{'init-modules'} .= " "
 	.join(" ",File::Slurp::read_file("t/top100"));
     }

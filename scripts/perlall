@@ -7,11 +7,11 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   fix logging (IPC::Run with IO::Tee on -v)
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 #   implement smoke, bench
-#   maketest -all (locally and testvm --all)
-#   init-modules: shell expansion, \ handling
+#   maketest --all (locally and testvm --all)
+#   init-modules: \ handling
 # non-critical:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
-#   testvm load balancing (keep mro of used vm's)
+#   testvm load balancing (keep mru vm's)
 #   build: perlbrew and HOME friendly (no hardcoded paths)
 #   windows support (paths, tee, tools), die on other non-POSIX exots (VMS)...
 #   CPAN::Shell->expand("Devel::*"), not easy todo with metacpan.
@@ -899,7 +899,7 @@ sub build
   my $from = shift @args ; # might be empty
   my $ps = $p;
   $ps =~ s/\-.+$//;
-  $ps =~ s/@.+$//;
+  $ps =~ s/\@.+$//;
   $ps =~ s/thr$// if $c->config->{usethrsuffix};
   $ps =~ s/d$//;
 
@@ -1272,6 +1272,13 @@ INSTALL:
       $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
       unshift @c, $sudo if $sudo;
       $c->_system1( @c);
+
+      my @c = ($cp, "$root/inst-$p/usr/local/bin/perldoc$ps", "/usr/local/bin/");
+      unshift @c, $sudo if $sudo;
+      $c->_system1( @c);
+      my @c = ($cp, "$root/inst-$p/usr/local/bin/pod2man$ps", "/usr/local/bin/");
+      unshift @c, $sudo if $sudo;
+      $c->_system1( @c);
     }
 
     @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
@@ -1313,14 +1320,24 @@ sub uninstall
   my $bindir = $c->config->{PERLALL_BINDIR};
   $bindir = "/usr/local/bin" unless $bindir;
   $c->_fail("$bindir/$p does not exist") unless -e "$bindir/$p";
+  my $pq = $p;
+  $pq =~ s/([\@\$\%])/\\$1/;
 
-  my $archlib = `$bindir/$p -MConfig -e'print $Config{archlibexp}'`;
-  $archlib = `$bindir/$p -MConfig -e'print $Config{archlib}'` unless $archlib;
-  my $sitearch = `$bindir/$p -MConfig -e'print $Config{sitearchexp}'`; # may be empty
+  my $archlib = `$bindir/$pq -MConfig -e'print \$Config{archlibexp}'`;
+  $archlib = `$bindir/$pq -MConfig -e'print \$Config{archlib}'` unless $archlib;
+  my $sitearch = `$bindir/$pq -MConfig -e'print \$Config{sitearchexp}'`; # may be empty
   if ($c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib)) {
-    $c->_system0("sudo rm -rf $bindir/$p $archlib $sitearch");
+    $c->_system0("sudo","rm","-rf", "$bindir/$p", $archlib, $sitearch);
   } else {
     $c->_fail("$p archlib $archlib did not exist");
+  }
+  my $root = $c->config->{PERLALL_BUILDROOT};
+  if (-d "$root/inst-$p") {
+    $c->_system("rm","-rf","$root/inst-$p");
+  }
+  # XXX ask
+  if (-d "$root/build-$p") {
+    $c->_log("rm","-rf","$root/build-$p");
   }
   "perl$p uninstalled"
 }

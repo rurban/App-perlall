@@ -4,11 +4,14 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   fix logging (IPC::Run with IO::Tee on -v)
-#   clarify -v STDOUT and STDERR (currently force -v on do,make...)
+#   fix logging (IPC::Cmd without IO::Tee)
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
+#   init is unstable (IO::Tee in IPC::Run)
 #   init-modules: \ handling
+# test:
+#   --as explicit and implicit
+#   clarify -v STDOUT and STDERR (currently force -v on do,make...)
 # non-critical:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
 #   testvm load balancing (keep mru vm's)
@@ -18,7 +21,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111119';
+our $VERSION = '0.001_20111121';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -43,7 +46,7 @@ BEGIN { # check platform support: perldoc perlport
       warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
     $_->import for @m;
   }
-  _auto_use(qw(App::Rad IPC::Run IO::Tee IO::Scalar 
+  _auto_use(qw(App::Rad IPC::Run IPC::Cmd IO::Scalar 
 	       Devel::Platform::Info Devel::PatchPerl));
 }
 
@@ -97,6 +100,9 @@ perlall - Build, test and do with all perls
 
 =head2 Planned Features
 
+    perlall maketest --all
+    perlall build perl5.15.5d-nt-blead-clang blead (implicit --as)
+    perlall build --as perl5.15.5d-nt-blead-clang bleadd-nt (explicit --as)
     perlall smoke -j4 bleadd-nt smoke-me/*
     perlall bench [ what  [ how ]]
     perlall cpan Devel::*
@@ -108,7 +114,7 @@ perlall - Build, test and do with all perls
 	  "older=s",  "only older versions (glob-style)"
 	  "nogit",    "skip @ git versions"
           "main|m",   "same as --skip=outdated, 
-                       only 5.6.2 5.8.[4589] 5.10.1 5.12.4 5.14.2 5.15.4"
+                       only 5.6.2 5.8.[4589] 5.10.1 5.12.4 5.14.2 5.15.5"
 	  "reverse|r" "oldest first. default is sorted by newest first"
 
 	  "quiet|q",  "Make perlall command quieter"
@@ -547,41 +553,27 @@ sub __system {
       my $what = join "','",@_;
       eval "$cmd('$what')";
     } else {
-      if ($c->cmd =~ /build|smoke/ and $_[0] =~ /make|sh$/
-	  and $c->stash->{log} and $^O ne 'MSWin32') {
-	push @_, "2>&1 | tee -a ".$c->stash->{log};
-	@_ = (join " ",@_);
-	#with IPC::Run:
-	# Configure: line 106: 1: Bad file descriptor
-	# Configure: line 1765: 1: Bad file descriptor
-	# Configure failed
-	$c->options->{verbose} ? system(@_) : qx(@_);
-      } else {
-	my $fh  = $c->stash->{log_fh};
-	# tee STDERR also to log or STDOUT
-	IPC::Run::run(\@_, \*STDIN, $fh, $fh);
+      my( $success, $error_message, $full_buf, $stdout_buf, $stderr_buf ) =
+	IPC::Cmd::run('command' => [ @_ ],
+		      'verbose' => $c->options->{verbose});
+      
+      if ($c->stash->{log_fh}) {
+	my $fh = $c->stash->{log_fh};
+	print $fh $full_buf;
       }
+      $success;
     }
   }
 }
-# -q   only print to log, STDOUT level 0
-#      STDOUT level 1, STDOUT+STDERR >>log
-# -v   tee to STDOUT (+STDERR) and log
 sub _loginit {
   my $c = shift;
   my $q = $c->options->{quiet};
   my $v = $c->options->{verbose};
   my $dryrun = $c->options->{dryrun};
   my $log = $c->stash->{log};
-  my $fh  = $c->stash->{log_fh};
-  if ( $v and !$dryrun ) {
-    # only with -v we print to STDOUT also, else only to the log
-    $fh = IO::Tee->new(\*STDOUT, ">$log");
-  } else {
-    $fh = $q ? IO::File->new(">>$log") : \*STDOUT;
-    select $fh if $q;
+  if ( !$dryrun and $log ) {
+    $c->stash->{log_fh} = IO::File->new(">> $log");
   }
-  $c->stash->{log_fh} = $fh;
 }
 
 # $c->_log(level, @messages)
@@ -820,10 +812,10 @@ Specific OPTIONS:
 
     Certain special switches are merged from F</usr/local/bin/perl> or F</usr/bin/perl>
 
-  --as name     Install a given perl under the given name.
+  --as name     Install a given perl under the given name. (not yet)
 
     perlall build perl5.6.2 -Dusemymalloc --as perl5.6.2-mymalloc
-    perlall build perlblead-nt smoke-me/test --as perl5.15.4-test
+    perlall build blead-nt smoke-me/test --as perl5.15.4-test
 
   -jnum         Enable parallel make and test (if supported by the target perl)
 
@@ -845,7 +837,7 @@ sub build
   if (@{$c->argv}) {
     my @build_opts =
       (
-      #[ "as=s",     "install perl under given name" ],
+       [ "as=s",     "install perl under given name" ],
        [ "D=s@",     "./configure option" ],
        [ "A=s@",     "./configure option" ],
        [ "U=s@",     "./configure option" ],
@@ -897,26 +889,63 @@ sub build
   }
   my $dryrun = $c->options->{dryrun};
   my $from = shift @args ; # might be empty
-  my $ps = $p;
-  $ps =~ s/\-.+$//;
-  $ps =~ s/\@.+$//;
-  $ps =~ s/thr$// if $c->config->{usethrsuffix};
-  $ps =~ s/d$//;
+  my $ps = _numonly($p);
+  # $ps =~ s/\-.+$//;
+  # $ps =~ s/\@.+$//;
+  # $ps =~ s/thr$// if $c->config->{usethrsuffix};
+  # $ps =~ s/d$//;
+  my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
+  my $gitsuffix;
 
   unless ($from) { # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
       $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
     } else {
-      $c->_fail ("could not determine from/branch argument for $p. perl-git missing?");
+      # get perl-release from CPAN-Perl-Releases
+      _auto_use("CPAN::Perl::Releases");
+      my $urls = CPAN::Perl::Releases::perl_tarballs($ps);
+      my $url = (keys %$urls)[0];
+      require CPAN; CPAN->import;
+      warn "CPAN::Shell->get(qw($url))\n"; 
+      CPAN::Shell->get($url);
+      # $c->_fail ("could not determine from/branch argument for $p. perl-git missing?");
     }
   }
+  # check explicit --as. which suffix to use?
+  # 1. valid version, perl5.15.5-clang
+  # 2. any other name (or bleadperl-test): no suffix to extract
+  if ($c->options->{as}) {
+    warn "--as nyi";
+    my $p_as = $c->options->{as};
+    $p_as =~ s/^perl//;
+    $p_as =~ s/^-//;
+    my $suffix_as = $p_as =~ /5\.\d\d?\.\d\d?(.+)$/;
+    if ($suffix_as) {
+      $gitsuffix = $suffix_as;
+      $ps = _numonly($p_as) unless $ps;
+      $c->debug("explicit --as suffix $suffix_as");
+    } else {
+      warn "missing version for --as suffix $suffix_as";
+    }
+  } else { # check implicit --as
+    # normalize suffix
+    my ($suffix_as) = $suffix =~ /^d?(?:-nt|thr)?(?:@.+)?(.*)$/;
+    if ($suffix_as) { # 5.15.5d-nt-git-clang => -git-clang
+      $gitsuffix = $suffix_as;
+      $c->debug("implicit --as suffix $gitsuffix");
+    }
+  }
+
   warn "--link ignored. Only valid with blead.\n" 
     if $c->options->{link} and $from ne 'blead';
   $c->_log('',"chdir $root") unless $c->options->{quiet};
   chdir $root unless $dryrun;
 
-  my $gitsuffix = $from unless $from =~ /^(perl-|v)5\./;
-  if ($gitsuffix) {
+  # XXX build perl5.15.5d-nt-blead-clang blead
+  # => gitsuffix=d-nt-blead-clang
+  # p as --as
+  if (!$gitsuffix and $from and $from !~ /^(perl-|v)5\./) {
+    $gitsuffix = $from if !$gitsuffix and $from !~ /^(perl-|v)5\./;
     if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
       $gitsuffix = "@".substr($gitsuffix,0,6);
       $p .= $gitsuffix unless $p =~ /@/;
@@ -954,6 +983,7 @@ sub build
 
 sub _build {
   my ($c, $p, $from, $ps, $gitsuffix, $root, $prefix, $cwd) = @_;
+  $c->debug("c, \$p=$p, \$from=$from, \$ps=$ps, \$gitsuffix=$gitsuffix, \$root=$root, \$prefix=$prefix, \$cwd=$cwd");
 
   my $make = $Config{make};
   my $sed = $Config{sed};
@@ -1237,10 +1267,14 @@ sub _build {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
   unless ($c->options->{notest}) {
-    $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
-    system("tail -30 log.test") unless $dryrun or $c->options->{quiet};
-    # XXX system is not giving me back the errcode
-    $testerr = `grep "All tests successful." log.test` ? undef : 1;
+    if ($dryrun) {
+      $c->_system1(join(" ",$make, @j, "test"));
+    } else {
+      $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
+      system("tail -30 log.test") unless $dryrun or $c->options->{quiet};
+      # XXX system is not giving me back the errcode
+      $testerr = `grep "All tests successful." log.test` ? undef : 1;
+    }
   }
 INSTALL:
   if (!$testerr or $c->options->{force}) {
@@ -1998,5 +2032,8 @@ L<http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall>
 L<App::perlbrew> which looked like my bash scripts and B<perlall>,
 but pollutes PERL5LIB and thus your whole environment, similar to
 the horrible Oracle perl.
+
+L<App::SmokeBrew> which also builds a lot of perls to smoke cpan 
+releases with them.
 
 =cut

@@ -557,7 +557,7 @@ sub __system {
 	IPC::Cmd::run('command' => [ @_ ],
 		      'verbose' => $c->options->{verbose});
       
-      if ($c->stash->{log_fh}) {
+      if ($c->stash->{log_fh} and $full_buf) {
 	my $fh = $c->stash->{log_fh};
 	print $fh $full_buf;
       }
@@ -1272,7 +1272,7 @@ sub _build {
     } else {
       $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
       system("tail -30 log.test") unless $dryrun or $c->options->{quiet};
-      # XXX system is not giving me back the errcode
+      # XXX system is not giving me back the errcode??
       $testerr = `grep "All tests successful." log.test` ? undef : 1;
     }
   }
@@ -1286,7 +1286,7 @@ INSTALL:
       $c->debug("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
       ;
     }
-    $c->_system1( $c->_older($p,'5.8.1') ? ("sudo") : (),
+    $c->_system1( $c->_older($p,'5.8.1') and $^O ne 'MSWin32' ? ("sudo") : (),
 		  $make, @j, "install", "DESTDIR=$root/inst-$p");
   }
 

@@ -54,12 +54,13 @@ my $plan = scalar(@modules) + scalar(@scripts);
 $plan ? (plan tests => $plan) : (plan skip_all => "no tests to run");
 
 {
+  my $X = $^X =~ m/\s/ ? qq{"$^X"} : $^X;
   # fake home for cpan-testers
   # no fake requested ## local $ENV{HOME} = tempdir( CLEANUP => 1 );
   for (sort @modules) {
     my $c = -d "lib"
-      ? qq( $^X -Ilib -e "require $_; print '$_ ok'")
-      : qq( $^X -e "require $_; print '$_ ok'");
+      ? qq( $X -Ilib -e "require $_; print '$_ ok'")
+      : qq( $X -e "require $_; print '$_ ok'");
     like( qx{ $c }, qr/^\s*$_ ok/s, "$_ loaded ok" )
   }
 

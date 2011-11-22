@@ -4,15 +4,15 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   fix logging (IPC::Cmd without IO::Tee)
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
-#   init is unstable (IO::Tee in IPC::Run)
 #   init-modules: \ handling
-# test:
+# TEST:
+#   init is unstable (IO::Tee in IPC::Run)
+#   fix logging (IPC::Cmd without IO::Tee)
 #   --as explicit and implicit
 #   clarify -v STDOUT and STDERR (currently force -v on do,make...)
-# non-critical:
+# non-critical TODO:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
 #   testvm load balancing (keep mru vm's)
 #   build: perlbrew and HOME friendly (no hardcoded paths)
@@ -72,7 +72,7 @@ App::Rad->run();
 
 =head1 NAME
 
-perlall - Build, test and do with all perls
+perlall - build, test and do with all perls
 
 =head1 SYNOPSIS
 
@@ -81,6 +81,8 @@ perlall - Build, test and do with all perls
     perlall build perl5.15.4
     perlall build perl5.14.2-nt
     perlall -v build -j4 bleadd-nt smoke-me/khw-tk
+    perlall build perl5.15.5d-nt-blead-clang blead # or with --as
+    perlall build --as perl5.15.5d-nt-blead-clang bleadd-nt
     perlall uninstall perl5.15.4d-nt@khw-tk
 
     perlall init perl5.15.4d-nt@blead DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
@@ -103,8 +105,6 @@ perlall - Build, test and do with all perls
 =head2 Planned Features
 
     perlall maketest --all
-    perlall build perl5.15.5d-nt-blead-clang blead (implicit --as)
-    perlall build --as perl5.15.5d-nt-blead-clang bleadd-nt (explicit --as)
     perlall smoke -j4 bleadd-nt smoke-me/*
     perlall bench [ what  [ how ]]
     perlall cpan Devel::*
@@ -1473,7 +1473,7 @@ sub init
 
 =item B<list> [version*]
 
-List all installed perlall versions.
+List all installed perls available for perlall.
 Note that options after list are ignored.
 
 =cut
@@ -1501,7 +1501,7 @@ is expanded to something like:
     $perl $*
   done
 
-Restricts perls via ENV:
+Better restricts perls via ENV:
 
   perlall="5.14.*d*" perlall do -E'say "Hello from $]"'
 
@@ -1548,7 +1548,7 @@ sub do
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
-    $c->_system( "$p @{$c->argv}");
+    $c->_system0( "$p @{$c->argv}");
   }
   $c->_set_alias();
 }
@@ -1702,7 +1702,11 @@ sub _startvm {
   my $c = shift;
   my $m = shift or die "_startvm missing vm name";
   # XXX only virsh supported so far. BTW, we do not want to use the Libvirt XML module
-  my $ctl = $c->config->{testvm_ctl} or return 1;
+  my $ctl = $c->config->{testvm_ctl};
+  unless ($ctl) {
+    $c->_log(1,"no testvm_ctl in .perlall. _startvm $m skipped");
+    return 1;
+  }
   $c->_fail("Unsupported testvm_ctl='$ctl' in .perlall. Only virsh.") if $ctl ne 'virsh';
   my $status = `sudo virsh list --all`;
   my $test = '
@@ -1823,6 +1827,7 @@ sub testvm
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
     $c->_startvm($m) or next;
+    # XXX some old system have rsync 3.2.6 
     $c->_system1("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
 		'.', "$m:$prefix/$base/");

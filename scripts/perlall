@@ -1286,8 +1286,9 @@ INSTALL:
       $c->debug("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
       ;
     }
-    $c->_system1( $c->_older($p,'5.8.1') and $^O ne 'MSWin32' ? ("sudo") : (),
-		  $make, @j, "install", "DESTDIR=$root/inst-$p");
+    my @c = ($make, @j, "install", "DESTDIR=$root/inst-$p");
+    push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
+    $c->_system1(@c);
   }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.

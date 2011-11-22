@@ -557,9 +557,12 @@ sub __system {
 	IPC::Cmd::run('command' => [ @_ ],
 		      'verbose' => $c->options->{verbose});
       
-      if ($c->stash->{log_fh} and $full_buf) {
+      if ($c->stash->{log_fh} and @$full_buf) {
 	my $fh = $c->stash->{log_fh};
-	print $fh $full_buf;
+	print $fh $_,"\n" for @$full_buf;
+      }
+      if (@$stderr_buf and !$c->options->{quiet}) {
+	print STDERR $_,"\n" for @$stderr_buf;
       }
       $success;
     }
@@ -593,15 +596,14 @@ sub _log {
     $c->_loginit unless $fh;
     $fh  = $c->stash->{log_fh};
     if (!$q) {
+      if ($level ne '') {
+	_print($level,join(" ",@_),"\n");
+      }
       if ($fh) {
 	print $fh join(" ",@_),"\n";
 	$fh->flush;
-      } else {
-	if ($level ne '') {
-	  _print($level,join(" ",@_),"\n");
-	} else {
-	  print join(" ",@_),"\n"; # fails on my centos5
-	}
+      } elsif ($level eq '') {
+	print join(" ",@_),"\n"; # fails on my centos5
       }
     } elsif ($level == 0) {
       _print(0,join(" ",@_),"\n");
@@ -938,8 +940,8 @@ sub build
 
   warn "--link ignored. Only valid with blead.\n" 
     if $c->options->{link} and $from ne 'blead';
-  $c->_log('',"chdir $root") unless $c->options->{quiet};
-  chdir $root unless $dryrun;
+  $c->_system("chdir", $root);
+  # chdir $root unless $dryrun;
 
   # XXX build perl5.15.5d-nt-blead-clang blead
   # => gitsuffix=d-nt-blead-clang
@@ -1287,8 +1289,7 @@ INSTALL:
     # it also doesn't do lib on versiononly (i.e. usedevel)
     # we better patch installperl
     if ($c->_older($p,'5.8.1')) {
-      $c->debug("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
-      ;
+      warn("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
     }
     my @c = ($make, @j, "install", "DESTDIR=$root/inst-$p");
     push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';

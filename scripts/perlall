@@ -1270,7 +1270,11 @@ sub _build {
     if ($dryrun) {
       $c->_system1(join(" ",$make, @j, "test"));
     } else {
-      $c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
+      if ($^O eq 'MSWin32') {
+	$c->_system1(join(" ",$make, @j, "test", "> log.test"));
+      } else {
+	$c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
+      }
       system("tail -30 log.test") unless $dryrun or $c->options->{quiet};
       # XXX system is not giving me back the errcode??
       $testerr = `grep "All tests successful." log.test` ? undef : 1;

@@ -1177,6 +1177,8 @@ sub _build {
     push @conf, "-Aldflags=-flat_namespace"
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
   }
+  # clang: use ld also
+  push @conf, "-Dld=clang" if join(" ",@conf) =~ /-Dcc=clang/;
 
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
@@ -1261,6 +1263,11 @@ sub _build {
   # XXX fix config_args also
 
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
+  $c->debug("post-configure clang fixes");
+  if (join(" ",@conf) =~ /-Dcc=clang/) {
+      $c->_grep("-i s/-fstack-protector//; print", "config.sh", "myconfig", $makefile);
+  }
+
   if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?
     $c->debug("post-configure old-perl Makefile <command-line> fixes");
     $c->_grep("-i print unless /<command-line>/", $makefile, "x2p/$makefile");
@@ -1760,7 +1767,7 @@ logfiles back.
 Options:
 
     --all|a    - all hosts defined in config C<testvm>
-    --up       - only upload local MANIFEST files
+    --up       - only upload (files from local MANIFEST)
     --prefix|p=Perl - remote basedir
     --cmd|c=<remotecmd> any valid perlall command, like
                build, init, makeinstall, smoke. Default: maketest
@@ -1794,6 +1801,7 @@ sub testvm
 {
   my $c = shift;
   # testvm has a different option set and allows options after the command
+  my $gopts = _opts($c->options);
   $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s"); #, "max|j=n" );
 
   my ($prefix, $base);
@@ -1806,8 +1814,10 @@ sub testvm
   #       But then we have to check the network for possible machines,
   #       or we want to do all hosts in /etc/hosts?
   #       - check hosts in .ssh/known_hosts
-  # XXX check if in core or in a module
-  _print(1,"perlall testvm "._opts($c->options),@machines)
+  # XXX check if pwd in core or in a module
+  my $opts = _opts($c->options);
+  $opts =~ s/$_//  for split/ /,$gopts;
+  _print(1,"perlall $gopts testvm ".$opts,@machines)
     if $c->options->{verbose};
   $c->_lognew('');
   my $cmd = $c->options->{cmd} || "maketest";
@@ -1815,8 +1825,8 @@ sub testvm
   my $man = 'MANIFEST';
   $c->_fail("$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
-  if ( -M $man > -M $f ) {
-    print "Creating $f\n" unless $c->options->{quiet};
+  if ( -M $man < -M $f ) {
+    $c->_log(1,"Creating $f");
     open M,'<',$man; open F,'>',$f;
     while (<M>) {
       print F $_ unless /^#/;
@@ -1825,17 +1835,39 @@ sub testvm
   }
   $prefix = $c->options->{prefix} || "Perl";
   $base = basename(Cwd::getcwd);
+  my $msg = "done";
+  my $remotecmd = "cd $prefix/$base && perlall $gopts $cmd $opt";
+  my $up = $c->options->{up};
+  my $do_fork = IPC::Cmd->can_use_run_forked;
+  my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
-    # XXX some old system have rsync 3.0.6 which will fail
+    # XXX some old systems (centos4) have rsync 2.6 which will fail. -vldogDtpRze.Lsf: unknown option
     $c->_system1("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
-		'.', "$m:$prefix/$base/");
-    # XXX TODO fork (parallel), and collect logfiles
-    $c->_system1("ssh",$m,"cd $prefix/$base && perlall $cmd $opt")
-      unless $c->options->{up};
+		'.', "$m:$prefix/$base/") or next;
+    unless ( $up ) {
+      # my $buf = ' 'x10000;
+      if ($do_fork) {
+	# fork (parallel).
+	my $forked = IPC::Cmd::run_forked( 
+	  ["ssh",$m,$remotecmd],
+	  {timeout => 3600, #seconds
+	   discard_output => 1, # rather collect logfiles
+	   terminate_on_parent_sudden_death => 1,
+	  });
+	push @forked, $forked;
+	$msg = "forked";
+	$c->_log('',"forked $remotecmd on $m");
+      } else {
+	$c->_system1("ssh",$m,$remotecmd);
+      }
+    }
   }
-  "testvm done on ".join(" ",@machines)
+  if ($do_fork) {
+    # XXX wait ? TODO collect logfiles
+  }
+  "testvm $msg on ".join(" ",@machines)
 }
 
 =item B<initvm> [--all] user@[hostname]...

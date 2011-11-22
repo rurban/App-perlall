@@ -1373,7 +1373,7 @@ sub uninstall
   }
   my $root = $c->config->{PERLALL_BUILDROOT};
   if (-d "$root/inst-$p") {
-    $c->_system("rm","-rf","$root/inst-$p");
+    $c->_system1("rm","-rf","$root/inst-$p");
   }
   # XXX ask
   if (-d "$root/build-$p") {
@@ -1608,14 +1608,14 @@ sub _make {
   $c->_system( $make, "-s", "clean") if -f "Makefile";
   $c->_lognew(_short($p));
   if (-f "Makefile.PL") {
-    $c->_system( $p, "Makefile.PL");
-    $c->_system0( $make);
+    $c->_system0( $p, "Makefile.PL");
+    $c->_system1( $make);
   } elsif (-f "Build.PL") {
     # This is broken and needs a realclean
     $c->_system( "./Build", "realclean") if -f "Build";# and $^O ne 'MSWin32';
     $c->_system( "rm", "-rf", "blib", "_Build", "Build" ) if $^O ne 'MSWin32';
-    $c->_system( $p, "Build.PL");
-    $c->_system0( $p, "Build");
+    $c->_system0( $p, "Build.PL");
+    $c->_system1( $p, "Build");
   }
 }
 
@@ -1655,9 +1655,9 @@ sub maketest
     unshift @opts,"-j".$c->options->{j} 
       if $c->options->{j} and !$c->_older( $p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {
-      $c->_system0( $p, "Build", @opts);
+      $c->_system1( $p, "Build", @opts);
     } else {
-      $c->_system0( $make, @opts);
+      $c->_system1( $make, @opts);
     }
     if (@{$c->argv}) {
       local $c->options->{verbose} = 1 unless $c->options->{quiet};
@@ -1684,7 +1684,7 @@ sub makeinstall
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_make($p);
-    $c->_system0( "$make test && $sudo $make install"); # csh?
+    $c->_system1( "$make test && $sudo $make install"); # csh?
 
     if (@{$c->argv}) {
       local $c->options->{verbose} = 1 unless $c->options->{quiet};
@@ -1722,13 +1722,13 @@ sub _startvm {
 	return 1;
       }
       elsif ($v[2] eq 'paused') { 
-	$c->_system(qw(sudo virsh resume), $m);
+	$c->_system1(qw(sudo virsh resume), $m);
 	# XXX --max: check if others should be suspend instead (prev. checked vm)
 	sleep 0.1;
 	return 1;
       }
       elsif ($v[2] eq 'shut off') {
-	$c->_system(qw(sudo virsh start), $m);
+	$c->_system1(qw(sudo virsh start), $m);
 	sleep 10;
 	# XXX --max: check if others should be shut off instead (prev. checked vm)
 	return 1;
@@ -1821,7 +1821,7 @@ sub testvm
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
     $c->_startvm($m) or next;
-    $c->_system("rsync","-avzL","--delete",
+    $c->_system1("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
 		'.', "$m:$prefix/$base/");
     # XXX TODO fork (parallel), and collect logfiles

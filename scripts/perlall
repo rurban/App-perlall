@@ -1827,7 +1827,7 @@ sub testvm
   $base = basename(Cwd::getcwd);
   for my $m (@machines) {
     $c->_startvm($m) or next;
-    # XXX some old system have rsync 3.2.6 
+    # XXX some old system have rsync 3.0.6 which will fail
     $c->_system1("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
 		'.', "$m:$prefix/$base/");

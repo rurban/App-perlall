@@ -21,7 +21,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111121';
+our $VERSION = '0.001_20111122';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -49,6 +49,8 @@ BEGIN { # check platform support: perldoc perlport
   _auto_use(qw(App::Rad IPC::Run IPC::Cmd IO::Scalar 
 	       Devel::Platform::Info Devel::PatchPerl));
 }
+# 5.8.4: ??, 5.8.5: centos4, 5.8.8: centos5
+our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.5);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -357,10 +359,10 @@ sub _get_perlall {
   my %skip;
   if ($c->options->{skip} or $c->options->{main}) {
     if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
-      @p = map { glob "$prefix/perl$_*" } # only keep those
-               qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.4);
-      # XXX --main: no @git releases only blead
-      #             no d if non-debug exists
+      # no @git releases only blead
+      @p = grep !/\@/, map { glob "$prefix/perl$_*" } @main_releases;
+      # XXX: no d if non-debug exists
+      my @dbg = grep /\.\dd/, @p;
     } else {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }

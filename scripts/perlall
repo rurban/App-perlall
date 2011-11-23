@@ -7,21 +7,21 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   init-modules: \ handling
+#   testvm balancing, log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
 # TEST:
-#   init is unstable (IO::Tee in IPC::Run)
-#   fix logging (IPC::Cmd without IO::Tee)
-#   --as explicit and implicit
-#   clarify -v STDOUT and STDERR (currently force -v on do,make...)
+#   init is unstable (IO::Tee in IPC::Run) - refactored
+#   fix logging (IPC::Cmd without IO::Tee) - refactored
+#   --as explicit and implicit - looks good, but no test
 # non-critical TODO:
-#   5.8.8 (centos5) fails with Attribute::Handler 0.78_02
+#   5.8.8 (centos5) fails with Attribute::Handler 0.78_02. monkeypatch or fail?
 #   testvm load balancing (keep mru vm's)
-#   build: perlbrew and HOME friendly (no hardcoded paths)
+#   build: test perlbrew and HOME friendly (no hardcoded paths)
 #   windows support (paths, tee, tools), die on other non-POSIX exots (VMS)...
 #   CPAN::Shell->expand("Devel::*"), not easy todo with metacpan.
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111122';
+our $VERSION = '0.001_20111123';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -46,7 +46,7 @@ BEGIN { # check platform support: perldoc perlport
       warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
     $_->import for @m;
   }
-  _auto_use(qw(App::Rad IPC::Run IPC::Cmd IO::Scalar 
+  _auto_use(qw(App::Rad IPC::Cmd IO::Scalar
 	       Devel::Platform::Info Devel::PatchPerl));
 }
 # 5.8.4: ??, 5.8.5: centos4, 5.8.8: centos5
@@ -127,7 +127,8 @@ perlall - build, test and do with all perls
 	  "debug|d",  "lots of internal debugging output"
 	  "version|V"
 
-build and smoke only:
+build and smoke only
+
 	  "D=s",      "Configure option"
 	  "A=s",      "Configure option"
 	  "U=s",      "Configure option"
@@ -136,6 +137,7 @@ build and smoke only:
 	  "install",  "skip Configure && make, only do make install" 
 
 build and makeinstall
+
 	  "notest|n", "skip the test suite on build and makeinstall"
 	  "force|f",  "force install"
 
@@ -197,7 +199,7 @@ F<status_upd> and F<store_rpt> for those generated logfiles.
 sub setup { 
   $_[0]->register_commands( {-ignore_prefix => '_'} );
   $_[0]->register('install', \&build, "alias to build");
-  $_[0]->register('smoke', \&build, "smoke [ perl<version><suffix> branch ]");
+  $_[0]->register('smoke', \&build, "(NYI) smoke [ perl<version><suffix> branch ]");
   $_[0]->unregister('basename'); #imported (bug)
 }
 
@@ -1423,6 +1425,7 @@ external influences, though perl typically shines on IO.
 =cut
 
 sub bench
+  :Help('NYI')
 {
   my $c = shift;
   # http://blogs.perl.org/users/rurban/2011/11/on-simple-benchmarks.html
@@ -1879,7 +1882,7 @@ copies pubkey to host:.ssh/authorized_keys if not exists
 copies perlall to host:bin/
 (if perlbin is installed at /usr/local/bin/ then symlink to it)
 
-ssh hostname perlall -v init App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl
+ssh hostname perlall -v init App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl
 
 =cut
 
@@ -1916,7 +1919,7 @@ sub initvm
     }
     $c->_system1("ssh $m "
 		 ."'perl -MCPAN -e\"install "
-		 ."qw/App::Rad IO::Tee IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
+		 ."qw/App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   }
   "initvm done on ".join(" ",@m)
 }

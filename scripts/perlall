@@ -1178,10 +1178,11 @@ sub _build {
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
   }
   # clang: use ld also
-  push @conf, "-Dld=clang" if join(" ",@conf) =~ /-Dcc=clang/;
+  push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
 
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
+  $c->_log(1,"post-configure fixes");
 
   # fix libs on debug and git-stuff
   my $archname = $dryrun ? "fake-arch"
@@ -1264,7 +1265,7 @@ sub _build {
 
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
   $c->debug("post-configure clang fixes");
-  if (join(" ",@conf) =~ /-Dcc=clang/) {
+  if (join(" ",@conf) =~ /-D'?cc='?clang'?/) {
       $c->_grep("-i s/-fstack-protector//; print", "config.sh", "myconfig", $makefile);
   }
 
@@ -1277,6 +1278,7 @@ sub _build {
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
+
   unless ($c->options->{notest}) {
     if ($dryrun) {
       $c->_system1(join(" ",$make, @j, "test"));

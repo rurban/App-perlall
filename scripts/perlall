@@ -1315,29 +1315,28 @@ INSTALL:
     my @c = ($cp, "$root/inst-$p/usr/local/bin/perl$ps","$prefix/bin/perl$p");
     $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
     unshift @c, $sudo if $sudo;
-    $c->_system1( @c);
+    $c->_system1( @c );
 
     # symlink to symbolic name (blead, smoke-me, ...)
     if ($from eq 'blead' and $^O ne 'MSWin32') {
       my $s = $p;
-      $s =~ /\@.*/;
+      $s =~ s/\@.*//;
       my @c = ('ln', '-sf', "/usr/local/bin/perl$p", "/usr/local/bin/perl$s\@blead");
       $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
       unshift @c, $sudo if $sudo;
-      $c->_system1( @c);
+      $c->_system( @c );
 
-      my @c = ($cp, "$root/inst-$p/usr/local/bin/perldoc$ps", "/usr/local/bin/");
+      $c->_system( 'mv', "$root/inst-$p/usr/local/bin/perl$ps", "$root/inst-$p/usr/local/perl$ps" );
+      my @c = ($cp, "$root/inst-$p/usr/local/bin/*", "/usr/local/bin/");
       unshift @c, $sudo if $sudo;
-      $c->_system1( @c);
-      my @c = ($cp, "$root/inst-$p/usr/local/bin/pod2man$ps", "/usr/local/bin/");
-      unshift @c, $sudo if $sudo;
-      $c->_system1( @c);
+      $c->_system( @c );
+      $c->_system( 'mv', "$root/inst-$p/usr/local/perl$ps", "$root/inst-$p/usr/local/bin/perl$ps" );
     }
 
     @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");
     # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
     unshift @c, $sudo if $sudo;
-    $c->_system1( @c);
+    $c->_system1( @c );
 
     if (!$testerr and $srcdir eq "." and -d '.git') {
       $c->_system1( "rm","-rf",".git");

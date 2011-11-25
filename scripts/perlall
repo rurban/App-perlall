@@ -599,7 +599,7 @@ sub _log {
     $fh  = $c->stash->{log_fh};
     if (!$q) {
       if ($level ne '') {
-	_print($level,join(" ",@_),"\n");
+	_print($level,@_);
       }
       if ($fh) {
 	print $fh join(" ",@_),"\n";
@@ -608,11 +608,11 @@ sub _log {
 	print join(" ",@_),"\n"; # fails on my centos5
       }
     } elsif ($level == 0) {
-      _print(0,join(" ",@_),"\n");
+      _print(0,@_);
     }
   } elsif ($v or $level == 0) {
     if ($level ne '') {
-      _print($level,join(" ",@_),"\n");
+      _print($level,@_);
     } else {
       print join(" ",@_),"\n";
     }

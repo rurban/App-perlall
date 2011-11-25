@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use ExtUtils::MakeMaker 6.30;
+use ExtUtils::MakeMaker 6.17; # perl-5.6.2
 use Config;
 
 my %WriteMakefileArgs = 
@@ -14,9 +14,11 @@ my %WriteMakefileArgs =
    "PREREQ_PM" =>  {
 		    'App::Rad' => "1.04",
 		    'Devel::Platform::Info' => '0',
-		    'IO::Tee' => '0.64',
 		    'Devel::PatchPerl' => "0.46",
 		    'IO::Scalar' => '0',
+		    # in core:
+		    'IPC::Cmd' => '0.54', # in core since 5.10
+		    'IPC::Open3' => '0',
 		    'Pod::Usage' => "1.33",
 		    'File::Basename' => "2.74",
 		    'Cwd' => "3.33",
@@ -48,7 +50,7 @@ if (! -f "$ENV{HOME}/.perlall") {
 Configuration in shell-syntax at ~/.perlall
 
 You might want to add this to the end of your ~/.profile for
-handy 'p' and 'cdperl' aliases:
+handy 'p', 'pm', 'mt', 'perl-git' and more aliases:
 
 test -f ~/.perlall && . ~/.perlall
 INSTRUCTION

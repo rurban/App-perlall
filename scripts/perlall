@@ -219,7 +219,7 @@ sub pre_process {
     $c->config->{cpan} = 'cpan';
     $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info'
       .' Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor'
-      .' YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Modern::Perl'
+      .' YAML::XS List::MoreUtils DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Modern::Perl'
       .' Task::Kensho';
     if (basename(Cwd::getcwd) =~/^B-C/ and -f "t/top100") {
       _auto_use("File::Slurp");

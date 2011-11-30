@@ -12,6 +12,7 @@ use Test::More tests => 2;
   my $c = qx{ $X scripts/perlall help 2>&1 };
   like( $c, qr/^Available Commands:/m, "help" );
 
+  # local $ENV{PAGER} = "cat";
   $c = qx{ $X scripts/perlall -v help 2>&1 };
-  like( $c, qr/CONFIGURATION/m, "-v help" );
+  like( $c, qr/This is shell-script syntax with ENV vars/m, "-v help" );
 }

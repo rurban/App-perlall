@@ -1761,7 +1761,7 @@ sub _startvm {
 	sleep 0.1;
 	return 1;
       }
-      elsif ($v[2] eq 'shut off') {
+      elsif ($v[2] eq 'shut') {
 	$c->_system1(qw(sudo virsh start), $m);
 	sleep 10;
 	# XXX --max: check if others should be shut off instead (prev. checked vm)

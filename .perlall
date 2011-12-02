@@ -34,10 +34,10 @@ cpan=cpan
 # and remote perlall. e.g. freebsd make=gmake
 # valid [user@]hostnames (manipulate your /etc/hosts)
 # must match the vm machine names if you want to control the vm.
-testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 win solaris"
+#testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 win solaris"
 # where modules are:
-testvm_prefix=Perl
-# control (only virsh so far) and balancing (TODO)
-#testvm_max=4
-# valid: virsh, xen-shell, vmrun, VBoXManage
+#testvm_prefix=Perl
+# balancing:
+#testvm_max=6
+# So far only: virsh. TODO: xen-shell, vmrun, VBoXManage
 #testvm_ctl=virsh

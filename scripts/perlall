@@ -8,14 +8,14 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   init-modules: \ handling
-#   testvm balancing, log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
+#   log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
 # TEST:
+#   testvm max balancing
 #   init is unstable (IO::Tee in IPC::Run) - refactored
 #   fix logging (IPC::Cmd without IO::Tee) - refactored
 #   --as explicit and implicit - looks good, but no test
 # non-critical TODO:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02. monkeypatch or fail?
-#   testvm load balancing (keep mru vm's)
 #   build: test perlbrew and HOME friendly (no hardcoded paths)
 #   windows support (paths, tee, tools), die on other non-POSIX exots (VMS)...
 #   CPAN::Shell->expand("Devel::*"), not easy todo with metacpan.
@@ -1748,7 +1748,17 @@ sub _startvm {
  25 solaris              running
   - freebsd8             shut off
   - openbsd49            shut off';
-  for (split/\n/,$status) {
+  my $max = $c->options->{max};
+  my (@running);
+  my @status = split/\n/,$status;
+  if ($max) {
+    for (@status) {
+      my @v = split /\s+/;
+      shift @v if $v[0] eq '';
+      push @running, $v[1] if $v[2] eq 'running';
+    }
+  }
+  for (@status) {
     my @v = split /\s+/;
     shift @v if $v[0] eq '';
     if ($v[1] eq $m) {
@@ -1756,15 +1766,25 @@ sub _startvm {
 	return 1;
       }
       elsif ($v[2] eq 'paused') { 
+	if ($max and @running > $max) {
+	  my $r = shift @running;
+	  $c->_system1(qw(sudo virsh suspend), $r);
+	}
+	push @{$c->stash->{vm}}, [$m,'paused'];
 	$c->_system1(qw(sudo virsh resume), $m);
 	# XXX --max: check if others should be suspend instead (prev. checked vm)
 	sleep 0.1;
 	return 1;
       }
       elsif ($v[2] eq 'shut') {
+	if ($max and @running > $max) {
+	  my $r = shift @running;
+	  $c->_system1(qw(sudo virsh suspend), $r);
+	}
+	push @{$c->stash->{vm}}, [$m,'shut off'];
 	$c->_system1(qw(sudo virsh start), $m);
-	sleep 10;
 	# XXX --max: check if others should be shut off instead (prev. checked vm)
+	sleep 10;
 	return 1;
       }
       else {
@@ -1823,7 +1843,7 @@ sub testvm
   my $c = shift;
   # testvm has a different option set and allows options after the command
   my $gopts = _opts($c->options);
-  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s"); #, "max|j=n" );
+  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
 
   my ($prefix, $base);
   my @testvm = split / /,$c->config->{testvm};
@@ -1907,10 +1927,10 @@ sub initvm
 {
   my $c = shift;
 
-  $c->addopts( "all|a");
+  $c->addopts( "all|a", "max|j=n");
   my @m = $c->options->{all} ? split(/ /,$c->config->{testvm}) : @{$c->argv};
   return "missing host" unless @m;
-
+  $c->options->{max} = $c->options->{testvm_max} unless $c->options->{max};
   $c->_lognew('');
   for my $m (@m) {
     _print(0,"perlall initvm $m") unless $c->options->{quiet};

@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   fix testvm forked
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   init-modules: \ handling
@@ -21,7 +22,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111123';
+our $VERSION = '0.001_20111201';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -1458,10 +1459,22 @@ sub init
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
   return "missing config init-modules" unless $mods;
   my $cpan = $c->config->{'cpan'};
-  $cpan = 'cpan' unless $cpan;
   $c->options->{verbose} = 1;
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
+    if ($c->_older( $p, "5.8.1")) {
+	$cpan = '-MCPAN';
+    } else {
+      if (!$cpan) {
+	if (qx($p -MApp::Cpan -e'print q(ok)') eq 'ok') {
+	  $cpan = 'cpan';
+	} elsif (qx($p -MApp::cpanminus -e'print q(ok)') eq 'ok') {
+	  $cpan = 'cpanm';
+	} else {
+	  $cpan = '-MCPAN';
+	}
+      }
+    }
     if ($cpan eq 'cpan') { # XXX and use_sqlite
       # if App::cpan exists and works ok, -S cpan
       #     otherwise need -MCPAN -e'install qw(mods)'
@@ -1477,7 +1490,11 @@ sub init
 	$c->_system1( $p, "-S", "cpan", "-j", $nosql, 'DBI', 'DBD::SQLite');
       }
     }
-    $c->_system1( $p, "-S", $cpan, split(/\s+/,$mods));
+    if ($cpan eq '-MCPAN') {
+      $c->_system1( $p, "-MCPAN", "-e", "install qw($mods)" );
+    } else {
+      $c->_system1( $p, "-S", $cpan, split(/\s+/,$mods));
+    }
   }
   $c->_set_alias();
 }

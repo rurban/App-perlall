@@ -1770,10 +1770,10 @@ sub _startvm {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
 	}
-	push @{$c->stash->{vm}}, [$m,'paused'];
+	push @{$c->stash->{vm}}, [$m,'suspend'];
 	$c->_system1(qw(sudo virsh resume), $m);
-	# XXX --max: check if others should be suspend instead (prev. checked vm)
 	sleep 0.1;
+	unshift @running, $m;
 	return 1;
       }
       elsif ($v[2] eq 'shut') {
@@ -1781,10 +1781,10 @@ sub _startvm {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
 	}
-	push @{$c->stash->{vm}}, [$m,'shut off'];
+	push @{$c->stash->{vm}}, [$m,'stop'];
 	$c->_system1(qw(sudo virsh start), $m);
-	# XXX --max: check if others should be shut off instead (prev. checked vm)
-	sleep 10;
+	sleep 25;
+	unshift @running, $m;
 	return 1;
       }
       else {
@@ -1849,6 +1849,7 @@ sub testvm
   my @testvm = split / /,$c->config->{testvm};
   my @machines = $c->options->{all} ? @testvm : @{$c->argv};
   return "missing args" unless @machines;
+  $c->options->{max} = $c->config->{testvm_max} unless $c->options->{max};
 
   # XXX Expand glob-style machines
   # Idea: - check /etc/hosts so testvm can be empty?
@@ -1908,6 +1909,11 @@ sub testvm
   if ($do_fork) {
     # XXX wait ? TODO collect logfiles
   }
+  unless (@forked) {
+    for (@{$c->stash->{vm}}) {
+      $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
+    }
+  }
   "testvm $msg on ".join(" ",@machines)
 }
 
@@ -1930,7 +1936,7 @@ sub initvm
   $c->addopts( "all|a", "max|j=n");
   my @m = $c->options->{all} ? split(/ /,$c->config->{testvm}) : @{$c->argv};
   return "missing host" unless @m;
-  $c->options->{max} = $c->options->{testvm_max} unless $c->options->{max};
+  $c->options->{max} = $c->config->{testvm_max} unless $c->options->{max};
   $c->_lognew('');
   for my $m (@m) {
     _print(0,"perlall initvm $m") unless $c->options->{quiet};
@@ -1956,6 +1962,9 @@ sub initvm
     $c->_system1("ssh $m "
 		 ."'perl -MCPAN -e\"install "
 		 ."qw/App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
+  }
+  for (@{$c->stash->{vm}}) {
+    $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
   }
   "initvm done on ".join(" ",@m)
 }

@@ -965,7 +965,8 @@ sub build
 	  my $pg = $p;
 	  my $s = $git;
 	  $s =~ s/^smoke-me\///;
-	  $s =~ s/\W//; # collapse non-word chars
+	  $s =~ s{/}{_}g;
+	  $s =~ s/\W//g; # collapse non-word chars
 	  $pg = $p."@".substr($s,0,12);
 	  $result .= $c->_build($pg, $git, $ps, '@'.$git, $root, $prefix, $cwd);
 	}
@@ -978,8 +979,9 @@ sub build
       unless ($p =~ /@/) {
 	my $git = $gitsuffix;
 	$git =~ s/^smoke-me\///;
-	$git =~ s/\W//; # collapse non-word chars
-	$git = "@".substr($gitsuffix,0,12);
+	$git =~ s{/}{_}g;
+	$git =~ s/\W//g; # collapse non-word chars
+	$git = "@".substr($git,0,12);
 	$p .= $git;
       }
       $gitsuffix = "@".$gitsuffix;
@@ -1963,7 +1965,7 @@ sub initvm
 		 ."'perl -MCPAN -e\"install "
 		 ."qw/App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   }
-  for (@{$c->stash->{vm}}) {
+  for (@{$c->stash->{vm}}) { # restore previous vm state
     $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
   }
   "initvm done on ".join(" ",@m)

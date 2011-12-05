@@ -21,7 +21,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111201';
+our $VERSION = '0.001_20111205';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -87,7 +87,7 @@ perlall - build, test and do with all perls
 
     perlall init perl5.15.4d-nt@blead DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
 
-    perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
+    perlall="5.1*" perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
     perlall --older 5.12 make -Mblib t/0basic.t
     perlall=5.15.4  perlall maketest  	# test with version as ENV
     perlall="5.14*" perlall makeinstall
@@ -96,9 +96,8 @@ perlall - build, test and do with all perls
 
     perlall maketest "5.*.d*" # test with all debugging, version as option
 
-    for m in centos4 centos5 solaris10; do perlall initvm $m; done
     perlall testvm centos4 centos5 solaris10
-    perlall initvm --all $m
+    perlall initvm --all --max=6
     perlall testvm --all -c=init # see testvm in .perlall
     perlall selfupgrade
 
@@ -1414,10 +1413,11 @@ sub _smoke
 
 =item B<bench> [OPTIONS] <version><suffix> [ how ]
 
-Runs a short perl-core benchmark, and optionally a third-party script.
+Runs a short perl-core benchmark, and optionally a third-party script,
+automatically until the benchmark statistically stabilizes.
 
-Rejects statistical outliers, heavy load, and does the 
-iterations up to 2 seconds automatically.
+Rejects statistical outliers, heavy load, and does the
+iterations up to 2 seconds on shorter scripts.
 
 Tested are array access, hash access, s///, in a tak with 
 recursion and tail-recursion without IO to prevent too many 

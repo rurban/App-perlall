@@ -965,7 +965,7 @@ sub build
 	  my $pg = $p;
 	  my $s = $git;
 	  $s =~ s/^smoke-me\///;
-	  $s =~ s{/}{_}g;
+	  # $s =~ s{/}{}g;
 	  $s =~ s/\W//g; # collapse non-word chars
 	  $pg = $p."@".substr($s,0,12);
 	  $result .= $c->_build($pg, $git, $ps, '@'.$git, $root, $prefix, $cwd);
@@ -979,7 +979,7 @@ sub build
       unless ($p =~ /@/) {
 	my $git = $gitsuffix;
 	$git =~ s/^smoke-me\///;
-	$git =~ s{/}{_}g;
+	# $git =~ s{/}{}g;
 	$git =~ s/\W//g; # collapse non-word chars
 	$git = "@".substr($git,0,12);
 	$p .= $git;
@@ -1882,7 +1882,7 @@ sub testvm
   my $msg = "done";
   my $remotecmd = "cd $prefix/$base && perlall $gopts $cmd $opt";
   my $up = $c->options->{up};
-  my $do_fork = IPC::Cmd->can_use_run_forked;
+  my $do_fork = 0 and IPC::Cmd->can_use_run_forked;
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
@@ -1912,8 +1912,9 @@ sub testvm
     # XXX wait ? TODO collect logfiles
   }
   unless (@forked) {
-    for (@{$c->stash->{vm}}) {
-      $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
+    while (@{$c->stash->{vm}}) {
+      my $a = shift @{$c->stash->{vm}};
+      $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
     }
   }
   "testvm $msg on ".join(" ",@machines)
@@ -1942,7 +1943,6 @@ sub initvm
   $c->_lognew('');
   for my $m (@m) {
     _print(0,"perlall initvm $m") unless $c->options->{quiet};
-    local $c->options->{verbose} = 1 unless $c->options->{quiet};
     $c->_startvm($m) or next;
     unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
       for my $t (/ecdsa dsa rsa/) {
@@ -1965,8 +1965,9 @@ sub initvm
 		 ."'perl -MCPAN -e\"install "
 		 ."qw/App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   }
-  for (@{$c->stash->{vm}}) { # restore previous vm state
-    $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
+  while (@{$c->stash->{vm}}) { # restore previous vm state
+    my $a = shift @{$c->stash->{vm}};
+    $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
   }
   "initvm done on ".join(" ",@m)
 }

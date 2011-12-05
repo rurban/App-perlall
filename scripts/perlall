@@ -12,7 +12,6 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 # TEST:
 #   testvm max balancing
 #   init is unstable (IO::Tee in IPC::Run) - refactored
-#   fix logging (IPC::Cmd without IO::Tee) - refactored
 #   --as explicit and implicit - looks good, but no test
 # non-critical TODO:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02. monkeypatch or fail?
@@ -1911,7 +1910,7 @@ sub testvm
   if ($do_fork) {
     # XXX wait ? TODO collect logfiles
   }
-  unless (@forked) {
+  unless (@forked or !$c->stash->{vm}) {
     while (@{$c->stash->{vm}}) {
       my $a = shift @{$c->stash->{vm}};
       $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
@@ -1965,7 +1964,7 @@ sub initvm
 		 ."'perl -MCPAN -e\"install "
 		 ."qw/App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
   }
-  while (@{$c->stash->{vm}}) { # restore previous vm state
+  while ($c->stash->{vm} and @{$c->stash->{vm}}) { # restore previous vm state
     my $a = shift @{$c->stash->{vm}};
     $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
   }

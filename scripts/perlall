@@ -21,7 +21,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111206';
+our $VERSION = '0.001_20111207';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -921,7 +921,6 @@ sub build
   # 1. valid version, perl5.15.5-clang
   # 2. any other name (or bleadperl-test): no suffix to extract
   if ($c->options->{as}) {
-    warn "--as nyi";
     my $p_as = $c->options->{as};
     $p_as =~ s/^perl//;
     $p_as =~ s/^-//;

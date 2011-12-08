@@ -231,8 +231,8 @@ sub pre_process {
   my $sudo = $^O =~ /cygwin|msys|MSWin32/ ? "" : "sudo";
   $c->config->{sudo} = $sudo;
 
-  # read .perlall config. cpan/cpanm not
-  if ($cmd =~ /^build|uninstall|init|list|testvm|smoke|do|make.*$/) {
+  # read .perlall config
+  if ($cmd =~ /^build|uninstall|init|list|testvm|smoke|do|make.*$|cpan.*/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
       $c->_dot_perlall($_) if -f $_;
     }

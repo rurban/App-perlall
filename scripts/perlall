@@ -10,6 +10,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   init-modules: \ handling
 #   log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
 # TEST:
+#   'perlall=5.8* perlall do -m' should filter only main 5.8*
 #   testvm max balancing
 #   init is unstable (IO::Tee in IPC::Run) - refactored
 #   --as explicit and implicit - looks good, but no test
@@ -362,9 +363,18 @@ sub _get_perlall {
   if ($c->options->{skip} or $c->options->{main}) {
     if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
       # no @git releases only blead
-      @p = grep !/\@/, map { glob "$prefix/perl$_*" } @main_releases;
-      # XXX: no d if non-debug exists
-      my @dbg = grep /\.\dd/, @p;
+      my @np;
+      for my $p (grep !/\@/, @p) {
+	push @np, map{index($p, "perl$_")>=0 ? $p :()} @main_releases;
+      }
+      @p = @np; @np = ();
+      for my $p (@p) { # '5.8.9-nt' vs '5.8.9d-nt'
+	my $nondbg = $p;
+	$nondbg =~ s/(\.\d)d/$1/; # skip debug if non-debug exists
+	if ($nondbg ne $p) {
+	  $skip{$p}++ if grep {$nondbg eq $_} @p;
+	}
+      }
     } else {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }

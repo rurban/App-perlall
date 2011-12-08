@@ -1175,6 +1175,15 @@ sub _build {
 	  } else {
             # avoid the BSDPAN ports hack, we do not want to register our modules with ports
 	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
+	    if ($f eq "cc" and $v =~ /asan_clang/) {
+	      push @conf, "-Accflags='-faddress-sanitizer'";
+	      push @conf, "-Aldflags='-faddress-sanitizer'";
+	      push @conf, "-Alddlflags='-faddress-sanitizer'";
+	      if ($^O eq 'darwin') {
+		push @conf, "-Aldflags='-Wl,no_pie'";
+		push @conf, "-Alddlflags='-Wl,no_pie'";
+	      }
+	    }
 	    $c->debug("-$d$f=$v");
 	    push @conf, "-$d$f='$v'";
 	  }
@@ -1190,7 +1199,7 @@ sub _build {
     push @conf, "-Aldflags=-flat_namespace"
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
   }
-  # clang: use ld also
+  # clang: use ld also (XXX: done automatically on linux)
   push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
 
   $c->_system1( @conf);

@@ -10,9 +10,9 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   init-modules: \ handling
 #   log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
 # TEST:
+#   'perlall=5.8* perlall do -m' should filter only main 5.8*
 #   testvm max balancing
 #   init is unstable (IO::Tee in IPC::Run) - refactored
-#   fix logging (IPC::Cmd without IO::Tee) - refactored
 #   --as explicit and implicit - looks good, but no test
 # non-critical TODO:
 #   5.8.8 (centos5) fails with Attribute::Handler 0.78_02. monkeypatch or fail?
@@ -22,11 +22,13 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111201';
+our $VERSION = '0.001_20111207';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
+my @extuse;
 BEGIN { # check platform support: perldoc perlport
+  @extuse = qw(App::Rad IPC::Cmd IO::Scalar Devel::Platform::Info Devel::PatchPerl);
   if ($^O !~ /^linux|freebsd|darwin|solaris|openbsd|cygwin$/) {
     if ($^O =~ /^vms|dos|bsdos$/) {
       die "unsupported OS $^O"; # fixes welcome
@@ -47,8 +49,7 @@ BEGIN { # check platform support: perldoc perlport
       warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
     $_->import for @m;
   }
-  _auto_use(qw(App::Rad IPC::Cmd IO::Scalar
-	       Devel::Platform::Info Devel::PatchPerl));
+  _auto_use( @extuse );
 }
 # 5.8.4: ??, 5.8.5: centos4, 5.8.8: centos5
 our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.15.5);
@@ -88,7 +89,7 @@ perlall - build, test and do with all perls
 
     perlall init perl5.15.4d-nt@blead DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
 
-    perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
+    perlall="5.1*" perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
     perlall --older 5.12 make -Mblib t/0basic.t
     perlall=5.15.4  perlall maketest  	# test with version as ENV
     perlall="5.14*" perlall makeinstall
@@ -97,9 +98,8 @@ perlall - build, test and do with all perls
 
     perlall maketest "5.*.d*" # test with all debugging, version as option
 
-    for m in centos4 centos5 solaris10; do perlall initvm $m; done
     perlall testvm centos4 centos5 solaris10
-    perlall initvm --all $m
+    perlall initvm --all --max=6
     perlall testvm --all -c=init # see testvm in .perlall
     perlall selfupgrade
 
@@ -231,8 +231,8 @@ sub pre_process {
   my $sudo = $^O =~ /cygwin|msys|MSWin32/ ? "" : "sudo";
   $c->config->{sudo} = $sudo;
 
-  # read .perlall config. cpan/cpanm not
-  if ($cmd =~ /^build|uninstall|init|list|testvm|smoke|do|make.*$/) {
+  # read .perlall config
+  if ($cmd =~ /^build|uninstall|init|list|testvm|smoke|do|make.*$|cpan.*/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
       $c->_dot_perlall($_) if -f $_;
     }
@@ -363,9 +363,18 @@ sub _get_perlall {
   if ($c->options->{skip} or $c->options->{main}) {
     if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
       # no @git releases only blead
-      @p = grep !/\@/, map { glob "$prefix/perl$_*" } @main_releases;
-      # XXX: no d if non-debug exists
-      my @dbg = grep /\.\dd/, @p;
+      my @np;
+      for my $p (grep !/\@/, @p) {
+	push @np, map{index($p, "perl$_")>=0 ? $p :()} @main_releases;
+      }
+      @p = @np; @np = ();
+      for my $p (@p) { # '5.8.9-nt' vs '5.8.9d-nt'
+	my $nondbg = $p;
+	$nondbg =~ s/(\.\d)d/$1/; # skip debug if non-debug exists
+	if ($nondbg ne $p) {
+	  $skip{$p}++ if grep {$nondbg eq $_} @p;
+	}
+      }
     } else {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }
@@ -922,7 +931,6 @@ sub build
   # 1. valid version, perl5.15.5-clang
   # 2. any other name (or bleadperl-test): no suffix to extract
   if ($c->options->{as}) {
-    warn "--as nyi";
     my $p_as = $c->options->{as};
     $p_as =~ s/^perl//;
     $p_as =~ s/^-//;
@@ -965,7 +973,8 @@ sub build
 	  my $pg = $p;
 	  my $s = $git;
 	  $s =~ s/^smoke-me\///;
-	  $s =~ s/\W//; # collapse non-word chars
+	  # $s =~ s{/}{}g;
+	  $s =~ s/\W//g; # collapse non-word chars
 	  $pg = $p."@".substr($s,0,12);
 	  $result .= $c->_build($pg, $git, $ps, '@'.$git, $root, $prefix, $cwd);
 	}
@@ -978,8 +987,9 @@ sub build
       unless ($p =~ /@/) {
 	my $git = $gitsuffix;
 	$git =~ s/^smoke-me\///;
-	$git =~ s/\W//; # collapse non-word chars
-	$git = "@".substr($gitsuffix,0,12);
+	# $git =~ s{/}{}g;
+	$git =~ s/\W//g; # collapse non-word chars
+	$git = "@".substr($git,0,12);
 	$p .= $git;
       }
       $gitsuffix = "@".$gitsuffix;
@@ -1165,6 +1175,14 @@ sub _build {
 	  } else {
             # avoid the BSDPAN ports hack, we do not want to register our modules with ports
 	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
+	    if ($f eq "cc" and $v =~ /asan_clang/) {
+	      push @conf, "-Accflags='-faddress-sanitizer'", 
+	                  "-Aldflags='-faddress-sanitizer'",
+	                  "-Alddlflags='-faddress-sanitizer'";
+	      if ($^O eq 'darwin') {
+		push @conf, "-Aldflags='-Wl,no_pie'", "-Alddlflags='-Wl,no_pie'";
+	      }
+	    }
 	    $c->debug("-$d$f=$v");
 	    push @conf, "-$d$f='$v'";
 	  }
@@ -1180,7 +1198,7 @@ sub _build {
     push @conf, "-Aldflags=-flat_namespace"
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
   }
-  # clang: use ld also
+  # clang: use ld also (XXX: done automatically on linux)
   push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
 
   $c->_system1( @conf);
@@ -1345,7 +1363,7 @@ INSTALL:
   }
 
   chdir $cwd;
-  _set_alias($c, $p);
+  $c->_set_alias($p);
 
   print $c->output() if $c->options->{verbose};
   return "$prefix/bin/perl$p faked" if $dryrun;
@@ -1413,10 +1431,11 @@ sub _smoke
 
 =item B<bench> [OPTIONS] <version><suffix> [ how ]
 
-Runs a short perl-core benchmark, and optionally a third-party script.
+Runs a short perl-core benchmark, and optionally a third-party script,
+automatically until the benchmark statistically stabilizes.
 
-Rejects statistical outliers, heavy load, and does the 
-iterations up to 2 seconds automatically.
+Rejects statistical outliers, heavy load, and does the
+iterations up to 2 seconds on shorter scripts.
 
 Tested are array access, hash access, s///, in a tak with 
 recursion and tail-recursion without IO to prevent too many 
@@ -1496,7 +1515,7 @@ sub init
       $c->_system1( $p, "-S", $cpan, split(/\s+/,$mods));
     }
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 =item B<list> [version*]
@@ -1578,7 +1597,7 @@ sub do
     $c->_lognew(_short($p));
     $c->_system0( "$p @{$c->argv}");
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 =item B<cpan> modules
@@ -1598,7 +1617,7 @@ sub cpan
     $c->_lognew(_short($p));
     $c->_system0($p, "-S", "cpan", @{$c->argv});
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 =item B<cpanm> modules
@@ -1618,7 +1637,7 @@ sub cpanm
     $c->_lognew(_short($p));
     $c->_system0($p, "-S", "cpanm", @{$c->argv});
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 =item B<make> [commands...]
@@ -1662,7 +1681,7 @@ sub make
       $c->_system0( "$p $argv");
     }
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 =item B<maketest> [commands...]
@@ -1695,7 +1714,7 @@ sub maketest
       $c->_system0( "$p @{$c->argv}");
     }
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 =item B<makeinstall> [commands...]
@@ -1709,20 +1728,27 @@ sub makeinstall
 {
   my $c = shift;
   my $make = $Config{make};
+  $c->addopts( "force|f", "notest|n" );
   # XXX check CPAN/MyConfig.pm for sudo
   #warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   my $sudo = $c->config->{sudo};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_make($p);
-    $c->_system1( "$make test && $sudo $make install"); # csh?
-
+    my $instcmd = "$sudo $make install";
+    if ($c->options->{notest}) {
+      $c->_system1( $instcmd );
+    } elsif ($c->options->{force}) {
+      $c->_system1( "$make test; $instcmd" );
+    } else {
+      $c->_system1( "$make test && $instcmd" ); # csh?
+    }
     if (@{$c->argv}) {
       local $c->options->{verbose} = 1 unless $c->options->{quiet};
       # optionally additional tests
       $c->_system0( "$p @{$c->argv}");
     }
   }
-  $c->_set_alias();
+  $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
 # may return undef if not possible to start it
@@ -1880,7 +1906,7 @@ sub testvm
   my $msg = "done";
   my $remotecmd = "cd $prefix/$base && perlall $gopts $cmd $opt";
   my $up = $c->options->{up};
-  my $do_fork = IPC::Cmd->can_use_run_forked;
+  my $do_fork = 0 and IPC::Cmd->can_use_run_forked;
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
@@ -1909,9 +1935,10 @@ sub testvm
   if ($do_fork) {
     # XXX wait ? TODO collect logfiles
   }
-  unless (@forked) {
-    for (@{$c->stash->{vm}}) {
-      $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
+  unless (@forked or !$c->stash->{vm}) {
+    while (@{$c->stash->{vm}}) {
+      my $a = shift @{$c->stash->{vm}};
+      $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
     }
   }
   "testvm $msg on ".join(" ",@machines)
@@ -1940,7 +1967,6 @@ sub initvm
   $c->_lognew('');
   for my $m (@m) {
     _print(0,"perlall initvm $m") unless $c->options->{quiet};
-    local $c->options->{verbose} = 1 unless $c->options->{quiet};
     $c->_startvm($m) or next;
     unless (`ssh $m ls .ssh/authorized_keys` =~ /authorized_keys$/m) {
       for my $t (/ecdsa dsa rsa/) {
@@ -1960,11 +1986,11 @@ sub initvm
       $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
     }
     $c->_system1("ssh $m "
-		 ."'perl -MCPAN -e\"install "
-		 ."qw/App::Rad IO::Scalar Devel::Platform::Info Devel::PatchPerl/\"'");
+		 ."'perl -MCPAN -e\"install qw/" . join(" ",@extuse). "/\"'");
   }
-  for (@{$c->stash->{vm}}) {
-    $c->_system1(qw(sudo virsh), $_->[1], $_->[0]);
+  while ($c->stash->{vm} and @{$c->stash->{vm}}) { # restore previous vm state
+    my $a = shift @{$c->stash->{vm}};
+    $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
   }
   "initvm done on ".join(" ",@m)
 }

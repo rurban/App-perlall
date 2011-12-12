@@ -1176,7 +1176,8 @@ sub _build {
             # avoid the BSDPAN ports hack, we do not want to register our modules with ports
 	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
 	    if ($f eq "cc" and $v =~ /asan_clang/) {
-	      push @conf, "-Accflags='-faddress-sanitizer'", 
+	      # XXX this should go into darwin and linux hints somewhen
+	      push @conf, "-Accflags='-faddress-sanitizer'",
 	                  "-Aldflags='-faddress-sanitizer'",
 	                  "-Alddlflags='-faddress-sanitizer'";
 	      if ($^O eq 'darwin') {
@@ -1197,9 +1198,10 @@ sub _build {
     my $conf = join(" ",@conf);
     push @conf, "-Aldflags=-flat_namespace"
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
+    # clang: use ld also
+    # XXX: done automatically on linux. bother only for darwin
+    push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
   }
-  # clang: use ld also (XXX: done automatically on linux)
-  push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
 
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
@@ -1893,7 +1895,7 @@ sub testvm
   my $man = 'MANIFEST';
   $c->_fail("$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
-  if ( -M $man < -M $f ) {
+  if ( ! -f $f or -M $man < -M $f ) {
     $c->_log(1,"Creating $f");
     open M,'<',$man; open F,'>',$f;
     while (<M>) {

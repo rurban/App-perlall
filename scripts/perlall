@@ -5,10 +5,11 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
 #   fix testvm forked
+#   testvm logs, also from forks
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
+#   more testvm_ctl: xen-shell, vmrun, VBoXManage
 #   init-modules: \ handling
-#   log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
 # TEST:
 #   'perlall=5.8* perlall do -m' should filter only main 5.8*
 #   testvm max balancing
@@ -22,7 +23,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111207';
+our $VERSION = '0.001_20111213';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -1776,6 +1777,7 @@ sub _startvm {
  25 solaris              running
   - freebsd8             shut off
   - openbsd49            shut off';
+  # XXX resolve DNS aliases (from /etc/hosts). i.e. c5 => centos5
   my $max = $c->options->{max};
   my (@running);
   my @status = split/\n/,$status;
@@ -1797,8 +1799,8 @@ sub _startvm {
 	if ($max and @running > $max) {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
+	  push @{$c->stash->{vm}}, [$m,'suspend'];
 	}
-	push @{$c->stash->{vm}}, [$m,'suspend'];
 	$c->_system1(qw(sudo virsh resume), $m);
 	sleep 0.1;
 	unshift @running, $m;
@@ -1808,8 +1810,8 @@ sub _startvm {
 	if ($max and @running > $max) {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
+	  push @{$c->stash->{vm}}, [$m,'stop'];
 	}
-	push @{$c->stash->{vm}}, [$m,'stop'];
 	$c->_system1(qw(sudo virsh start), $m);
 	sleep 25;
 	unshift @running, $m;
@@ -1821,7 +1823,8 @@ sub _startvm {
       }
     }
   }
-  return; # not found, skip to next
+  $c->debug("vm $m not found");
+  return 1;
 }
 
 =item B<testvm> [OPTIONS] [user@]hostname...
@@ -1921,9 +1924,9 @@ sub testvm
       if ($do_fork) {
 	# fork (parallel).
 	my $forked = IPC::Cmd::run_forked( 
-	  ["ssh",$m,$remotecmd],
+	  ["ssh",$m,$remotecmd,'&&',"rsync","-avz","$m:$prefix/$base/log.$cmd-*","."],
 	  {timeout => 3600, #seconds
-	   discard_output => 1, # rather collect logfiles
+	   discard_output => 1, # rather collect logfiles. how?
 	   terminate_on_parent_sudden_death => 1,
 	  });
 	push @forked, $forked;
@@ -1931,6 +1934,7 @@ sub testvm
 	$c->_log('',"forked $remotecmd on $m");
       } else {
 	$c->_system1("ssh",$m,$remotecmd);
+	$c->_system1("rsync","-avz","$m:$prefix/$base/log.$cmd-*",".");
       }
     }
   }

@@ -380,7 +380,7 @@ sub _get_perlall {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }
   }
-  @p = grep !/\@/,@p if $c->options->{nogit};
+  @p = grep !/(\@|-git)/,@p if $c->options->{nogit};
   # glob-style
   if (my $ver = $c->options->{older}) {
     # XXX? if last char is non-decimal match this suffix filter also. or use skip

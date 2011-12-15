@@ -5,10 +5,12 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
 #   fix testvm forked
+#   testvm logs back from forks
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
+#   more testvm_ctl: xen-shell, vmrun, VBoXManage
 #   init-modules: \ handling
-#   log from forks and more testvm_ctl: xen-shell, vmrun, VBoXManage
+#   uninstall: packfile of installed files instead of rather unsafe globbing
 # TEST:
 #   'perlall=5.8* perlall do -m' should filter only main 5.8*
 #   testvm max balancing
@@ -22,7 +24,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111207';
+our $VERSION = '0.001_20111213';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -267,7 +269,7 @@ sub pre_process {
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
       # "we should not disturb a running perlall in this dir"
-      $c->_check_lock() if $cmd =~ /^do|make|testvm/;
+      $c->_check_lock() if $cmd =~ /^do|make/;
     }
   }
 
@@ -379,7 +381,7 @@ sub _get_perlall {
       %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
     }
   }
-  @p = grep !/\@/,@p if $c->options->{nogit};
+  @p = grep !/(\@|-git)/,@p if $c->options->{nogit};
   # glob-style
   if (my $ver = $c->options->{older}) {
     # XXX? if last char is non-decimal match this suffix filter also. or use skip
@@ -1132,6 +1134,7 @@ sub _build {
   push @conf, "-D'".$_."'" for @{$c->options->{D}};
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
+  push @conf, "-Dprefix='$prefix'" if $prefix ne '/usr/local';
   # special *perl<xxx>.dll if non-default
   if ($^O =~ /cygwin|MSWin32/ and $suffix) {
     if ($^O eq 'cygwin') {
@@ -1176,7 +1179,8 @@ sub _build {
             # avoid the BSDPAN ports hack, we do not want to register our modules with ports
 	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
 	    if ($f eq "cc" and $v =~ /asan_clang/) {
-	      push @conf, "-Accflags='-faddress-sanitizer'", 
+	      # XXX this should go into darwin and linux hints somewhen
+	      push @conf, "-Accflags='-faddress-sanitizer'",
 	                  "-Aldflags='-faddress-sanitizer'",
 	                  "-Alddlflags='-faddress-sanitizer'";
 	      if ($^O eq 'darwin') {
@@ -1197,9 +1201,10 @@ sub _build {
     my $conf = join(" ",@conf);
     push @conf, "-Aldflags=-flat_namespace"
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
+    # clang: use ld also
+    # XXX: done automatically on linux. bother only for darwin
+    push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
   }
-  # clang: use ld also (XXX: done automatically on linux)
-  push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
 
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
@@ -1774,6 +1779,7 @@ sub _startvm {
  25 solaris              running
   - freebsd8             shut off
   - openbsd49            shut off';
+  # XXX resolve DNS aliases (from /etc/hosts). i.e. c5 => centos5
   my $max = $c->options->{max};
   my (@running);
   my @status = split/\n/,$status;
@@ -1795,8 +1801,8 @@ sub _startvm {
 	if ($max and @running > $max) {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
+	  push @{$c->stash->{vm}}, [$m,'suspend'];
 	}
-	push @{$c->stash->{vm}}, [$m,'suspend'];
 	$c->_system1(qw(sudo virsh resume), $m);
 	sleep 0.1;
 	unshift @running, $m;
@@ -1806,8 +1812,8 @@ sub _startvm {
 	if ($max and @running > $max) {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
+	  push @{$c->stash->{vm}}, [$m,'stop'];
 	}
-	push @{$c->stash->{vm}}, [$m,'stop'];
 	$c->_system1(qw(sudo virsh start), $m);
 	sleep 25;
 	unshift @running, $m;
@@ -1819,7 +1825,8 @@ sub _startvm {
       }
     }
   }
-  return; # not found, skip to next
+  $c->debug("vm $m not found");
+  return 1;
 }
 
 =item B<testvm> [OPTIONS] [user@]hostname...
@@ -1893,7 +1900,7 @@ sub testvm
   my $man = 'MANIFEST';
   $c->_fail("$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
-  if ( -M $man < -M $f ) {
+  if ( ! -f $f or -M $man < -M $f ) {
     $c->_log(1,"Creating $f");
     open M,'<',$man; open F,'>',$f;
     while (<M>) {
@@ -1919,9 +1926,9 @@ sub testvm
       if ($do_fork) {
 	# fork (parallel).
 	my $forked = IPC::Cmd::run_forked( 
-	  ["ssh",$m,$remotecmd],
+	  ["ssh",$m,$remotecmd,'&&',"rsync","-avz","$m:$prefix/$base/log.$cmd-*","."],
 	  {timeout => 3600, #seconds
-	   discard_output => 1, # rather collect logfiles
+	   discard_output => 1, # rather collect logfiles. how?
 	   terminate_on_parent_sudden_death => 1,
 	  });
 	push @forked, $forked;
@@ -1929,6 +1936,7 @@ sub testvm
 	$c->_log('',"forked $remotecmd on $m");
       } else {
 	$c->_system1("ssh",$m,$remotecmd);
+	$c->_system1("rsync","-avz","$m:$prefix/$base/log.$cmd-*",".");
       }
     }
   }

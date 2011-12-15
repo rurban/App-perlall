@@ -1679,10 +1679,12 @@ sub make
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
+  my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    local $c->options->{verbose} = $v;
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
-      local $c->options->{verbose} = 1 unless $c->options->{quiet};
+      $c->options->{verbose} = 1 unless $c->options->{quiet};
       $c->_system0( "$p $argv");
     }
   }
@@ -1703,8 +1705,11 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
+  my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    local $c->options->{verbose} = $v;
     $c->_make($p);
+    $c->options->{verbose} = 1 unless $c->options->{quiet};
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} 
       if $c->options->{j} and !$c->_older( $p,"5.10.0");
@@ -1714,9 +1719,8 @@ sub maketest
       $c->_system1( $make, @opts);
     }
     if (@{$c->argv}) {
-      local $c->options->{verbose} = 1 unless $c->options->{quiet};
       # optionally additional tests
-      $c->_system0( "$p @{$c->argv}");
+      $c->_system0( $p, @{$c->argv});
     }
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
@@ -1737,20 +1741,25 @@ sub makeinstall
   # XXX check CPAN/MyConfig.pm for sudo
   #warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   my $sudo = $c->config->{sudo};
+  my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    local $c->options->{verbose} = $v;
     $c->_make($p);
     my $instcmd = "$sudo $make install";
     if ($c->options->{notest}) {
+      $c->options->{verbose} = 1 unless $c->options->{quiet};
       $c->_system1( $instcmd );
     } elsif ($c->options->{force}) {
-      $c->_system1( "$make test; $instcmd" );
+      $c->_system1( $make, 'test' );
+      $c->options->{verbose} = 1 unless $c->options->{quiet};
+      $c->_system1( $instcmd );
     } else {
+      $c->options->{verbose} = 1 unless $c->options->{quiet};
       $c->_system1( "$make test && $instcmd" ); # csh?
     }
     if (@{$c->argv}) {
-      local $c->options->{verbose} = 1 unless $c->options->{quiet};
       # optionally additional tests
-      $c->_system0( "$p @{$c->argv}");
+      $c->_system0( $p, @{$c->argv} );
     }
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;

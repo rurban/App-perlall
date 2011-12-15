@@ -269,7 +269,7 @@ sub pre_process {
       $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
 
       # "we should not disturb a running perlall in this dir"
-      $c->_check_lock() if $cmd =~ /^do|make|testvm/;
+      $c->_check_lock() if $cmd =~ /^do|make/;
     }
   }
 

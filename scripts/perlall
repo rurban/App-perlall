@@ -1919,7 +1919,8 @@ sub testvm
   # XXX check if pwd in core or in a module
   my $opts = _opts($c->options);
   $opts =~ s/$_//  for split/ /,$gopts;
-  _print(1,"perlall $gopts testvm ".$opts,@machines)
+  $gopts = " ".$gopts if $gopts;
+  _print(1,"perlall$gopts testvm ".$opts,@machines)
     if $c->options->{verbose};
   $c->_lognew('');
   my $cmd = $c->options->{cmd} || "maketest";
@@ -1948,21 +1949,22 @@ sub testvm
     $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
   }
   my $msg = "done";
-  my $remotecmd = "cd $base && perlall $gopts $cmd $opt";
+  my $remotecmd = "cd $base && perlall$gopts $cmd";
+  $remotecmd .= " $opt" if $opt;
   my $up = $c->options->{up};
-  my $do_fork = IPC::Cmd->can_use_run_forked;
+  my $do_fork = 0 and IPC::Cmd->can_use_run_forked; # XXX still not usable
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
-    # XXX some old systems (centos4) have rsync 2.6 which will fail. -vldogDtpRze.Lsf: unknown option
+    # XXX some old systems (centos4) have rsync 2.6 which will fail. 
+    #   -vldogDtpRze.Lsf: unknown option
     $c->_system1("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
 		'.', "$m:$base/") or next;
     unless ( $up ) {
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
-      if ($do_fork) {
-	# fork (parallel).
+      if ($do_fork) { # fork (parallel)
 	my @cmd = ("ssh",$m,$remotecmd);
 	push @cmd, '&&',"rsync","-avz","$m:$base/$logglob",".";
         # if virsh was resumed, pause it back afterwards
@@ -1970,13 +1972,15 @@ sub testvm
 	  push @cmd, ('&&','sudo','virsh', $m, $prevstat);
 	}
 	my $forked = IPC::Cmd::run_forked( \@cmd,
-	  {timeout => 3600,     #seconds, max 1h
-	   discard_output => 1, # rather collect logfiles. how?
-	   terminate_on_parent_sudden_death => 1,
+	  {timeout => 3600,     # seconds, max 1h
+	   # discard_output => 1, # rather collect logfiles.
+	   # terminate_on_parent_sudden_death => 1,
 	  });
+	$c->debug("forked $forked");
 	push @forked, $forked;
 	$msg = "forked";
-	$c->_log(1,"forked '$remotecmd' on $m");
+	$c->_log(0,"forked '$remotecmd' on $m");
+	sleep 15.0 if $forked; ## DEBUGGING
       } else {
 	$c->_system1("ssh",$m,$remotecmd);
 	$c->_system1("rsync","-avz","$m:$base/$logglob",".");
@@ -1989,7 +1993,7 @@ sub testvm
       $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
     }
   }
-  "testvm $msg on ".join(" ",@machines)
+  "testvm $cmd $msg on ".join(" ",@machines)
 }
 
 =item B<initvm> [--all] user@[hostname]...

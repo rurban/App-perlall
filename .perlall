@@ -1,15 +1,26 @@
 # optionally source this from .profile
-alias p=perl5.15.4d-nt
 
+# important: path to the perl .git clone
+alias perl-git='cd /usr/src/perl/blead/perl-git'
+
+# default Configure -Dprefix
 PERLALL_PREFIX=/usr/local
+# default dir to build and tmp. install perls
 PERLALL_BUILDROOT=/usr/src/perl
-# untested!
 # PERLALL_PREFIX=~/perl5/perlbrew
-# PERLALL_BINDIR~/perl5/perlbrew/bin
 # PERLALL_BUILDROOT=~/perl5/perlbrew/build
+# where perl5* are expected (default: /usr/local/bin)
+# PERLALL_BINDIR=~/perl5/perlbrew/bin
+
+# use -thr suffix, if not use -nt for "non threaded"
 #usethrsuffix=0
 
-alias perl-git='cd /usr/src/perl/blead/perl-git'
+# when $HOME or File::HomeDir is not available. where are your modules on the vm's
+#vmprefix=Perl
+
+# currently used perl (set by perlall)
+alias p=perl5.15.4d-nt
+
 # just some suggestions
 alias pb="p -Mblib"
 alias m=make

@@ -4,14 +4,14 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   fix testvm forked
-#   testvm logs back from forks
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   more testvm_ctl: xen-shell, vmrun, VBoXManage
 #   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 # TEST:
+#   testvm logs back from forks
+#   fix testvm forked
 #   'perlall=5.8* perlall do -m' should filter only main 5.8*
 #   testvm max balancing
 #   init is unstable (IO::Tee in IPC::Run) - refactored

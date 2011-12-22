@@ -27,6 +27,7 @@ use 5.006;
 our $VERSION = '0.001_20111215';
 use Config;
 use Cwd ();
+use File::Spec ();
 use File::Basename 'basename';
 my @extuse;
 BEGIN { # check platform support: perldoc perlport
@@ -1846,6 +1847,15 @@ sub _startvm {
   return 1;
 }
 
+sub _vm_prevstatus {
+  my $c = shift;
+  my $m = shift or die "_vm_prevstatus missing vm name";
+  while (@{$c->stash->{vm}}) {
+    my $a = shift @{$c->stash->{vm}};
+    return $a->[1] if $a->[0] eq $m;
+  }
+}
+
 =item B<testvm> [OPTIONS] [user@]hostname...
 
 Does C<perlall maketest> in parallel on remote machines.
@@ -1895,7 +1905,7 @@ sub testvm
   my $gopts = _opts($c->options);
   $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n" );
 
-  my ($prefix, $base);
+  my ($base);
   my @testvm = split / /,$c->config->{testvm};
   my @machines = $c->options->{all} ? @testvm : @{$c->argv};
   return "missing args" unless @machines;
@@ -1925,42 +1935,55 @@ sub testvm
     }
     close M; close F;
   }
-  $prefix = $c->options->{prefix} || "Perl";
-  $base = basename(Cwd::getcwd);
+  # $vmprefix = File::Spec->abs2rel(Cwd::getcwd, $ENV{HOME});
+  my $home = $ENV{HOME};
+  if (!$home or !-d $home) {
+    _auto_use('File::HomeDir');
+    $home = File::HomeDir->my_home;
+  }
+  if (File::Spec->can('abs2rel') and $home) {
+    $base = File::Spec->abs2rel(Cwd::getcwd(), $home);
+  } else {
+    my $vmprefix = $c->options->{vmprefix} || "Perl";
+    $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
+  }
   my $msg = "done";
-  my $remotecmd = "cd $prefix/$base && perlall $gopts $cmd $opt";
+  my $remotecmd = "cd $base && perlall $gopts $cmd $opt";
   my $up = $c->options->{up};
-  my $do_fork = 0 and IPC::Cmd->can_use_run_forked;
+  my $do_fork = IPC::Cmd->can_use_run_forked;
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
     # XXX some old systems (centos4) have rsync 2.6 which will fail. -vldogDtpRze.Lsf: unknown option
     $c->_system1("rsync","-avzL","--delete",
 		'--files-from=MANIFEST.files',
-		'.', "$m:$prefix/$base/") or next;
+		'.', "$m:$base/") or next;
     unless ( $up ) {
       # my $buf = ' 'x10000;
+      my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
       if ($do_fork) {
 	# fork (parallel).
-	my $forked = IPC::Cmd::run_forked( 
-	  ["ssh",$m,$remotecmd,'&&',"rsync","-avz","$m:$prefix/$base/log.$cmd-*","."],
-	  {timeout => 3600, #seconds
+	my @cmd = ("ssh",$m,$remotecmd);
+	push @cmd, '&&',"rsync","-avz","$m:$base/$logglob",".";
+        # if virsh was resumed, pause it back afterwards
+	if ($c->stash->{vm} and my $prevstat = $c->_vm_prevstatus($m)) {
+	  push @cmd, ('&&','sudo','virsh', $m, $prevstat);
+	}
+	my $forked = IPC::Cmd::run_forked( \@cmd,
+	  {timeout => 3600,     #seconds, max 1h
 	   discard_output => 1, # rather collect logfiles. how?
 	   terminate_on_parent_sudden_death => 1,
 	  });
 	push @forked, $forked;
 	$msg = "forked";
-	$c->_log('',"forked $remotecmd on $m");
+	$c->_log(1,"forked '$remotecmd' on $m");
       } else {
 	$c->_system1("ssh",$m,$remotecmd);
-	$c->_system1("rsync","-avz","$m:$prefix/$base/log.$cmd-*",".");
+	$c->_system1("rsync","-avz","$m:$base/$logglob",".");
       }
     }
   }
-  if ($do_fork) {
-    # XXX wait ? TODO collect logfiles
-  }
-  unless (@forked or !$c->stash->{vm}) {
+  if (!@forked and $c->stash->{vm}) {
     while (@{$c->stash->{vm}}) {
       my $a = shift @{$c->stash->{vm}};
       $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);

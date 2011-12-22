@@ -1915,7 +1915,7 @@ sub testvm
   my $c = shift;
   # testvm has a different option set and allows options after the command
   my $gopts = _opts($c->options);
-  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n", "fork" );
+  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n", "fork!" );
 
   my ($base);
   my @testvm = split / /,$c->config->{testvm};
@@ -1936,7 +1936,7 @@ sub testvm
     if $c->options->{verbose};
   $c->_lognew('');
   my $cmd = $c->options->{cmd} || "maketest";
-  my $opt = $c->options->{option} || '';
+  my $opt = $c->options->{option} ? (' '.$c->options->{option}) : '';
   my $man = 'MANIFEST';
   $c->_fail("$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
@@ -1961,8 +1961,7 @@ sub testvm
     $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
   }
   my $msg = "done";
-  my $remotecmd = "cd $base && perlall$gopts $cmd";
-  $remotecmd .= " $opt" if $opt;
+  my $remotecmd = "'cd $base && perlall$gopts $cmd$opt'";
   my $up = $c->options->{up};
   my $do_fork = IPC::Cmd->can_use_run_forked and $c->options->{fork}; # XXX still not usable
   my @forked;
@@ -1977,11 +1976,10 @@ sub testvm
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
       if ($do_fork) { # run cmds in parallel
-	my @cmd = ("ssh",$m,$remotecmd);
-	push @cmd, '&&',"rsync","-avz","$m:$base/$logglob",".";
+	my @cmd = ("sh","-c","if ssh $m $remotecmd; then rsync -avz $m:$base/$logglob .; fi");
         # if virsh was resumed, pause it back afterwards
 	if ($c->stash->{vm} and my $prevstat = $c->_vm_prevstatus($m)) {
-	  push @cmd, ('&&','sudo','virsh', $m, $prevstat);
+	  @cmd = ("sh","-c","if ssh $m $remotecmd; then rsync -avz $m:$base/$logglob .;sudo virsh $m $prevstat; fi");
 	}
 	my $pid;
 	#my $pid = IPC::Cmd::run_forked( \@cmd,

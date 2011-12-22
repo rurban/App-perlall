@@ -24,7 +24,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111213';
+our $VERSION = '0.001_20111215';
 use Config;
 use Cwd ();
 use File::Basename 'basename';
@@ -182,7 +182,7 @@ the F<perl.dll> ditto.
 
 Platforms
 
-I plan to use perlall on cygwin, linux (debian+centos),
+I use and support perlall on cygwin, linux (debian+centos),
 freebsd, openbsd and solaris, with bash, dash and ksh.
 Supporting other platforms besides VMS should not be hard.
 freebsd needs sudo from ports. mingw (strawberry) support is
@@ -192,7 +192,7 @@ Log Files
 
 Most commands always create a log file with the command, platform 
 and version, like F<log.maketest-centos5-5.10.1d-nt> or
-F<log.makeinstall-osx1068-5.15.4>, F<log.build-osx1068-5.15.4d-nt@30cb48da>.
+F<log.makeinstall-osx10.6.8-5.15.4>, F<log.build-osx10.6.8-5.15.4d-nt@30cb48da>.
 
 In L<B::C> there are post-processing scripts
 F<status_upd> and F<store_rpt> for those generated logfiles.
@@ -1720,6 +1720,11 @@ sub maketest
       $c->_system1( $p, "Build", @opts);
     } else {
       $c->_system1( $make, @opts);
+    }
+    unless ($c->options->{verbose}) {
+      my $log = $c->stash->{log};
+      my $result = `grep Result: $log`;
+      $c->_system0($result) if $result;
     }
     if (@{$c->argv}) {
       # optionally additional tests

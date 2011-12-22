@@ -1464,7 +1464,7 @@ sub bench
 }
 
 
-=item B<init> [perl<version><suffix> [<modules>...]]
+=item B<init> [perl<version><suffix> [--deps] [<modules>...]]
 
 =item perlall="5.*" B<init> [<modules>...]
 
@@ -1477,8 +1477,10 @@ Default: C<init-modules> in F<~/.perlall>
    Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse 
    MouseX::Types Task::Kensho)
 
-Default: C<cpan>=C<cpan> or C<cpanm> in F<.perlall>
-Todo: cpan=-MCPAN
+Options:
+  --cpan=-MCPAN
+    Default: C<cpan>=C<cpan> or C<cpanm> in F<.perlall>
+  --deps    scan blib/lib and t for modules
 
 =cut
 
@@ -1486,10 +1488,17 @@ sub init
   :Help('Installs and updates basic CPAN modules')
 {
   my $c = shift;
+  $c->addopts( "cpan=s", "deps" );
   my @argv = @{$c->argv};
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
+  if ($c->options->{deps}) {
+    $mods = `ack -ho '(^\s*|\{\s*)(use|require) ([\w:]+);' blib/lib t | perl -lpe's/^\s*(\{|;|use|require)\s*//g;s/;?\s*\$//;' | sort -u`;
+    $mods = join(" ",split(/\n/, $mods));
+    return "no --deps found" unless $mods;
+  }
   return "missing config init-modules" unless $mods;
-  my $cpan = $c->config->{'cpan'};
+  my $cpan = $c->options->{'cpan'};
+  $cpan = $c->config->{'cpan'} unless $cpan;
   $c->options->{verbose} = 1;
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
@@ -1906,7 +1915,7 @@ sub testvm
   my $c = shift;
   # testvm has a different option set and allows options after the command
   my $gopts = _opts($c->options);
-  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n", "fork!" );
+  $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n", "fork" );
 
   my ($base);
   my @testvm = split / /,$c->config->{testvm};

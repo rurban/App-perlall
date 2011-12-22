@@ -1936,7 +1936,7 @@ sub testvm
     if $c->options->{verbose};
   $c->_lognew('');
   my $cmd = $c->options->{cmd} || "maketest";
-  my $opt = $c->options->{option} ? (' '.$c->options->{option}) : '';
+  my $opt = $c->options->{option} ? (' '.$c->options->{option}) : ' -q';
   my $man = 'MANIFEST';
   $c->_fail("$man not found") unless -f $man;
   my $f = 'MANIFEST.files';
@@ -1963,7 +1963,7 @@ sub testvm
   my $msg = "done";
   my $remotecmd = "'cd $base && perlall$gopts $cmd$opt'";
   my $up = $c->options->{up};
-  my $do_fork = IPC::Cmd->can_use_run_forked and $c->options->{fork}; # XXX still not usable
+  my $do_fork = IPC::Cmd->can_use_run_forked and $c->options->{fork};
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
@@ -1993,16 +1993,14 @@ sub testvm
 	    $c->debug("forked $pid");
 	    push @forked, $pid;
 	    $msg = "forked";
-	    $c->_log(0,"forked '$remotecmd' on $m");
+	    $c->_log(0,"forked $remotecmd on $m");
 	  } elsif (defined $pid) {
 	    exec @cmd;
-	  } elsif ($! == &Fcntl::EAGAIN) {
-	    # EAGAIN is the supposedly recoverable fork error
+	  } elsif ($! == &Fcntl::EAGAIN) { # supposedly recoverable fork error
 	    sleep 5;
 	    redo FORK;
 	  } else {
-	    #weird fork error
-	    die "Can't fork: $!\n";
+	    die "Can't fork: $!\n"; # weird fork error
 	  }
 	}
 	# do not wait for children forked off. they are perlall.lock'ed and come back alone

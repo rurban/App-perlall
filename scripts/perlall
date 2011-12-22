@@ -256,8 +256,8 @@ sub pre_process {
 	$s = "solaris";
 	$v = $d->{kvers} if $v eq 'SunOS';
       }
-      $v =~ s/^\D*//;    # strip non-number lead
-      $v =~ s/[\D\.]//g; # only numbers and dots
+      $v =~ s/^\D*//;     # strip non-number lead
+      $v =~ s/[^\d\.]//g; # only numbers and dots
       $s = $s . $v;
       $s =~ s/[\s\(\)\[\}\[\]]//g;
       if ($^O eq 'cygwin') {
@@ -266,7 +266,11 @@ sub pre_process {
 	$s = 'cygwin'.$s;
       }
       $s = $^O unless $s;
-      $c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
+      if ($cmd eq 'maketest') {
+	$c->stash->{logprefix} = "log.test-".lc($s)."-";
+      } else {
+	$c->stash->{logprefix} = "log.$cmd-".lc($s)."-";
+      }
 
       # "we should not disturb a running perlall in this dir"
       $c->_check_lock() if $cmd =~ /^do|make/;
@@ -569,12 +573,12 @@ sub __system {
       my $what = join "','",@_;
       eval "$cmd('$what')";
     } else {
-      my( $success, $error_message, $full_buf, $stdout_buf, $stderr_buf ) =
-	IPC::Cmd::run('command' => [ @_ ],
-		      'verbose' => $c->options->{verbose});
-      
-      if ($c->stash->{log_fh} and @$full_buf) {
-	my $fh = $c->stash->{log_fh};
+      my $fh = $c->stash->{log_fh};
+      # XXX we rather want a tee STDOUT/ERR to print to fh at the same time as to STDOUT/ERR
+      # stdout_handler+stderr_handler
+      my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf) =
+	IPC::Cmd::run('command' => [ @_ ], 'verbose' => $c->options->{verbose});
+      if ($fh and @$full_buf) {
 	print $fh $_ for @$full_buf;
       }
       if (@$stderr_buf and !$c->options->{quiet}) {
@@ -1685,6 +1689,7 @@ sub make
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
       $c->options->{verbose} = 1 unless $c->options->{quiet};
+      # $c->_lognew(_short($p));
       $c->_system0( "$p $argv");
     }
   }
@@ -1705,11 +1710,9 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
-  my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
-    local $c->options->{verbose} = $v;
     $c->_make($p);
-    $c->options->{verbose} = 1 unless $c->options->{quiet};
+    # $c->_lognew(_short($p));
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} 
       if $c->options->{j} and !$c->_older( $p,"5.10.0");

@@ -1977,7 +1977,7 @@ sub testvm
     $home = File::HomeDir->my_home;
   }
   if (File::Spec->can('abs2rel') and $home) {
-    my $cmd = Cwd::getcwd();
+    my $cwd = Cwd::getcwd();
     $base = File::Spec->abs2rel($cwd, $home);
     if (length($cmd) < length($base)) { # use absolute paths if shorter
       $base = $cwd;
@@ -1987,7 +1987,7 @@ sub testvm
     $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
   }
   my $msg = "done";
-  my $remotecmd = "'cd $base && perlall$gopts $cmd$opt'";
+  my $remotecmd = "cd $base && perlall$gopts $cmd$opt";
   my $up = $c->options->{up};
   my $do_fork = $c->options->{fork} and IPC::Cmd->can_use_run_forked();
   my @forked;
@@ -2002,10 +2002,10 @@ sub testvm
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
       if ($do_fork) { # run cmds in parallel
-	my @cmd = ("sh","-c","if ssh $m $remotecmd; then rsync -avz $m:$base/$logglob .; fi");
+	my @cmd = ("sh","-c","if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; fi");
         # if virsh was resumed, pause it back afterwards
 	if ($c->stash->{vm} and my $prevstat = $c->_vm_prevstatus($m)) {
-	  @cmd = ("sh","-c","if ssh $m $remotecmd; then rsync -avz $m:$base/$logglob .;sudo virsh $m $prevstat; fi");
+	  @cmd = ("sh","-c","if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .;sudo virsh $m $prevstat; fi");
 	}
 	my $pid;
 	#my $pid = IPC::Cmd::run_forked( \@cmd,

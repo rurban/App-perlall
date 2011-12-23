@@ -24,7 +24,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.001_20111222';
+our $VERSION = '0.01';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1908,8 +1908,9 @@ Options:
                build, init, makeinstall, smoke. Default: maketest
     --option|o="" remaining remote perlall cmd options and args
     --max|j 4  - how many machines in parallel.
-    --fork | --no-fork
-    --prefix|p=Perl - remote basedir
+    --fork     - test in parallel and do not wait for the results,
+                 just gather logfiles
+    --prefix|p=Perl - remote basedir if different to local basedir
 
 Config settings:
 
@@ -2260,5 +2261,12 @@ the horrible Oracle perl.
 
 L<App::SmokeBrew> which also builds a lot of perls to smoke cpan 
 releases with them.
+
+=HEAD1 COPYRIGHT
+
+This software is copyright (c) 2011 by cPanel Inc.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut

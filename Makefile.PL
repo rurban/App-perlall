@@ -8,8 +8,8 @@ my %WriteMakefileArgs =
   (
    "NAME" => "App::perlall",
    "VERSION_FROM" => "scripts/perlall",
-   "ABSTRACT" => "Create perls and test with all perls",
-   "AUTHOR" => "Reini Urban <rurban\@cpan.org>",
+   "ABSTRACT" => "Build, test and do with all perls",
+   "AUTHOR" => "Reini Urban <rurban\@cpanel.net>",
    "LICENSE" => "perl",
    "PREREQ_PM" =>  {
 		    'App::Rad'     => "1.04",

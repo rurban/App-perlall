@@ -598,7 +598,7 @@ sub _loginit {
   my $dryrun = $c->options->{dryrun};
   my $log = $c->stash->{log};
   if ( !$dryrun and $log ) {
-    $c->stash->{log_fh} = IO::File->new(">> $log");
+    $c->stash->{log_fh} = IO::File->new("> $log");
   }
 }
 
@@ -1731,9 +1731,14 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
+  my $gitshort;
+  $gitshort = `svn info t | grep Revision` if -d '.svn';
+  $gitshort = `git log --oneline HEAD^1..HEAD` if -d '.git';
   for my $p (@{$c->stash->{perlall}}) {
+    $c->_lognew(_short($p));
+    my $fh = $c->stash->{log_fh};
+    print $fh $gitshort if $gitshort;
     $c->_make($p);
-    # $c->_lognew(_short($p));
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} 
       if $c->options->{j} and !$c->_older( $p,"5.10.0");
@@ -1751,6 +1756,14 @@ sub maketest
       # optionally additional tests
       $c->_system0( $p, @{$c->argv});
     }
+    if (-d '.svn') {
+      print $fh `svn info t | grep Revision`;
+      print $fh `svn diff -x -w` if -d '.svn';
+    } elsif (-d '.git') {
+      print $fh `git log -1`;
+      print $fh `git diff`;
+    }
+    print $fh `$p -V`;
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }

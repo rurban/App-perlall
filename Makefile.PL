@@ -12,17 +12,17 @@ my %WriteMakefileArgs =
    "AUTHOR" => "Reini Urban <rurban\@cpan.org>",
    "LICENSE" => "perl",
    "PREREQ_PM" =>  {
-		    'App::Rad' => "1.04",
+		    'App::Rad'     => "1.04",
 		    'Devel::Platform::Info' => '0',
 		    'Devel::PatchPerl' => "0.46",
-		    'IO::Scalar' => '0',
+		    'IO::Scalar'   => '0',
 		    # in core:
-		    'IPC::Cmd' => '0.54', # in core since 5.10
-		    'IPC::Open3' => '0',
-		    'Pod::Usage' => "1.33",
+		    'IPC::Cmd'     => '0.46', # in core since 5.10
+		    'IPC::Open3'   => '0',
+		    'Pod::Usage'   => "1.33",
 		    'File::Basename' => "2.74",
-		    'Cwd' => "3.33",
-		    'File::Path' => "1.08",
+		    'Cwd'          => "3.30",
+		    'File::Path'   => "1.08",
 		    'Getopt::Long' => "2.36",
 		   },
    "SIGN" => 1,

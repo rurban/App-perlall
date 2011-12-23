@@ -1737,7 +1737,9 @@ sub maketest
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
-    print $fh $gitshort if $gitshort;
+    if ($fh and $gitshort) {
+      print $fh $gitshort;
+    }
     $c->_make($p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} 
@@ -1750,20 +1752,20 @@ sub maketest
     unless ($c->options->{verbose}) {
       my $log = $c->stash->{log};
       my $result = `grep Result: $log`;
-      $c->_system0($result) if $result;
+      $c->_log(0, $result) if $result;
     }
     if (@{$c->argv}) {
       # optionally additional tests
       $c->_system0( $p, @{$c->argv});
     }
-    if (-d '.svn') {
+    if (-d '.svn' and $fh) {
       print $fh `svn info t | grep Revision`;
       print $fh `svn diff -x -w` if -d '.svn';
-    } elsif (-d '.git') {
+    } elsif (-d '.git' and $fh) {
       print $fh `git log -1`;
       print $fh `git diff`;
     }
-    print $fh `$p -V`;
+    print $fh `$p -V` if $fh;
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }

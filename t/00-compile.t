@@ -8,6 +8,8 @@ use Test::More;
 use File::Find;
 use File::Temp qw{ tempdir };
 
+unlink "perlall.lock" if -f "perlall.lock";
+
 my @modules;
 find(
   sub {

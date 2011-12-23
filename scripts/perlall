@@ -1357,11 +1357,20 @@ INSTALL:
       unshift @c, $sudo if $sudo;
       $c->_system( @c );
 
+      # move away perl5.x
       $c->_system( 'mv', "$root/inst-$p/usr/local/bin/perl$ps", "$root/inst-$p/usr/local/perl$ps" );
+      # copy all versioned tools
       my @c = ($cp, "$root/inst-$p/usr/local/bin/*", "/usr/local/bin/");
       unshift @c, $sudo if $sudo;
       $c->_system( @c );
+      # move back perl5.x
       $c->_system( 'mv', "$root/inst-$p/usr/local/perl$ps", "$root/inst-$p/usr/local/bin/perl$ps" );
+    } else {
+      for (qw(cpan perldoc pod2man)) {
+	my @c = ($cp, "$root/inst-$p/usr/local/bin/$_$ps","$prefix/bin/");
+	unshift @c, $sudo if $sudo;
+	$c->_system1( @c );
+      }
     }
 
     @c = ($cp, "-r", "$root/inst-$p/usr/local/lib", "$prefix/");

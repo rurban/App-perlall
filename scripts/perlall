@@ -24,7 +24,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1731,6 +1731,7 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!" );
   my $gitshort;
   $gitshort = `svn info t | grep Revision` if -d '.svn';
   $gitshort = `git log --oneline HEAD^1..HEAD` if -d '.git';
@@ -1816,7 +1817,7 @@ sub _startvm {
   # XXX only virsh supported so far. BTW, we do not want to use the Libvirt XML module
   my $ctl = $c->config->{testvm_ctl};
   unless ($ctl) {
-    $c->_log(1,"no testvm_ctl in .perlall. _startvm $m skipped");
+    $c->_log('',"no testvm_ctl in .perlall. _startvm $m skipped");
     return 1;
   }
   $c->_fail("Unsupported testvm_ctl='$ctl' in .perlall. Only virsh.") if $ctl ne 'virsh';
@@ -2262,7 +2263,7 @@ the horrible Oracle perl.
 L<App::SmokeBrew> which also builds a lot of perls to smoke cpan 
 releases with them.
 
-=HEAD1 COPYRIGHT
+=head1 COPYRIGHT
 
 This software is copyright (c) 2011 by cPanel Inc.
 

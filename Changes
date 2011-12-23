@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.02	2011-12-24 rurban
+	* add maketest options for testvm
+	* fix pod syntax
+
 0.01	2011-12-23 rurban
 	* initial release based on
 	http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall

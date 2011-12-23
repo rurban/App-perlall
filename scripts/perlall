@@ -11,7 +11,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 # TEST:
 #   testvm logs back from forks
-#   fix testvm forked
+#   fix testvm forked and --fork arg
 #   'perlall=5.8* perlall do -m' should filter only main 5.8*
 #   testvm max balancing
 #   init is unstable (IO::Tee in IPC::Run) - refactored
@@ -1940,7 +1940,7 @@ sub testvm
   $c->addopts( "all|a", "up", "prefix|p=s", "cmd|c=s", "option|o=s", "max|j=n", "fork!" );
 
   my ($base);
-  my @testvm = split / /,$c->config->{testvm};
+  my @testvm = split / /,$c->config->{testvm_all};
   my @machines = $c->options->{all} ? @testvm : @{$c->argv};
   return "missing args" unless @machines;
   $c->options->{max} = $c->config->{testvm_max} unless $c->options->{max};
@@ -1977,15 +1977,19 @@ sub testvm
     $home = File::HomeDir->my_home;
   }
   if (File::Spec->can('abs2rel') and $home) {
-    $base = File::Spec->abs2rel(Cwd::getcwd(), $home);
+    my $cmd = Cwd::getcwd();
+    $base = File::Spec->abs2rel($cwd, $home);
+    if (length($cmd) < length($base)) { # use absolute paths if shorter
+      $base = $cwd;
+    }
   } else {
-    my $vmprefix = $c->options->{vmprefix} || "Perl";
+    my $vmprefix = $c->options->{testvm_prefix} || "Perl";
     $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
   }
   my $msg = "done";
   my $remotecmd = "'cd $base && perlall$gopts $cmd$opt'";
   my $up = $c->options->{up};
-  my $do_fork = IPC::Cmd->can_use_run_forked and $c->options->{fork};
+  my $do_fork = $c->options->{fork} and IPC::Cmd->can_use_run_forked();
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
@@ -2059,7 +2063,7 @@ sub initvm
   my $c = shift;
 
   $c->addopts( "all|a", "max|j=n");
-  my @m = $c->options->{all} ? split(/ /,$c->config->{testvm}) : @{$c->argv};
+  my @m = $c->options->{all} ? split(/ /,$c->config->{testvm_all}) : @{$c->argv};
   return "missing host" unless @m;
   $c->options->{max} = $c->config->{testvm_max} unless $c->options->{max};
   $c->_lognew('');

@@ -15,11 +15,8 @@ PERLALL_BUILDROOT=/usr/src/perl
 # use -thr suffix, if not use -nt for "non threaded"
 #usethrsuffix=0
 
-# when $HOME or File::HomeDir is not available. where are your modules on the vm's
-#vmprefix=Perl
-
 # currently used perl (set by perlall)
-alias p=perl5.15.4d-nt
+alias p=perl5.15.6d-nt
 
 # just some suggestions
 alias pb="p -Mblib"
@@ -35,6 +32,7 @@ alias perldoc=cpandoc
 # for init
 cpan=cpan
 #cpan=cpanm
+#cpan=-MCPAN
 #init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
 #   Params::Util Bundle::CPANReporter2 \
 #   B::Flags Opcodes Set::Object Math::Round Params::Classify \
@@ -45,10 +43,11 @@ cpan=cpan
 # and remote perlall. e.g. freebsd make=gmake
 # valid [user@]hostnames (manipulate your /etc/hosts)
 # must match the vm machine names if you want to control the vm.
-#testvm="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 win solaris"
-# where modules are:
+# all remote hosts, vm or physical.
+#testvm_all="centos4 centos5 centos6 freebsd7 freebsd8 openbsd49 win solaris"
+# when $HOME or File::HomeDir is not available. where are your modules on the vm's
 #testvm_prefix=Perl
-# balancing:
+# kvm balancing:
 #testvm_max=6
 # So far only: virsh. TODO: xen-shell, vmrun, VBoXManage
 #testvm_ctl=virsh

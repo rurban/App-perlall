@@ -1,5 +1,10 @@
 -*- change-log -*-
 
+0.03	2011-12-xx rurban
+	* add forgotten 5.14.2 as -m main release
+	* pass --forked to maketest children
+	* defer pause forked vm's (added _vm_delstatus)
+
 0.02	2011-12-24 rurban
 	* add maketest options for testvm
 	* fix pod syntax

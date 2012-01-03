@@ -1686,7 +1686,7 @@ sub _make {
   my $make = $Config{make};
   # checks MB
   $c->_system( $make, "-s", "clean") if -f "Makefile";
-  $c->_lognew(_short($p));
+  $c->_lognew(_short($p)) unless $c->stash->{log_fh};
   if (-f "Makefile.PL") {
     $c->_system0( $p, "Makefile.PL");
     $c->_system1( $make);

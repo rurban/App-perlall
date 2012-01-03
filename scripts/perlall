@@ -1735,7 +1735,7 @@ sub maketest
   $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked' );
   my $gitshort;
   $gitshort = `svn info t | grep Revision` if -d '.svn';
-  $gitshort = `git log --oneline HEAD^1..HEAD` if -d '.git';
+  $gitshort = `git log --oneline -1` if -d '.git';
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
@@ -1769,6 +1769,8 @@ sub maketest
     }
     print $fh `$p -V` if $fh;
   }
+  # special hooks:
+  `./store_rpt` if -f 'store_rpt';
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 

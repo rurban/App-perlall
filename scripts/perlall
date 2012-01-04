@@ -1708,6 +1708,7 @@ sub make
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
     local $c->options->{verbose} = $v;
+    undef $c->stash->{log_fh};
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
       $c->options->{verbose} = 1 unless $c->options->{quiet};
@@ -1792,6 +1793,7 @@ sub makeinstall
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
     local $c->options->{verbose} = $v;
+    undef $c->stash->{log_fh};
     $c->_make($p);
     my $instcmd = "$sudo $make install";
     if ($c->options->{notest}) {

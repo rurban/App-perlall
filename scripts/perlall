@@ -1876,7 +1876,7 @@ sub _startvm {
 	if ($max and @running > $max) {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
-	  push @{$c->stash->{vm}}, [$m,'stop'];
+	  push @{$c->stash->{vm}}, [$m,'shutdown'];
 	}
 	$c->_system1(qw(sudo virsh start), $m);
 	sleep 25;
@@ -1946,7 +1946,7 @@ VM Balancing:
     Currently only C<virsh> is supported to resume a paused vm and start 
     a stopped vm. C<--max> is yet ignored.
 
-    If C<testvm_ctl> is not set, no balancing - start+stop - will be done,
+    If C<testvm_ctl> is not set, no balancing - start+shutdown - will be done,
     such as on physical hosts or enough VM power.
     See F<.perlall>
 

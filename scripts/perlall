@@ -25,7 +25,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -211,7 +211,7 @@ sub setup {
 }
 
 sub App::Rad::Help::usage {
-    return "Usage: ".basename($0)." [options] command [arguments]";
+  return "Usage: ".basename($0)." [options] command [arguments]";
 }
 
 sub pre_process {
@@ -350,6 +350,9 @@ sub App::Rad::_get_input {
     $c->debug('received command: ' . $c->{'cmd'});
     $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
     @ARGV = @{$c->argv};
+    if (!$c->{'cmd'} and $c->options->{version}) {
+      return $c->version();
+    }
     return $c;
 }
 

@@ -1,6 +1,7 @@
 -*- change-log -*-
 
-0.04	2012-01-xx rurban
+0.04	2012-01-09 rurban
+	* perlall --version
 	* install Win32CORE.a (missing)
 	* virsh stop => shutdown
 

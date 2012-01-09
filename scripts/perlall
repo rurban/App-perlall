@@ -1340,6 +1340,11 @@ INSTALL:
     push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
     $c->_system1(@c);
   }
+  # make install for static extensions severely broken
+  if ($^O =~ /^MSWin32|cygwin/) {
+    $c->_system1($cp, 'lib/auto/Win32CORE/Win32CORE.a',
+		 "$root/inst-$p/usr/local/lib/perl5/$ps/$new/auto/Win32CORE/");
+  }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable

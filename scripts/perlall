@@ -25,7 +25,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.04';
+our $VERSION = '0.04_20120210';
 use Config;
 use Cwd ();
 use File::Spec ();

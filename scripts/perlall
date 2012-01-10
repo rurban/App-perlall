@@ -684,7 +684,7 @@ sub _check_lock {
 	unlink $l;
       } else {
 	warn "Other perlall process $pid still running. perlall.lock kept\n";
-	warn `pgrep -Ll $pid`,"\n";
+	warn `ps -l -p $pid`,"\n";
 	# unlink $l;
       }
     }

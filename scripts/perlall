@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   fix build test: missing /usr/src/perl and/or perm (see cpanreports)
 #   tee log.test unbuffered
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)

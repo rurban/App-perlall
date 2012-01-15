@@ -1754,7 +1754,7 @@ sub maketest
     }
     unless ($c->options->{verbose}) {
       my $log = $c->stash->{log};
-      my $result = `grep Result: $log`;
+      my $result = `grep -a Result: $log`;
       $c->_log(0, $result) if $result;
     }
     if (@{$c->argv}) {

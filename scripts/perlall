@@ -75,6 +75,7 @@ our @opts = (
 	  [ "nolog",    "skip writing log file(s)" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
+          [ "gitoneliner", "oneline summary for the testvm logfile"],
 	  [ "version|V" ]);
 App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
@@ -1680,6 +1681,13 @@ sub cpanm
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
+sub _gitoneliner {
+  my $c = shift;
+  return $c->options->{gitoneliner} if $c->options->{gitoneliner};
+  -d '.svn' ? `svn info t | grep Revision`
+    : (-d '.git' ? `git log --oneline -1` : '');
+}
+
 =item B<make> [commands...]
 
 like C<perlall do>, but prepends C<make -s clean; $perl Makefile.PL; make> 
@@ -1714,14 +1722,17 @@ sub make
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
+  my $gitshort = $c->_gitoneliner();
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    $c->_lognew(_short($p));
+    my $fh = $c->stash->{log_fh};
+    print $fh $gitshort if $fh and $gitshort;
     local $c->options->{verbose} = $v;
-    undef $c->stash->{log_fh};
+    # undef $c->stash->{log_fh};
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
       $c->options->{verbose} = 1 unless $c->options->{quiet};
-      # $c->_lognew(_short($p));
       $c->_system0( "$p $argv");
     }
   }
@@ -1743,15 +1754,11 @@ sub maketest
   my $c = shift;
   my $make = $Config{make};
   $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked' );
-  my $gitshort;
-  $gitshort = `svn info t | grep Revision` if -d '.svn';
-  $gitshort = `git log --oneline -1` if -d '.git';
+  my $gitshort = $c->_gitoneliner();
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
-    if ($fh and $gitshort) {
-      print $fh $gitshort;
-    }
+    print $fh $gitshort if $fh and $gitshort;
     $c->_make($p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} 
@@ -1798,11 +1805,15 @@ sub makeinstall
   $c->addopts( "force|f", "notest|n" );
   # XXX check CPAN/MyConfig.pm for sudo
   #warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
+  my $gitshort = $c->_gitoneliner();
   my $sudo = $c->config->{sudo};
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    $c->_lognew(_short($p));
     local $c->options->{verbose} = $v;
-    undef $c->stash->{log_fh};
+    my $fh = $c->stash->{log_fh};
+    print $fh $gitshort if $fh and $gitshort;
+    # undef $c->stash->{log_fh};
     $c->_make($p);
     my $instcmd = "$sudo $make install";
     if ($c->options->{notest}) {
@@ -2015,6 +2026,9 @@ sub testvm
   my $remotecmd = "cd $base && perlall$gopts $cmd$opt";
   my $up = $c->options->{up};
   my $do_fork = $c->options->{fork} and IPC::Cmd->can_use_run_forked();
+  my $gitshort = $c->_gitoneliner();
+  my $fh = $c->stash->{log_fh};
+  print $fh $gitshort if $fh and $gitshort;
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
@@ -2026,6 +2040,7 @@ sub testvm
     unless ( $up ) {
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
+      $remotecmd .= " --gitoneliner='$gitshort'" if $gitshort;
       if ($do_fork) { # run cmds in parallel
 	$remotecmd .= ' --forked' if $cmd = 'maketest';
 	my @cmd = ("sh","-c",

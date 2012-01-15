@@ -2,6 +2,7 @@
 
 0.05	2012-01-xx rurban
 	* fix pgrep command to list the running perlall.lock process
+	* pass --gitoneliner to testvm for their logfiles
 
 0.04	2012-01-09 rurban
 	* perlall --version

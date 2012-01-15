@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   fix build test: missing /usr/src/perl and/or perm (see cpanreports)
 #   tee log.test unbuffered
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
@@ -25,7 +26,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.03';
+our $VERSION = '0.04_20120210';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -74,6 +75,7 @@ our @opts = (
 	  [ "nolog",    "skip writing log file(s)" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
+          [ "gitoneliner", "oneline summary for the testvm logfile"],
 	  [ "version|V" ]);
 App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
@@ -211,7 +213,7 @@ sub setup {
 }
 
 sub App::Rad::Help::usage {
-    return "Usage: ".basename($0)." [options] command [arguments]";
+  return "Usage: ".basename($0)." [options] command [arguments]";
 }
 
 sub pre_process {
@@ -350,6 +352,9 @@ sub App::Rad::_get_input {
     $c->debug('received command: ' . $c->{'cmd'});
     $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
     @ARGV = @{$c->argv};
+    if (!$c->{'cmd'} and $c->options->{version}) {
+      return $c->version();
+    }
     return $c;
 }
 
@@ -681,7 +686,7 @@ sub _check_lock {
 	unlink $l;
       } else {
 	warn "Other perlall process $pid still running. perlall.lock kept\n";
-	warn `pgrep -Ll $pid`,"\n";
+	warn `ps -l -p $pid`,"\n";
 	# unlink $l;
       }
     }
@@ -1340,6 +1345,11 @@ INSTALL:
     push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
     $c->_system1(@c);
   }
+  # make install for static extensions severely broken
+  if ($^O =~ /^MSWin32|cygwin/) {
+    $c->_system1($cp, 'lib/auto/Win32CORE/Win32CORE.a',
+		 "$root/inst-$p/usr/local/lib/perl5/$ps/$new/auto/Win32CORE/");
+  }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable
@@ -1671,6 +1681,13 @@ sub cpanm
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
 
+sub _gitoneliner {
+  my $c = shift;
+  return $c->options->{gitoneliner} if $c->options->{gitoneliner};
+  -d '.svn' ? `svn info t | grep Revision`
+    : (-d '.git' ? `git log --oneline -1` : '');
+}
+
 =item B<make> [commands...]
 
 like C<perlall do>, but prepends C<make -s clean; $perl Makefile.PL; make> 
@@ -1705,14 +1722,17 @@ sub make
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
+  my $gitshort = $c->_gitoneliner();
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    $c->_lognew(_short($p));
+    my $fh = $c->stash->{log_fh};
+    print $fh $gitshort if $fh and $gitshort;
     local $c->options->{verbose} = $v;
-    undef $c->stash->{log_fh};
+    # undef $c->stash->{log_fh};
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
       $c->options->{verbose} = 1 unless $c->options->{quiet};
-      # $c->_lognew(_short($p));
       $c->_system0( "$p $argv");
     }
   }
@@ -1734,15 +1754,11 @@ sub maketest
   my $c = shift;
   my $make = $Config{make};
   $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked' );
-  my $gitshort;
-  $gitshort = `svn info t | grep Revision` if -d '.svn';
-  $gitshort = `git log --oneline -1` if -d '.git';
+  my $gitshort = $c->_gitoneliner();
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
-    if ($fh and $gitshort) {
-      print $fh $gitshort;
-    }
+    print $fh $gitshort if $fh and $gitshort;
     $c->_make($p);
     my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
     unshift @opts,"-j".$c->options->{j} 
@@ -1789,11 +1805,15 @@ sub makeinstall
   $c->addopts( "force|f", "notest|n" );
   # XXX check CPAN/MyConfig.pm for sudo
   #warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
+  my $gitshort = $c->_gitoneliner();
   my $sudo = $c->config->{sudo};
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
+    $c->_lognew(_short($p));
     local $c->options->{verbose} = $v;
-    undef $c->stash->{log_fh};
+    my $fh = $c->stash->{log_fh};
+    print $fh $gitshort if $fh and $gitshort;
+    # undef $c->stash->{log_fh};
     $c->_make($p);
     my $instcmd = "$sudo $make install";
     if ($c->options->{notest}) {
@@ -1871,7 +1891,7 @@ sub _startvm {
 	if ($max and @running > $max) {
 	  my $r = shift @running;
 	  $c->_system1(qw(sudo virsh suspend), $r);
-	  push @{$c->stash->{vm}}, [$m,'stop'];
+	  push @{$c->stash->{vm}}, [$m,'shutdown'];
 	}
 	$c->_system1(qw(sudo virsh start), $m);
 	sleep 25;
@@ -1941,7 +1961,7 @@ VM Balancing:
     Currently only C<virsh> is supported to resume a paused vm and start 
     a stopped vm. C<--max> is yet ignored.
 
-    If C<testvm_ctl> is not set, no balancing - start+stop - will be done,
+    If C<testvm_ctl> is not set, no balancing - start+shutdown - will be done,
     such as on physical hosts or enough VM power.
     See F<.perlall>
 
@@ -2006,6 +2026,9 @@ sub testvm
   my $remotecmd = "cd $base && perlall$gopts $cmd$opt";
   my $up = $c->options->{up};
   my $do_fork = $c->options->{fork} and IPC::Cmd->can_use_run_forked();
+  my $gitshort = $c->_gitoneliner();
+  my $fh = $c->stash->{log_fh};
+  print $fh $gitshort if $fh and $gitshort;
   my @forked;
   for my $m (@machines) {
     $c->_startvm($m) or next;
@@ -2017,6 +2040,7 @@ sub testvm
     unless ( $up ) {
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
+      $remotecmd .= " --gitoneliner='$gitshort'" if $gitshort;
       if ($do_fork) { # run cmds in parallel
 	$remotecmd .= ' --forked' if $cmd = 'maketest';
 	my @cmd = ("sh","-c",

@@ -26,7 +26,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.04_20120210';
+our $VERSION = '0.04_20120216';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1636,7 +1636,8 @@ sub do
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
-    $c->_system0( "$p @{$c->argv}");
+    local $ENV{p} = $p;
+    $c->_system0( "$p $argv");
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
 }
@@ -1690,10 +1691,13 @@ sub _gitoneliner {
 
 =item B<make> [commands...]
 
-like C<perlall do>, but prepends C<make -s clean; $perl Makefile.PL; make> 
+like C<perlall do>, but prepends C<make -s clean; $p Makefile.PL; make> 
 before executing the arguments.
+C<$p> is expanded to the currently run perl.
 
 Also is Build.PL aware but prefers Makefile.PL.
+
+    perlall make '-e1 && valgrind \$p -Mblib test.pl'
 
 =cut
 
@@ -1733,7 +1737,8 @@ sub make
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
       $c->options->{verbose} = 1 unless $c->options->{quiet};
-      $c->_system0( "$p $argv");
+      local $ENV{p} = $p;
+      $c->_system0( "$p $argv" );
     }
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
@@ -1775,7 +1780,7 @@ sub maketest
     }
     if (@{$c->argv}) {
       # optionally additional tests
-      $c->_system0( $p, @{$c->argv});
+      $c->_system0( "p=$p $p @{$c->argv}");
     }
     if (-d '.svn' and $fh) {
       print $fh `svn info t | grep Revision`;
@@ -1829,6 +1834,7 @@ sub makeinstall
     }
     if (@{$c->argv}) {
       # optionally additional tests
+      local $ENV{p} = $p;
       $c->_system0( $p, @{$c->argv} );
     }
   }

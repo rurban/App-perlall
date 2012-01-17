@@ -1348,7 +1348,8 @@ INSTALL:
   # make install for static extensions severely broken
   if ($^O =~ /^MSWin32|cygwin/) {
     $c->_system1($cp, 'lib/auto/Win32CORE/Win32CORE.a',
-		 "$root/inst-$p/usr/local/lib/perl5/$ps/$new/auto/Win32CORE/");
+		 "$root/inst-$p/usr/local/lib/perl5/$ps/$new/auto/Win32CORE/")
+      if -e 'lib/auto/Win32CORE/Win32CORE.a';
   }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
@@ -1358,7 +1359,9 @@ INSTALL:
     $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
     unshift @c, $sudo if $sudo;
     $c->_system1( @c );
-
+    if ($^O =~ /^MSWin32|cygwin/) {
+      $c->_system1( "$cp $root/inst-$p/usr/local/bin/*.dll $prefix/bin/" );
+    }
     # symlink to symbolic name (blead, smoke-me, ...)
     if ($from eq 'blead' and $^O ne 'MSWin32') {
       my $s = $p;

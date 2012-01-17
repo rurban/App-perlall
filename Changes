@@ -5,6 +5,7 @@
 	* pass --gitoneliner to testvm for their logfiles
 	* add support for $p in make and do
           e.g. perlall make '-e1 && valgrind \$p -Mblib t/test.pl'
+	* install the windows/cygwin bin/perl.dll
 
 0.04	2012-01-09 rurban
 	* perlall --version

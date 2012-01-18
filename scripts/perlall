@@ -26,7 +26,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.04_20120216';
+our $VERSION = '0.04_20120218';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -75,7 +75,7 @@ our @opts = (
 	  [ "nolog",    "skip writing log file(s)" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
-          [ "gitoneliner", "oneline summary for the testvm logfile"],
+          [ "gitoneliner=s", "oneline summary for the testvm logfile"],
 	  [ "version|V" ]);
 App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
@@ -267,9 +267,9 @@ sub pre_process {
       $s = $s . $v;
       $s =~ s/[\s\(\)\[\}\[\]]//g;
       if ($^O eq 'cygwin') {
-	my $s = $d->{source}->{uname}->[2];
+	$s = $d->{source}->{uname}->[2];
 	$s =~ s/\(.+$//;
-	$s = 'cygwin'.$s;
+	$s = 'cygwin'.$s.'_'.$d->{source}->{uname}->[1]; # cygwin1.7.10s_winxp
       }
       $s = $^O unless $s;
       if ($cmd eq 'maketest') {
@@ -697,6 +697,7 @@ sub _lognew {
   my $c = shift;
   my $p = shift;
   if ($p) {
+    $p = substr($p,0,-4) if $^O eq 'cygwin' and $p =~ /\.exe$/;
     $c->stash->{log} = $c->stash->{logprefix} . $p;
   } else {
     $c->stash->{log} = substr($c->stash->{logprefix},0,-1); # strip last -
@@ -1636,6 +1637,7 @@ sub do
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
@@ -1729,6 +1731,7 @@ sub make
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
   my $gitshort = $c->_gitoneliner();
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
@@ -1761,7 +1764,7 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked' );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
   my $gitshort = $c->_gitoneliner();
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));

@@ -1210,6 +1210,10 @@ sub _build {
       last;
     }
   }
+  # https://www.socialtext.net/perl5/installing_perl_on_os_x
+  if ($ps =~ /^5\.6\.2/ and $^O =~ /darwin|bsd|dragon/) {
+    push @conf, "-Dd_Gconvert=sprintf";
+  }
   # darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
   if ($^O eq 'darwin') {
     my $conf = join(" ",@conf);
@@ -1218,6 +1222,11 @@ sub _build {
     # clang: use ld also
     # XXX: done automatically on linux. bother only for darwin
     push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
+
+    if ($c->_older($p,'5.6.2')) { # need to use 5.6.2 hints/darwin.sh
+      #open F,">hints/darwin.sh";
+      #close F;
+    }
   }
 
   $c->_system1( @conf);
@@ -1314,7 +1323,7 @@ sub _build {
     $c->_grep("-i print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 
-  $c->_system1( $make, @j); 
+  $c->_system1( $make, @j);
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
@@ -1341,6 +1350,9 @@ INSTALL:
     # we better patch installperl
     if ($c->_older($p,'5.8.1')) {
       warn("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
+    }
+    if ($^O eq 'darwin' and $c->_older($p,'5.6.2')) {
+      $c->_system1('mv','INSTALL','INSTALL.txt');
     }
     my @c = ($make, @j, "install", "DESTDIR=$root/inst-$p");
     push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
@@ -2035,7 +2047,7 @@ sub testvm
     $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
   }
   my $msg = "done";
-  my $remotecmd = "cd $base && perlall$gopts $cmd$opt";
+  my $remotecmd = "cd $base && touch Makefile.PL && perlall$gopts $cmd$opt";
   my $up = $c->options->{up};
   my $do_fork = $c->options->{fork} and IPC::Cmd->can_use_run_forked();
   my $gitshort = $c->_gitoneliner();
@@ -2052,7 +2064,10 @@ sub testvm
     unless ( $up ) {
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
-      $remotecmd .= " --gitoneliner='$gitshort'" if $gitshort;
+      if ($gitshort) {
+	my ($commit) = split / /, $gitshort;
+	$remotecmd .= " --gitoneliner=$commit";
+      }
       if ($do_fork) { # run cmds in parallel
 	$remotecmd .= ' --forked' if $cmd = 'maketest';
 	my @cmd = ("sh","-c",

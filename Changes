@@ -7,6 +7,8 @@
           e.g. perlall make '-e1 && valgrind \$p -Mblib t/test.pl'
 	* install the windows/cygwin bin/*perl.dll. TODO rebase on cygwin.
 	* improve cygwin log name
+	* build darwin 5.6.2 with -Dd_Gconvert=sprintf
+	* testvm: touch Makefile.PL because of bad vm clocks
 
 0.04	2012-01-09 rurban
 	* perlall --version

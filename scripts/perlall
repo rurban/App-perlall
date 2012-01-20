@@ -75,7 +75,7 @@ our @opts = (
 	  [ "nolog",    "skip writing log file(s)" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
-          [ "gitoneliner=s", "oneline summary for the testvm logfile"],
+          [ "gittag=s", "for the testvm logfile"],
 	  [ "version|V" ]);
 App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
@@ -1649,7 +1649,7 @@ sub do
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
@@ -1701,7 +1701,7 @@ sub cpanm
 
 sub _gitoneliner {
   my $c = shift;
-  return $c->options->{gitoneliner} if $c->options->{gitoneliner};
+  return $c->options->{gittag} if $c->options->{gittag};
   -d '.svn' ? `svn info t | grep Revision`
     : (-d '.git' ? `git log --oneline -1` : '');
 }
@@ -1743,7 +1743,7 @@ sub make
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   my $gitshort = $c->_gitoneliner();
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
@@ -1776,7 +1776,7 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   my $gitshort = $c->_gitoneliner();
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
@@ -2064,9 +2064,9 @@ sub testvm
     unless ( $up ) {
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
-      if ($gitshort) {
+      if ($gitshort and $remotecmd != /--gittag/) {
 	my ($commit) = split / /, $gitshort;
-	$remotecmd .= " --gitoneliner=$commit";
+	$remotecmd .= " --gittag=$commit";
       }
       if ($do_fork) { # run cmds in parallel
 	$remotecmd .= ' --forked' if $cmd = 'maketest';

@@ -2,7 +2,7 @@
 
 0.05	2012-01-xx rurban
 	* fix pgrep command to list the running perlall.lock process
-	* pass --gitoneliner to testvm for their logfiles
+	* pass --gittag to testvm for their logfiles without .git
 	* add support for $p in make and do
           e.g. perlall make '-e1 && valgrind \$p -Mblib t/test.pl'
 	* install the windows/cygwin bin/*perl.dll. TODO rebase on cygwin.

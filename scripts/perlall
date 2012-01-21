@@ -59,7 +59,7 @@ BEGIN { # check platform support: perldoc perlport
   _auto_use( @extuse );
 }
 # 5.8.4: ??, 5.8.5: centos4, 5.8.8: centos5
-our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.15.6);
+our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.15.7);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -1393,7 +1393,7 @@ INSTALL:
       # move back perl5.x
       $c->_system( 'mv', "$root/inst-$p/usr/local/perl$ps", "$root/inst-$p/usr/local/bin/perl$ps" );
     } else {
-      for (qw(cpan perldoc pod2man)) {
+      for (qw(cpan perldoc pod2man perlbug)) {
 	my @c = ($cp, "$root/inst-$p/usr/local/bin/$_$ps","$prefix/bin/");
 	unshift @c, $sudo if $sudo;
 	$c->_system1( @c );

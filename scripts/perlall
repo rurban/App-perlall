@@ -59,7 +59,7 @@ BEGIN { # check platform support: perldoc perlport
   _auto_use( @extuse );
 }
 # 5.8.4: ??, 5.8.5: centos4, 5.8.8: centos5
-our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.15.6);
+our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.15.7);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -75,7 +75,7 @@ our @opts = (
 	  [ "nolog",    "skip writing log file(s)" ],
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
-          [ "gitoneliner=s", "oneline summary for the testvm logfile"],
+          [ "gittag=s", "for the testvm logfile"],
 	  [ "version|V" ]);
 App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
@@ -1326,7 +1326,7 @@ sub _build {
     $c->_grep("-i print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 
-  $c->_system1( $make, @j); 
+  $c->_system1( $make, @j);
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }
@@ -1396,7 +1396,7 @@ INSTALL:
       # move back perl5.x
       $c->_system( 'mv', "$root/inst-$p/usr/local/perl$ps", "$root/inst-$p/usr/local/bin/perl$ps" );
     } else {
-      for (qw(cpan perldoc pod2man)) {
+      for (qw(cpan perldoc pod2man perlbug)) {
 	my @c = ($cp, "$root/inst-$p/usr/local/bin/$_$ps","$prefix/bin/");
 	unshift @c, $sudo if $sudo;
 	$c->_system1( @c );
@@ -1652,7 +1652,7 @@ sub do
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
@@ -1704,7 +1704,7 @@ sub cpanm
 
 sub _gitoneliner {
   my $c = shift;
-  return $c->options->{gitoneliner} if $c->options->{gitoneliner};
+  return $c->options->{gittag} if $c->options->{gittag};
   -d '.svn' ? `svn info t | grep Revision`
     : (-d '.git' ? `git log --oneline -1` : '');
 }
@@ -1746,7 +1746,7 @@ sub make
   my $c = shift;
   my $argv = join " ",@{$c->argv};
   my $make = $Config{make};
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   my $gitshort = $c->_gitoneliner();
   my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
@@ -1779,7 +1779,7 @@ sub maketest
 {
   my $c = shift;
   my $make = $Config{make};
-  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gitoneliner=s" );
+  $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   my $gitshort = $c->_gitoneliner();
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
@@ -2050,7 +2050,7 @@ sub testvm
     $base = File::Spec->catdir($vmprefix, basename(Cwd::getcwd()));
   }
   my $msg = "done";
-  my $remotecmd = "cd $base && perlall$gopts $cmd$opt";
+  my $remotecmd = "cd $base && touch Makefile.PL && perlall$gopts $cmd$opt";
   my $up = $c->options->{up};
   my $do_fork = $c->options->{fork} and IPC::Cmd->can_use_run_forked();
   my $gitshort = $c->_gitoneliner();
@@ -2067,7 +2067,10 @@ sub testvm
     unless ( $up ) {
       # my $buf = ' 'x10000;
       my $logglob = $cmd eq 'maketest' ? "log.test-*" : "log.$cmd-*";
-      $remotecmd .= " --gitoneliner='$gitshort'" if $gitshort;
+      if ($gitshort and $remotecmd != /--gittag/) {
+	my ($commit) = split / /, $gitshort;
+	$remotecmd .= " --gittag=$commit";
+      }
       if ($do_fork) { # run cmds in parallel
 	$remotecmd .= ' --forked' if $cmd = 'maketest';
 	my @cmd = ("sh","-c",

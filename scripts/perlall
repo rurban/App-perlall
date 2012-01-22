@@ -1176,17 +1176,19 @@ sub _build {
 	     or grep /^$f[= ]/, @{$c->options->{A}}
 	     or grep /^$f[= ]/, @{$c->options->{U}};
 	# -Dlibpth=/usr/local/lib64 /lib64 /usr/lib64 -D
-	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -/; # until - or $
+	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -[ADU]/; # Not until -L
 	if ($f =~ /^use/ and !$v) {
 	  my ($u) = $tryargs =~ /-([DU])$f /;
 	  $c->debug("-$u$f") if $u;
 	  push @conf, "-$u$f" if $u;
 	} elsif ($v and $d) {
+	  $v =~ s/([^\\]) /$1\\ /g;
 	  # There can be multiple -A$f=$v
 	  if ($d eq 'A') {
 	    my @v = ($tryargs =~ /-A$f=(.+?) /g);
 	    for my $v (@v) {
 	      $c->debug("-$d$f=$v") if $v;
+	      $v =~ s/([^\\]) /$1\\ /g;
 	      push @conf, "-$d$f='$v'";
 	    }
 	  } else {
@@ -1202,6 +1204,7 @@ sub _build {
 	      }
 	    }
 	    $c->debug("-$d$f=$v");
+	    $v =~ s/([^\\]) /$1\ /g;
 	    push @conf, "-$d$f='$v'";
 	  }
 	}
@@ -1209,6 +1212,10 @@ sub _build {
       $c->debug("merged config_args: ".join(" ",@conf));
       last;
     }
+  }
+  # https://www.socialtext.net/perl5/installing_perl_on_os_x
+  if ($ps =~ /^5\.6\.2/ and $^O =~ /darwin|bsd|dragon/) {
+    push @conf, "-Dd_Gconvert=sprintf";
   }
   # darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
   if ($^O eq 'darwin') {
@@ -1218,6 +1225,11 @@ sub _build {
     # clang: use ld also
     # XXX: done automatically on linux. bother only for darwin
     push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
+
+    if ($c->_older($p,'5.6.2')) { # need to use 5.6.2 hints/darwin.sh
+      #open F,">hints/darwin.sh";
+      #close F;
+    }
   }
 
   $c->_system1( @conf);
@@ -1341,6 +1353,9 @@ INSTALL:
     # we better patch installperl
     if ($c->_older($p,'5.8.1')) {
       warn("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
+    }
+    if ($^O eq 'darwin' and $c->_older($p,'5.6.2')) {
+      $c->_system1('mv','INSTALL','INSTALL.txt');
     }
     my @c = ($make, @j, "install", "DESTDIR=$root/inst-$p");
     push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';

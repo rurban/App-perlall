@@ -26,7 +26,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.04_20120218';
+our $VERSION = '0.04_20120229';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -108,7 +108,7 @@ perlall - build, test and do with all perls
 
     perlall testvm centos4 centos5 solaris10
     perlall initvm --all --max=6
-    perlall testvm --all -c=init # see testvm in .perlall
+    perlall testvm --all --fork -c=init # see testvm in .perlall
     perlall selfupgrade
 
 =head2 Planned Features

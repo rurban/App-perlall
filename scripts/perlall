@@ -4,7 +4,6 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   fix build test: missing /usr/src/perl and/or perm (see cpanreports)
 #   tee log.test unbuffered
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
@@ -26,7 +25,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.04_20120131';
+our $VERSION = '0.05';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -307,8 +306,14 @@ sub pre_process {
 sub App::Rad::addopts {
   my $c = shift;
   my $savopts = $c->options;
+  my @savargv = @ARGV;
+  if ($c->cmd =~ /^make|do/) {
+    $c->debug("pass options verbatim through");
+    @ARGV = ();
+  }
   $c->getopt( @_ );
   $c->options->{$_} = $savopts->{$_} for keys %$savopts; # merge with old opts
+  @ARGV = @savargv;
 }
 
 # only process opts before the command. 
@@ -910,16 +915,16 @@ sub build
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd }
 
+  my $dryrun = $c->options->{dryrun};
   my $root = $c->config->{PERLALL_BUILDROOT};
   my $prefix = $c->config->{PERLALL_PREFIX};
   unless ($root) {
     $c->_fail("Empty PERLALL_BUILDROOT in .perlall");
   }
-  unless (-d $root) {
+  if (!-d $root and !$dryrun) {
     $c->_system1( "mkdir",$root) 
       and $c->_fail("Cannot create PERLALL_BUILDROOT $root");
   }
-  my $dryrun = $c->options->{dryrun};
   my $from = shift @args ; # might be empty
   my $ps = _numonly($p);
   # $ps =~ s/\-.+$//;
@@ -1604,6 +1609,7 @@ For example, run a Hello program:
 is expanded to something like:
 
   for perl in /usr/local/bin/perl5*; do
+    p=$perl
     echo $perl $*
     $perl $*
   done
@@ -1615,8 +1621,9 @@ Better restricts perls via ENV:
 is expanded to something like:
 
   for perl in /usr/local/bin/perl5.14.*d*; do
-    echo $perl $*
-    $perl $*
+    p=$perl
+    echo $p $*
+    $p $*
   done
 
 The output depends on your perl installations, and looks like this:

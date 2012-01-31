@@ -1,6 +1,6 @@
 -*- change-log -*-
 
-0.05	2012-01-xx rurban
+0.05	2012-01-31 rurban
 	* fix pgrep command to list the running perlall.lock process
 	* pass --gittag to testvm for their logfiles without .git
 	* add support for $p in make and do
@@ -9,6 +9,9 @@
 	* improve cygwin log name
 	* build darwin 5.6.2 with -Dd_Gconvert=sprintf
 	* testvm: touch Makefile.PL because of bad vm clocks
+	* addopts: for make* and do pass remaining options verbatim through,
+	  without warning
+	* pass tests without existing /usr/src/perl
 
 0.04	2012-01-09 rurban
 	* perlall --version

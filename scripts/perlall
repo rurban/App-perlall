@@ -26,7 +26,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.04_20120229';
+our $VERSION = '0.04_20120131';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -2072,7 +2072,7 @@ sub testvm
 	$remotecmd .= " --gittag=$commit";
       }
       if ($do_fork) { # run cmds in parallel
-	$remotecmd .= ' --forked' if $cmd = 'maketest';
+	$remotecmd .= ' --forked' if $cmd = 'maketest' and $cmd !~ /--forked/;
 	my @cmd = ("sh","-c",
 		   "if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; fi");
         # if virsh was resumed, pause it back afterwards

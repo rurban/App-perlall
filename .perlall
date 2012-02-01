@@ -15,6 +15,9 @@ PERLALL_BUILDROOT=/usr/src/perl
 # use -thr suffix, if not use -nt for "non threaded"
 #usethrsuffix=0
 
+# 1h default. Or 0 for no timeout
+timeout = 3600
+
 # currently used perl (set by perlall)
 alias p=perl5.15.6d-nt
 

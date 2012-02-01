@@ -25,7 +25,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.05';
+our $VERSION = '0.05_20120201';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -75,6 +75,7 @@ our @opts = (
 	  [ "help|h",   "commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
           [ "gittag=s", "for the testvm logfile"],
+          [ "timeout=i", "IPC::Cmd::run timeout in seconds, Default: 0"],
 	  [ "version|V" ]);
 App::Rad->import ('debug') if grep /^-d$/, @ARGV;
 App::Rad->run();
@@ -133,6 +134,10 @@ perlall - build, test and do with all perls
 	  "nolog",    "skip writing log file(s)"
 	  "help|h",   "commands and options"
 	  "debug|d",  "lots of internal debugging output"
+          "timeout=i","IPC::Cmd::run timeout in seconds, Default: 0"
+          "gittag=s", "Internally set by testvm for the logfile"
+          "forked!",  "Internally set by testvm"
+	  "help|h"
 	  "version|V"
 
 build and smoke only
@@ -251,6 +256,7 @@ sub pre_process {
       unless $c->config->{PERLALL_BUILDROOT};
     $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
       unless $c->config->{'perl-git'};
+    $c->config->{'timeout'} = 0 unless $c->config->{'timeout'};
 
     if ($c->is_command($cmd) and $cmd !~ /^list/) {
       # logging + locking
@@ -352,6 +358,9 @@ sub App::Rad::_get_input {
     $parser->configure( qw(bundling) );
     @ARGV = @options; # getoptions eats @ARGV
     my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
+    for (qw(timeout)) { # set defaults from config
+      $c->options->{$_} = $c->config->{$_} unless exists $c->options->{$_};
+    }
     $c->debug('received options: ' . join(' ',@options) . ' => '
 	      . _opts($c->options));
     $c->debug('received command: ' . $c->{'cmd'});
@@ -591,7 +600,12 @@ sub __system {
       # XXX we rather want a tee STDOUT/ERR to print to fh at the same time as to STDOUT/ERR
       # stdout_handler+stderr_handler
       my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf) =
-	IPC::Cmd::run('command' => [ @_ ], 'verbose' => $c->options->{verbose});
+	IPC::Cmd::run('command' => [ @_ ],
+		      'verbose' => $c->options->{verbose},
+		      (defined $c->options->{timeout} 
+		       ? ('timeout' => $c->options->{timeout} )
+		       : ())
+	);
       if ($fh and @$full_buf) {
 	print $fh $_ for @$full_buf;
       }
@@ -609,7 +623,7 @@ sub _loginit {
   my $dryrun = $c->options->{dryrun};
   my $log = $c->stash->{log};
   if ( !$dryrun and $log ) {
-    $c->stash->{log_fh} = IO::File->new("> $log");
+    $c->stash->{log_fh} = IO::File->new($v ? ">& $log" : "> $log");
   }
 }
 

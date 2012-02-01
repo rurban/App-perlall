@@ -606,7 +606,7 @@ sub __system {
 		       ? ('timeout' => $c->options->{timeout} )
 		       : ())
 	);
-      if ($fh and @$full_buf) {
+      if ($fh and !$v and @$full_buf) {
 	print $fh $_ for @$full_buf;
       }
       if (@$stderr_buf and !$c->options->{quiet}) {

@@ -1308,6 +1308,9 @@ sub _build {
 		qw(config.h config.sh));
     }
   }
+  if ($archname and $archname ne $new) {
+    $archname = $new;
+  }
   if ($^O =~ /cygwin|MSWin32/ and $suffix) {
     $c->debug("post-configure perl.dll fixes");
     # libperl really is libperl.a. Should be libperl.dll.a at least. we use the dll.
@@ -1391,8 +1394,9 @@ INSTALL:
   }
   # make install for static extensions severely broken
   if ($^O =~ /^MSWin32|cygwin/) {
+    # XXX for all static libs actually
     $c->_system1($cp, 'lib/auto/Win32CORE/Win32CORE.a',
-		 "$root/inst-$p/usr/local/lib/perl5/$ps/$new/auto/Win32CORE/")
+		 "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/Win32CORE/")
       if -e 'lib/auto/Win32CORE/Win32CORE.a';
   }
 

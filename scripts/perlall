@@ -4,13 +4,14 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
-#   tee log.test unbuffered
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   more testvm_ctl: xen-shell, vmrun, VBoXManage
 #   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
+#   cmd --help
 # TEST:
+#   tee with -v
 #   testvm logs back from forks
 #   fix testvm forked and --fork arg
 #   'perlall=5.8* perlall do -m' should filter only main 5.8*
@@ -25,7 +26,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.05_20120201';
+our $VERSION = '0.05_20120202';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1442,7 +1443,7 @@ INSTALL:
     : "$prefix/bin/perl$p failed to install";
 }
 
-=item install  [ perl<version><suffix> [ from ]]
+=item B<install> [ perl<version><suffix> [ from ]]
 
 Same as build
 

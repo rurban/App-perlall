@@ -606,8 +606,8 @@ sub _backup($) {
 sub __system {
   my $c = shift;
   unless ($c->options->{dryrun}) {
-    # native chdir/rmdir/mkdir/unlink
-    if ($_[0] =~ /^chdir|rmdir|mkdir|unlink$/) {
+    # native chdir/rmdir/mkdir/unlink/rename
+    if ($_[0] =~ /^chdir|rmdir|mkdir|unlink|rename$/) {
       my $cmd = shift @_;
       my $what = join "','",@_;
       eval "$cmd('$what')";
@@ -1352,6 +1352,8 @@ sub _build {
 	$c->debug("post-configure DLLNAME $dllname fixes");
 	my $dll = substr($libperl,0,-4);
 	$c->_grep("-i s/^DLLNAME= $dllname/DLLNAME= $dll/; print", qw(Makefile GNUmakefile));
+	# move away the culprit
+	$c->_system('rename','cygwin/Makefile.SH','cygwin/Makefile.SH.orig') if -f 'cygwin/Makefile.SH';
       }
     }
     # XXX fix config_args also

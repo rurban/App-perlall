@@ -1,0 +1,48 @@
+prereq's: perl, make, git, sh
+
+perl Makefile.PL
+make
+make test
+
+with sudo:
+
+sudo make install
+test -f ~/.perlall || cp .perlall ~/
+sudo mkdir -p /usr/src/perl/blead/perl-git
+sudo chown $USER -R /usr/src/perl
+cd /usr/src/perl/blead/
+
+as root:
+
+make install
+test -f ~/.perlall || cp .perlall ~/
+mkdir -p /usr/src/perl/blead/perl-git
+cd /usr/src/perl/blead/
+
+without sudo (local as with perlbrew)
+
+cp script/perlall ~/bin/perlall
+# ensure that $HOME/bin is in your $PATH
+test -f ~/.perlall || cp .perlall ~/
+cd ~
+mkdir -p ~/perl5/blead/perl-git
+sed -i 's,/usr/src/perl/blead/perl-git,~/perl5/blead/perl-git,' .perlall
+sed -i 's,PERLALL_PREFIX=/usr/local,PERLALL_PREFIX=~/perl5,' .perlall
+sed -i 's,PERLALL_BUILDROOT=/usr/src/perl,PERLALL_BUILDROOT=~/perl5,' .perlall
+sed -i 's,# PERLALL_BINDIR=~/perl5/perlbrew/bin,PERLALL_BINDIR=~/bin,' .perlall
+cd ~/perl5/blead/
+
+for all three variants:
+
+git clone git://perl5.git.perl.org/perl.git perl-git
+perlall -v build --force bleadd --link
+perlall -v build --force 5.12.4d-nt
+perlall -v build --force 5.14.2d-nt
+perlall -v build --force 5.10.1d-nt
+perlall -v build --force 5.8.9d-nt
+perlall -v build --force 5.8.8d-nt
+perlall -v build --force 5.8.5d-nt
+perlall -v build --force 5.8.4d-nt
+perlall -v build --force 5.6.2d-nt
+
+perlall init

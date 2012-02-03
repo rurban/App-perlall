@@ -490,7 +490,7 @@ sub _older {
   $p =~ s/(\.\d+)\D.*$/$1/;
   # perl5.14.2d-nt@345aef vs 5.12 => 14.2 vs 12
   $ver =~ s/^5\.//;
-  $c->debug("_older($_[0],$_[1]) => $p,$ver");
+  $c->debug("_older($_[0], $_[1]) => $p, $ver");
   return $p < $ver;
 }
 
@@ -756,7 +756,7 @@ sub _grep {
     $inplace = 1;
     $cmd = substr($cmd,3);
   }
-  $c->_log('',"perl -i -ne'$cmd'",join(" ",@_)) if $inplace;
+  $c->_log('',"perl -i~ -ne'$cmd'",join(" ",@_)) if $inplace;
   return if $c->options->{dryrun};
   my $catch = '';
   while (my $f = shift @_) {
@@ -1267,6 +1267,9 @@ sub _build {
       #close F;
     }
   }
+  if ($^O eq 'msys') { # msys: mingw bootstrapping
+    push @conf, "-Dlibc=/usr/lib.libmsys-1.0.dll.a", "-Dusenm=no";
+  }
 
   $c->_system1( @conf);
   $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
@@ -1334,12 +1337,12 @@ sub _build {
       $c->_log('',"configure did keep our libperl, good");
     } elsif ($libperl and $dll) {
       $libperl =~ s/([\.\$\%\@])/\\$1/g;
-      $c->_grep("-i s,$dll,$libperl,",
+      $c->_grep("-i s,$dll,$libperl,; print",
 		qw(config.sh config.h Makefile GNUmakefile myconfig));
       if ($^O eq 'cygwin') {
-	$c->_grep("-i s,libperl='libperl\.a',libperl='$libperl',",
+	$c->_grep("-i s,libperl='libperl\.a',libperl='$libperl',; print",
 		  qw(config.sh));
-	$c->_grep("-i s,libperl=libperl\.a,libperl=$libperl,",
+	$c->_grep("-i s,libperl=libperl\.a,libperl=$libperl,; print",
 		  qw(myconfig));
       }
     }
@@ -1348,7 +1351,7 @@ sub _build {
       if ("$dllname.dll" ne $libperl) {
 	$c->debug("post-configure DLLNAME $dllname fixes");
 	my $dll = substr($libperl,0,-4);
-	$c->_grep("-i s,$dllname,$dll,", qw(Makefile GNUmakefile));
+	$c->_grep("-i s/^DLLNAME= $dllname/DLLNAME= $dll/; print", qw(Makefile GNUmakefile));
       }
     }
     # XXX fix config_args also
@@ -1416,10 +1419,8 @@ INSTALL:
     $c->_system1(@c);
   }
   # make install for static extensions severely broken
-  if (my $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh")) {
-    #if ($^O =~ /^MSWin32|cygwin|msys/) {
-    #  $static_ext = 'Win32CORE'; # XXX for all static libs actually
-    #}
+  my $static_ext;
+  if (-d "$root/inst-$p" and $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh")) {
     $c->debug("post-configure install static extensions $static_ext") if $static_ext;
     for my $ext (split(/ /,$static_ext)) { # may be PerlIO/scalar
       my $base = basename($ext);

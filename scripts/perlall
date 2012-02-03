@@ -596,6 +596,12 @@ sub _print {
     print "\033[1;39m",join(" ",@_),"\033[0;0m\n";
   }
 }
+sub _backup($) {
+  my $f = shift;
+  my $i = 1;
+  while (-e "$f.$i") { $i++ }
+  rename $f,"$f.$i";
+}
 sub __system {
   my $c = shift;
   unless ($c->options->{dryrun}) {
@@ -632,6 +638,7 @@ sub _loginit {
   my $dryrun = $c->options->{dryrun};
   my $log = $c->stash->{log};
   if ( !$dryrun and $log ) {
+    _backup($log) if -e $log;
     $c->stash->{log_fh} = IO::File->new($v ? ">& $log" : "> $log");
   }
 }
@@ -1279,6 +1286,11 @@ sub _build {
     if ($new eq $archname) {
       $new .= "-debug" if $debug and $archname !~ /-debug/;
       $new .= $gitsuffix if $gitsuffix  and $archname !~ /$gitsuffix$/;
+      if (!$ithreads and $new =~ /-thread/) {
+	$new =~ s/-thread//;
+      } elsif ($ithreads and $new !~ /-thread/) {
+	$new .= "-thread";
+      }
     }
     $c->debug("post-configure archname fixes: $archname => $new");
     $c->_fail("archname not detected in config.sh") unless $archname;
@@ -1393,11 +1405,16 @@ INSTALL:
     $c->_system1(@c);
   }
   # make install for static extensions severely broken
-  if ($^O =~ /^MSWin32|cygwin/) {
-    # XXX for all static libs actually
-    $c->_system1($cp, 'lib/auto/Win32CORE/Win32CORE.a',
-		 "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/Win32CORE/")
-      if -e 'lib/auto/Win32CORE/Win32CORE.a';
+  my $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh");
+  #if ($^O =~ /^MSWin32|cygwin|msys/) {
+  #  $static_ext = 'Win32CORE'; # XXX for all static libs actually
+  #}
+  $c->debug("post-configure install static extensions $static_ext") if $static_ext;
+  for my $ext (qw($static_ext)) { # may be PerlIO/scalar
+    my $base = basename($ext);
+    my $dir = "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/$ext";
+    $c->_system1("mkdir","-p",$dir) unless -d $dir;
+    $c->_system1($cp, 'lib/auto/$ext/$base.a', "$dir/") if -e 'lib/auto/$ext/$base.a';
   }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.

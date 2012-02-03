@@ -733,7 +733,7 @@ sub _lognew {
   my $c = shift;
   my $p = shift;
   if ($p) {
-    $p = substr($p,0,-4) if $^O eq 'cygwin' and $p =~ /\.exe$/;
+    $p = substr($p,0,-4) if $p =~ /\.exe$/;
     $c->stash->{log} = $c->stash->{logprefix} . $p;
   } else {
     $c->stash->{log} = substr($c->stash->{logprefix},0,-1); # strip last -

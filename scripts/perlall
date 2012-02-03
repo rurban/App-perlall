@@ -10,6 +10,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 #   cmd --help
+#   working on getting msys compiled, bootstrap a mingw perl without strawberry
 # TEST:
 #   tee with -v
 #   testvm logs back from forks
@@ -26,7 +27,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.05_20120202';
+our $VERSION = '0.05_20120203';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1323,7 +1324,8 @@ sub _build {
   if ($archname and $archname ne $new) {
     $archname = $new;
   }
-  if ($^O =~ /cygwin|MSWin32/ and $suffix) {
+  
+  if ($^O =~ /cygwin|MSWin32/) {
     $c->debug("post-configure perl.dll fixes");
     # libperl really is libperl.a. Should be libperl.dll.a at least. we use the dll.
     my $dll = $dryrun ? "fake.dll"
@@ -1340,9 +1342,18 @@ sub _build {
 	$c->_grep("-i s,libperl=libperl\.a,libperl=$libperl,",
 		  qw(myconfig));
       }
-      # XXX fix config_args also
     }
+    if ($^O eq 'cygwin' and !$dryrun) {
+      my $dllname = $c->_grep("/^DLLNAME= (cygperl.+?)\$/ and print \$1", "GNUmakefile");
+      if ("$dllname.dll" ne $libperl) {
+	$c->debug("post-configure DLLNAME $dllname fixes");
+	my $dll = substr($libperl,0,-4);
+	$c->_grep("-i s,$dllname,$dll,", qw(Makefile GNUmakefile));
+      }
+    }
+    # XXX fix config_args also
   }
+
   if ($^O eq 'darwin') { # darwin hints overwrote ld
     $c->debug("post-configure darwin ld fixes");
     my $ld = $dryrun ? "env MACOSX_DEPLOYMENT_TARGET=10.3 cc"
@@ -1405,16 +1416,17 @@ INSTALL:
     $c->_system1(@c);
   }
   # make install for static extensions severely broken
-  my $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh");
-  #if ($^O =~ /^MSWin32|cygwin|msys/) {
-  #  $static_ext = 'Win32CORE'; # XXX for all static libs actually
-  #}
-  $c->debug("post-configure install static extensions $static_ext") if $static_ext;
-  for my $ext (qw($static_ext)) { # may be PerlIO/scalar
-    my $base = basename($ext);
-    my $dir = "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/$ext";
-    $c->_system1("mkdir","-p",$dir) unless -d $dir;
-    $c->_system1($cp, 'lib/auto/$ext/$base.a', "$dir/") if -e 'lib/auto/$ext/$base.a';
+  if (my $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh")) {
+    #if ($^O =~ /^MSWin32|cygwin|msys/) {
+    #  $static_ext = 'Win32CORE'; # XXX for all static libs actually
+    #}
+    $c->debug("post-configure install static extensions $static_ext") if $static_ext;
+    for my $ext (split(/ /,$static_ext)) { # may be PerlIO/scalar
+      my $base = basename($ext);
+      my $dir = "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/$ext";
+      $c->_system1("mkdir","-p",$dir) unless -d $dir;
+      $c->_system1($cp, "lib/auto/$ext/$base.a", "$dir/") if -e "lib/auto/$ext/$base.a";
+    }
   }
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.

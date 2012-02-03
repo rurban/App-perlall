@@ -2,8 +2,9 @@
 
 0.06	2012-02-xx rurban
 	* do not overwrite old logfiles, backup numbered
-	* build: check for -thread in archname (wrong hints overrides)
+	* build: check for -thread in archname, wrong hints overrides
 	* build: install static_ext which is broken in perl
+	* build: fix DLLNAME on cygwin
 
 0.05	2012-01-31 rurban
 	* fix pgrep command to list the running perlall.lock process

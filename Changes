@@ -2,10 +2,13 @@
 
 0.06	2012-02-xx rurban
 	* do not overwrite old logfiles, backup numbered
+	* build: use config vars from .perlall for building new perls: prefix, bindir
 	* build: check for -thread in archname, wrong hints overrides
 	* build: install static_ext which is broken in perl
 	* build: add DLLNAME fix on cygwin
+	* build: add LLIBPERL fix on cygwin (It was not me, who did this! I fixed it in 5.10)
 	* build: fix post-configure on cygwin, -i print missing
+	* build: patch installperl for custom perldll on cygwin
 	* INSTALL: added INSTALL instructions for root, sudo and non-sudo
 
 0.05	2012-01-31 rurban

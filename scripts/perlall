@@ -10,7 +10,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 #   cmd --help
-#   working on getting msys compiled, bootstrap a mingw perl without strawberry
+#   get msys compiled, bootstrap a mingw perl without strawberry
 # TEST:
 #   tee with -v
 #   testvm logs back from forks
@@ -897,6 +897,7 @@ Specific Options:
 
 =cut
 
+
 sub build
   :Help('build [opts] perl<version><suffix> [ branch|from ]')
 {
@@ -1424,6 +1425,9 @@ INSTALL:
   my $static_ext;
   if (-d "$root/inst-$p" and $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh")) {
     $c->debug("post-configure install static extensions $static_ext") if $static_ext;
+    my $archname = $dryrun ? "fake-arch"
+      : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh")
+      unless $archname;
     for my $ext (split(/ /,$static_ext)) { # may be PerlIO/scalar
       my $base = basename($ext);
       my $dir = "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/$ext";
@@ -1497,6 +1501,7 @@ Uninstalls the given version.
 
 =cut
 
+
 sub uninstall
   :Help('sudo rm /usr/local/bin/perl<arg> and its archlibs')
 {
@@ -1538,6 +1543,7 @@ Description and OPTIONS see L</build>.
 
 =cut
 
+
 sub _smoke
 {
   my ($c, $p, $from, @j) = @_;
@@ -1557,6 +1563,7 @@ recursion and tail-recursion without IO to prevent too many
 external influences, though perl typically shines on IO.
 
 =cut
+
 
 sub bench
   :Help('NYI')
@@ -1724,6 +1731,7 @@ Notice that the commands are not executed in parallel.
 
 =cut
 
+
 sub do
   :Help('Execute commands with all perls')
 {
@@ -1745,6 +1753,7 @@ sub do
 like C<perlall do>, but calls C<perl5.* -S cpan args...> for all perls
 
 =cut
+
 
 sub cpan
   :Help('Call cpan with args for all perls')
@@ -2099,6 +2108,7 @@ VM Balancing:
     See F<.perlall>
 
 =cut
+
 
 sub testvm
   :Help('Test on remote accounts via ssh/rsync (vm or host)')

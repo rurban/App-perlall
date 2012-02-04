@@ -1431,7 +1431,7 @@ INSTALL:
     for my $ext (split(/ /,$static_ext)) { # may be PerlIO/scalar
       my $base = basename($ext);
       my $dir = "$root/inst-$p/usr/local/lib/perl5/$ps/$archname/auto/$ext";
-      $c->_system1("mkdir","-p",$dir) unless -d $dir;
+      $c->_system1("mkdir -p $dir") unless -d $dir;
       $c->_system1($cp, "lib/auto/$ext/$base.a", "$dir/") if -e "lib/auto/$ext/$base.a";
     }
   }

@@ -1333,7 +1333,7 @@ sub _build {
   if ($archname and $archname ne $new) {
     $archname = $new;
   }
-  
+
   if ($^O =~ /cygwin|MSWin32/) {
     $c->debug("post-configure perl.dll fixes");
     # libperl really is libperl.a. Should be libperl.dll.a at least. we use the dll.
@@ -1353,19 +1353,19 @@ sub _build {
       }
     }
     if ($^O eq 'cygwin' and !$dryrun) {
-      my $dllname = $c->_grep("/^DLLNAME= (cygperl.+?)\$/ and print \$1", "GNUmakefile");
-      if ("$dllname.dll" ne $libperl) {
+      my $cygmk = 'cygwin/Makefile.SHs';
+      # <= 5.8.8
+      if (-e $cygmk and $c->_grep("/^linklibperl=(-l)/ and print \$1", $cygmk)) {
+	$c->debug("post-configure LLIBPERL llibperl fixes");
+	$c->_grep('-i s/^linklibperl=-l.*/linklibperl=\$libperl.dll/; print', $cygmk);
+      }
+      # since 5.8.9
+      if (my $dllname = $c->_grep("/^DLLNAME= (\$dllname)\$/ and print \$1", $cygmk)) {
 	$c->debug("post-configure DLLNAME $dllname fixes");
 	my $dll = substr($libperl,0,-4);
-	$c->_grep("-i s/^DLLNAME= $dllname/DLLNAME= $dll/; print", qw(Makefile GNUmakefile));
-	# move away the culprit
-	$c->_system('rename','cygwin/Makefile.SH','cygwin/Makefile.SH.orig') if -f 'cygwin/Makefile.SH';
-      }
-      my $llibperl = $c->_grep("/^LLIBPERL= (-lcygperl.+?)\$/ and print \$1", "GNUmakefile");
-      if ($llibperl =~ /^-lcygperl/) {
-	$c->debug("post-configure LLIBPERL $llibperl fixes");
-	my $new = substr($llibperl,2).".dll";
-	$c->_grep("-i s/^LLIBPERL= $llibperl/LLIBPERL= $new/; print", qw(Makefile GNUmakefile));
+	if ($dll ne $dllname) {
+	  $c->_grep("-i s/^DLLNAME= \$dllname/DLLNAME= $dll/; print", $cygmk);
+	}
       }
     }
     # XXX fix config_args also
@@ -1448,7 +1448,7 @@ EOP
     # it also doesn't do lib on versiononly (i.e. usedevel)
     # we better patch installperl
     if ($c->_older($p,'5.8.1')) {
-      warn("perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
+      warn("TODO perl <= 5.8.0 needs to patch installperl: DESTDIR, versiononly w/ lib");
     }
     if ($^O eq 'darwin' and $c->_older($p,'5.6.2')) {
       $c->_system1('mv','INSTALL','INSTALL.txt');
@@ -2461,7 +2461,7 @@ releases with them.
 
 =head1 COPYRIGHT
 
-This software is copyright (c) 2011 by cPanel Inc.
+This software is copyright (c) 2011,2012 by cPanel Inc.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

@@ -610,7 +610,11 @@ sub __system {
     if ($_[0] =~ /^chdir|rmdir|mkdir|unlink|rename$/) {
       my $cmd = shift @_;
       my $what = join "','",@_;
-      eval "$cmd('$what')";
+      if ($cmd =~ /^mkdir -p/) {
+	system(@_);
+      } else {
+	eval "$cmd('$what')";
+      }
     } else {
       my $fh = $c->stash->{log_fh};
       # XXX we rather want a tee STDOUT/ERR to print to fh at the same time as to STDOUT/ERR
@@ -1405,7 +1409,32 @@ sub _build {
       $testerr = `grep "All tests successful." log.test` ? undef : 1;
     }
   }
+
 INSTALL:
+  if ($^O eq 'cygwin') { # patch installperl for cygwin
+    my $patch = <<'EOP';
+--- installperl.orig    2012-02-03 16:10:51.000000000 -0600
++++ installperl 2012-02-03 19:53:29.614891000 -0600
+@@ -263,9 +263,11 @@
+
+     if ($Is_Cygwin) {
+        $perldll = $libperl;
+-       my $v_e_r_s = substr($ver,0,-2); $v_e_r_s =~ tr/./_/;
+-       $perldll =~ s/(\..*)?$/$v_e_r_s.$dlext/;
+-       $perldll =~ s/^lib/cyg/;
++       if (substr($perldll,-4) ne ".dll") {  
++         my $v_e_r_s = substr($ver,0,-2); $v_e_r_s =~ tr/./_/;
++         $perldll =~ s/(\..*)?$/$v_e_r_s.$dlext/;
++         $perldll =~ s/^lib/cyg/;
++        }
+     } else {
+        $perldll = 'perl58.' . $dlext;
+     }
+EOP
+
+    $c->debug("patch installperl for perldll");
+    $c->_grep('-i s|$perldll =~ s/^lib/cyg/;|$perldll = $libperl;|; print', 'installperl');
+  }
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
     # XXX <= 5.8.0 needs sudo, as it doesn't do DESTDIR
@@ -1424,7 +1453,7 @@ INSTALL:
   # make install for static extensions severely broken
   my $static_ext;
   if (-d "$root/inst-$p" and $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh")) {
-    $c->debug("post-configure install static extensions $static_ext") if $static_ext;
+    $c->debug("post-make install static extensions $static_ext") if $static_ext;
     my $archname = $dryrun ? "fake-arch"
       : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh")
       unless $archname;

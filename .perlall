@@ -16,7 +16,7 @@ PERLALL_BUILDROOT=/usr/src/perl
 #usethrsuffix=0
 
 # 1h default. Or 0 for no timeout
-timeout = 3600
+perlall_timeout=3600
 
 # currently used perl (set by perlall)
 alias p=perl5.15.6d-nt

@@ -1354,19 +1354,27 @@ sub _build {
     }
     if ($^O eq 'cygwin' and !$dryrun) {
       my $cygmk = 'cygwin/Makefile.SHs';
-      # <= 5.8.8
-      if (-e $cygmk and $c->_grep("/^linklibperl=(-l)/ and print \$1", $cygmk)) {
-	$c->debug("post-configure LLIBPERL llibperl fixes");
-	$c->_grep('-i s/^linklibperl=-l.*/linklibperl=\$libperl.dll/; print', $cygmk);
+      my $dll = substr($libperl,0,-4);
+      if ($c->_older($p,'5.8.9')) {
+	if (-e $cygmk and $c->_grep("/^linklibperl=(-l)/ and print \$1", $cygmk)) {
+	  $c->debug("post-configure LLIBPERL llibperl fixes");
+	  $c->_grep("-i s/^LLIBPERL= \$linklibperl/DLLNAME= $dll/; print", $cygmk);
+	  $c->_grep('-i s/^-o $(LIBPERL)$(DLSUFFIX)/-o $(DLLNAME)$(DLSUFFIX)/; print', $cygmk);
+	  $c->_grep('-i s/^$(LIBPERL).dll$(LIB_EXT): $& perl$(OBJ_EXT) $(cwobj) ld2/'
+		         .'libperl.dll$(LIB_EXT): $& perl$(OBJ_EXT) $(cwobj)/; print;', $cygmk);
+	  $c->_grep('-i s/$(LDLIBPTH) ld2 $(SHRPLDFLAGS) -o $(LIBPERL)$(DLSUFFIX)/'
+		        .'$(LDLIBPTH) $(CC) $(SHRPLDFLAGS) -o $(DLLNAME)$(DLSUFFIX) -Wl,--out-implib=$@/; print', $cygmk);
+	}
       }
       # since 5.8.9
       if (my $dllname = $c->_grep("/^DLLNAME= (\$dllname)\$/ and print \$1", $cygmk)) {
 	$c->debug("post-configure DLLNAME $dllname fixes");
-	my $dll = substr($libperl,0,-4);
 	if ($dll ne $dllname) {
 	  $c->_grep("-i s/^DLLNAME= \$dllname/DLLNAME= $dll/; print", $cygmk);
 	}
+	$c->_grep('-i s/^-o $(LIBPERL)$(DLSUFFIX)/-o $(DLLNAME)$(DLSUFFIX)/; print', $cygmk);
       }
+	$c->_grep('-i s/^-o $(LIBPERL)$(DLSUFFIX)/-o $(DLLNAME)$(DLSUFFIX)/; print', $cygmk);
     }
     # XXX fix config_args also
   }

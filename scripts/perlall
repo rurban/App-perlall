@@ -266,7 +266,7 @@ sub pre_process {
       unless $c->config->{PERLALL_BUILDROOT};
     $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
       unless $c->config->{'perl-git'};
-    $c->config->{'timeout'} = 0 unless $c->config->{'timeout'};
+    $c->config->{'perlall_timeout'} = 0 unless $c->config->{'perlall_timeout'};
 
     if ($c->is_command($cmd) and $cmd !~ /^list/) {
       # logging + locking
@@ -368,9 +368,7 @@ sub App::Rad::_get_input {
     $parser->configure( qw(bundling) );
     @ARGV = @options; # getoptions eats @ARGV
     my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
-    for (qw(timeout)) { # set defaults from config
-      $c->options->{$_} = $c->config->{$_} unless exists $c->options->{$_};
-    }
+    $c->options->{timeout} = $c->config->{perlall_timwout} unless exists $c->options->{timeout};
     $c->debug('received options: ' . join(' ',@options) . ' => '
 	      . _opts($c->options));
     $c->debug('received command: ' . $c->{'cmd'});

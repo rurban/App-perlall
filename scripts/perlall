@@ -1163,7 +1163,8 @@ sub _build {
       # unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
       if ($^O eq 'MSWin32') {
 	$c->_system1( "rm -rf \"$builddir\\.git\"") if -d "$builddir/.git";
-	@cmd = ("xcopy", "/S/I/H/Y", "\"$srcdir/.git\"", "\"$builddir\\.git\"");
+	@cmd = ("xcopy", "/S/I/H/Y".($c->options->{verbose}?"":"/Q"),
+		"\"$srcdir/.git\"", "\"$builddir\\.git\"");
       }
       $c->_system1( @cmd);
       $srcdir = "."; # clean copy
@@ -1329,6 +1330,7 @@ sub _build {
     else {$config = $aperl ? 'config.vc' : 'config.gc';}
     $c->_log(1,"win32 configure $config $make");
     $c->_system1($cp,$config,'config.h');
+    $dryrun = 1;
   }
   $c->_log(1,"post-configure fixes");
 
@@ -1457,6 +1459,7 @@ sub _build {
   }
 
   if ($^O eq 'MSWin32') {
+    $dryrun = $c->options->{dryrun};
     $c->_log(1,"win32 $make");
     $c->_system1($make);
     $c->_system1("chdir","..");

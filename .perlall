@@ -1,15 +1,18 @@
-# optionally source this from .profile
+# optionally source this file from .profile
 
 # important: path to the perl .git clone
 alias perl-git='cd /usr/src/perl/blead/perl-git'
 
 # default Configure -Dprefix
-PERLALL_PREFIX=/usr/local
+# PERLALL_PREFIX=/usr/local
 # default dir to build and tmp. install perls
-PERLALL_BUILDROOT=/usr/src/perl
+# PERLALL_BUILDROOT=/usr/src/perl
+# PERLALL_PREFIX=~/perl5/
+# PERLALL_BUILDROOT=~/perl5/
 # PERLALL_PREFIX=~/perl5/perlbrew
 # PERLALL_BUILDROOT=~/perl5/perlbrew/build
 # where perl5* are expected (default: /usr/local/bin)
+# PERLALL_BINDIR=~/bin
 # PERLALL_BINDIR=~/perl5/perlbrew/bin
 
 # use -thr suffix, if not use -nt for "non threaded"
@@ -20,17 +23,6 @@ perlall_timeout=3600
 
 # currently used perl (set by perlall)
 alias p=perl5.15.6d-nt
-
-# just some suggestions
-alias pb="p -Mblib"
-alias m=make
-alias pb="p -Mblib"
-alias pmf="p Makefile.PL"
-alias pm='pmf && m'
-alias ppan='p -S cpan'
-alias mt='make test'
-alias mi="make test && sudo make install"
-alias perldoc=cpandoc
 
 # for init
 cpan=cpan
@@ -54,3 +46,25 @@ cpan=cpan
 #testvm_max=6
 # So far only: virsh. TODO: xen-shell, vmrun, VBoXManage
 #testvm_ctl=virsh
+
+
+# just some suggestions
+alias pb="p -Mblib"
+alias m=make
+alias pb="p -Mblib"
+alias pmf="p Makefile.PL"
+alias pm='pmf && m'
+alias ppan='p -S cpan'
+alias jpan='ppan -j ~/.cpan/CPAN/nosqlite.pm'
+alias mt='make -j4 test'
+alias mtv='make -j4 test TEST_VERBOSE=1'
+alias mi='make -j4 test && sudo make install'
+alias perldoc=cpandoc
+alias smi='sudo make install'
+# set p alias from Makefile
+function ppm {
+  p=$(perl -ane'print $F[2] if /^FULLPERL =/' Makefile)
+  echo alias p=$p; test -n "$p" && alias p='$p'
+}
+alias pgrp='pgrep -fl perl'
+alias perlallkill='pkill t/release-testing.sh; pkill perlall; pkill perl'

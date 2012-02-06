@@ -1,6 +1,7 @@
 -*- change-log -*-
 
 0.06	2012-02-xx rurban
+	added cygwin support, win32 not yet
 	* do not overwrite old logfiles, backup numbered
 	* build: use config vars from .perlall for building new perls: prefix, bindir
 	* build: check for -thread in archname, wrong hints overrides
@@ -11,7 +12,7 @@
 	* build: patch installperl for custom perldll on cygwin
 	* build --install: support PERLALL_BINDIR
 	* INSTALL: added INSTALL instructions for root, sudo and non-sudo
-	* .perlall: add perlall_timeout
+	* .perlall: add perlall_timeout and more aliases
 
 0.05	2012-01-31 rurban
 	* fix pgrep command to list the running perlall.lock process

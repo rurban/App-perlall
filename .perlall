@@ -1,7 +1,8 @@
 # optionally source this file from .profile
 
-# important: path to the perl .git clone
+# path to the perl .git clone, see INSTALL
 alias perl-git='cd /usr/src/perl/blead/perl-git'
+#perl-git='c:/cygwin/usr/src/perl/blead/perl-git'
 
 # default Configure -Dprefix
 # PERLALL_PREFIX=/usr/local

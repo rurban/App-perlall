@@ -52,3 +52,18 @@ perlall -v build --force 5.14.2d-nt
 perlall -v build --force bleadd --link
 
 perlall init
+
+win32
+=====
+You will need cygwin for git and have c:\cygwin\bin in your PATH
+There are 4 major variants:
+* strawberry perl - stripped mingw with cmd.exe. build from win32\
+* msys - bash, for cross-compiling to mingw
+  needs mingw-get install msys-dvlpr
+* mingw - bash, can use perlall, but perlall build not possible
+* activeperl - cmd.exe with MSVC. build from win32\
+
+All 4 variants are still in work. 
+msys being the easiest and most attractive, to be able to compile your mingw perl 
+in a sane environment, and strawberry perl the most common.
+msys is not even mentioned in perl core, but support is easy to add to Configure.

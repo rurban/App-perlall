@@ -41,8 +41,8 @@ BEGIN { # check platform support: perldoc perlport
   if ($^O !~ /^linux|freebsd|darwin|solaris|openbsd|cygwin$/) {
     if ($^O =~ /^vms|dos|bsdos$/) {
       die "unsupported OS $^O"; # fixes welcome
-    } elsif ($^O eq 'MSWin32') {
-      warn "$^O support planned but not yet enabled";
+    } elsif ($^O =~ /^MSWin32|msys/) {
+      warn "$^O support in work, some commands may not work yet";
     } else { # should theoretically work:
              #        netbsd sunos aix haiku hpux irix next svr4 unicos* plan9
              # scary: VOS os390 os400 posix-bc vmesa riscos amigaos beos mpeix
@@ -602,7 +602,9 @@ sub _short {
 
 sub _print {
   my $level = shift;
-  if ($level == 0) { # bold green, highest level, headers
+  if ($^O eq 'MSWin32') {
+    print join(" ",@_),"\n";
+  } elsif ($level == 0) { # bold green, highest level, headers
     print "\033[1;32m",join(" ",@_),"\033[0;0m\n";
   } elsif ($level == 1) { # bold red/black, major commands
     print "\033[1;39m",join(" ",@_),"\033[0;0m\n";
@@ -972,7 +974,7 @@ sub build
     $c->execute('help') and return undef;
   }
   # $c->_log(0,"perlall",_opts($c->options),"build",$p,@args);
-  $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
+  # $c->_fail("build not yet supported on Windows") if $^O eq 'MSWin32';
   my $cwd = Cwd::getcwd();
   END { chdir $cwd if $cwd }
 
@@ -1159,6 +1161,10 @@ sub _build {
       $c->debug("copy git tree for $from");
       @cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
       # unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
+      if ($^O eq 'MSWin32') {
+	$c->_system1( "rm -rf \"$builddir\\.git\"") if -d "$builddir/.git";
+	@cmd = ("xcopy", "/S/I/H/Y", "\"$srcdir/.git\"", "\"$builddir\\.git\"");
+      }
       $c->_system1( @cmd);
       $srcdir = "."; # clean copy
 
@@ -1194,15 +1200,15 @@ sub _build {
   $c->_system( $rm, "-rf", "UU") if -d "UU";
   $c->_system( $rm, "-rf", ".config") if -d ".config";
 
+  my $debug = substr($suffix,0,1) eq 'd';
+  my $ithreads = $suffix !~ /^d?-nt/;
+  my $multi = $suffix =~ /^d?-m/;
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none",
 	      "-Dinstallsiteman1dir=none","-Dinstallsiteman3dir=none");
   # we cannot force archname, because we don't know the resulting name yet
   # we fix that post-configure
-  my $debug = substr($suffix,0,1) eq 'd';
-  my $ithreads = $suffix !~ /^d?-nt/;
-  my $multi = $suffix =~ /^d?-m/;
   my ($libperl);
   if ($c->config->{usethrsuffix}) {
     $ithreads = $suffix =~ /^d?thr/; # perl5.14.2dthr
@@ -1211,13 +1217,17 @@ sub _build {
   push @conf, "-DEBUGGING" if $debug;
   push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion}; #-g is lame
   push @conf, "-Dusemultiplicity" if $multi;
-  push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
+  if ($^O eq 'cygwin') { # fixed with 5.15.8 [perl #109968]
+    push @conf, ($ithreads ? "-D" :"-U") . "usethreads";
+  } else {
+    push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
+  }
   push @conf, "-D'".$_."'" for @{$c->options->{D}};
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
   push @conf, "-Dprefix='$prefix'" if $prefix ne '/usr/local';
   # special *perl<xxx>.dll if non-default
-  if ($^O =~ /cygwin|MSWin32/ and $suffix) {
+  if ($^O =~ /cygwin|msys/ and $suffix) {
     if ($^O eq 'cygwin') {
       $libperl = $ps;
       $libperl =~ s/\./_/g;
@@ -1303,8 +1313,23 @@ sub _build {
     push @conf, "-Dlibc=/usr/lib.libmsys-1.0.dll.a", "-Dusenm=no";
   }
 
-  $c->_system1( @conf);
-  $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
+  if ($^O ne 'MSWin32') {
+    $c->_system1( @conf);
+    $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
+  } else {
+    my ($w64, $config);
+    my $aperl = $make eq 'nmake';
+    $c->_system1("chdir","win32");
+    # XXX check which config and makefile we will need
+    my $makefile = $aperl ? 'Makefile' : 'makefile.mk';
+    # XXX copy and tune config.h and Makefile (INST_DRV, INST_TOP)
+    if ($ENV{WIN64}) { # XXX check if our compiler can do 64bit, else unset WIN64
+    }
+    if ($w64) { $config = $aperl ? 'config.vc64' : 'config.gc64'; }
+    else {$config = $aperl ? 'config.vc' : 'config.gc';}
+    $c->_log(1,"win32 configure $config $make");
+    $c->_system1($cp,$config,'config.h');
+  }
   $c->_log(1,"post-configure fixes");
 
   # fix libs on debug and git-stuff
@@ -1360,7 +1385,7 @@ sub _build {
     $archname = $new;
   }
 
-  if ($^O =~ /cygwin|MSWin32/) {
+  if ($^O =~ /cygwin|msys/) {
     $c->debug("post-configure perl.dll fixes");
     # libperl really is libperl.a. Should be libperl.dll.a at least. we use the dll.
     my $dll = $dryrun ? "fake.dll"
@@ -1431,7 +1456,14 @@ sub _build {
     $c->_grep("-i print unless /<command-line>/", $makefile, "x2p/$makefile");
   }
 
-  $c->_system1( $make, @j);
+  if ($^O eq 'MSWin32') {
+    $c->_log(1,"win32 $make");
+    $c->_system1($make);
+    $c->_system1("chdir","..");
+  } else {
+    $c->_system1( $make, @j);
+  }
+
   if ($c->cmd eq 'smoke') {
     return $c->execute('_smoke', $p, $from, @j); # XXX not yet
   }

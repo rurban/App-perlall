@@ -13,6 +13,7 @@
 	* build --install: support PERLALL_BINDIR
 	* INSTALL: added INSTALL instructions for root, sudo and non-sudo
 	* .perlall: add perlall_timeout and more aliases
+	* config: new command
 
 0.05	2012-01-31 rurban
 	* fix pgrep command to list the running perlall.lock process

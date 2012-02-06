@@ -10,6 +10,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 #   cmd --help
+#   classic win32 support (from win32/)
 #   get msys compiled, bootstrap a mingw perl without strawberry
 # TEST:
 #   tee with -v
@@ -111,6 +112,7 @@ perlall - build, test and do with all perls
     perlall testvm centos4 centos5 solaris10
     perlall initvm --all --max=6
     perlall testvm --all --fork -c=init # see testvm in .perlall
+    perlall config
     perlall selfupgrade
 
 =head2 Planned Features
@@ -252,9 +254,20 @@ sub pre_process {
   }
   my $sudo = $^O =~ /cygwin|msys|MSWin32/ ? "" : "sudo";
   $c->config->{sudo} = $sudo;
+  if ($^O eq 'MSWin32') {
+    $ENV{HOME} = $ENV{HOMEDRIVE} . $ENV{HOMEPATH} unless $ENV{HOME};
+    $c->config->{PERLALL_PREFIX} = $Config{prefix};
+    $c->config->{PERLALL_BUILDROOT} = $ENV{HOME}."\\perl5";
+    # bindir should be in the path.
+    if ($Config{installsitebin} and $Config{installsitebin} =~ $ENV{PATH}) {
+      $c->config->{PERLALL_BINDIR} = $Config{installsitebin};
+    } else {
+      $c->config->{PERLALL_BINDIR} = $ENV{HOME}."\\perl5\\bin";
+    }
+  }
 
   # read .perlall config
-  if ($cmd =~ /^build|uninstall|init|list|testvm|smoke|do|make.*$|cpan.*/) {
+  if ($cmd =~ /^build|config|uninstall|init|list|testvm|smoke|do|make.*$|cpan.*/) {
     for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
       $c->_dot_perlall($_) if -f $_;
     }
@@ -604,8 +617,22 @@ sub _backup($) {
 sub __system {
   my $c = shift;
   unless ($c->options->{dryrun}) {
+    # MSWin32 ExtUtils::Command methods (tools_other section)
+    if ($^O eq 'MSWin32' and $_[0] =~ /^(rm|mv|mkdir) /) {
+      my $what = join " ",@_;
+      if ($what =~ /^rm -rf/) {
+	system("$^X -MExtUtils::Command -e 'rm_rf' -- ",substr($what,6));
+      } elsif ($what =~ /^rm /) {
+	system("$^X -MExtUtils::Command -e 'rm_f' -- ",substr($what,5));
+      } elsif ($what =~ /^mv /) {
+	system("$^X -MExtUtils::Command -e 'mv' -- ",substr($what,3));
+      } elsif ($what =~ /^mkdir (-p)?(.*)/) {
+	system("$^X -MExtUtils::Command -e 'mkpath' -- $2");
+      } else {
+	die "unhandled $what";
+      }
     # native chdir/rmdir/mkdir/unlink/rename
-    if ($_[0] =~ /^chdir|rmdir|mkdir|unlink|rename$/) {
+    } elsif ($_[0] =~ /^chdir|rmdir|mkdir|unlink|rename$/) {
       my $cmd = shift @_;
       my $what = join "','",@_;
       if ($cmd =~ /^mkdir -p/) {
@@ -1055,7 +1082,8 @@ sub build
 
 sub _build {
   my ($c, $p, $from, $ps, $gitsuffix, $root, $prefix, $cwd) = @_;
-  $c->debug("c, \$p=$p, \$from=$from, \$ps=$ps, \$gitsuffix=$gitsuffix, \$root=$root, \$prefix=$prefix, \$cwd=$cwd");
+  $c->debug("c, \$p=$p, \$from=$from, \$ps=$ps, \$gitsuffix=$gitsuffix,"
+	   ." \$root=$root, \$prefix=$prefix, \$cwd=$cwd");
 
   my $make = $Config{make};
   my $sed = $Config{sed};
@@ -2319,7 +2347,15 @@ sub initvm
 	}
       }
     }
-    # XXX To ~/bin/ or /usr/local/bin/ make install puts it into /usr/local/bin/
+    # XXX To ~/bin/ or /usr/local/bin/?
+    # make install puts it into /usr/local/bin/ but this will need sudo
+    # XXX if $m is cygwin, check if pl2bat needed
+# XXX TODO current msys and mingw recipes:
+#rsync -azL ~/bin/perlall win:/cygdrive/c/mingw/msys/1.0/home/$USER/bin/
+#rsync -azL ~/bin/perlall win:/cygdrive/c/perl514/perl/site/bin
+#ssh win 'cd /cygdrive/c/perl514/perl/site/bin && cmd /C "PATH=c:\perl514\perl\bin;%PATH% & c:\perl514\perl\bin\pl2bat perlall"'
+#rsync -azL /home/rurban/bin/perlall win:/cygdrive/c/perl512/perl/site/bin
+#ssh win 'cd /cygdrive/c/perl512/perl/site/bin && cmd /C "PATH=c:\perl512\perl\bin;%PATH% & c:\perl512\perl\bin\pl2bat perlall"'
     $c->_system1("rsync","-avzL",$0,"$m:bin/perlall") and next;
     # check .perlall, and cpan deps
     unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
@@ -2333,6 +2369,31 @@ sub initvm
     $c->_system1(qw(sudo virsh), $a->[1], $a->[0]);
   }
   "initvm done on ".join(" ",@m)
+}
+
+=item B<config> I<(var (value))>
+
+=cut
+
+sub config
+  :Help('Print (or update - not yet) config')
+{
+  my $c = shift;
+  $c->addopts('options|o');
+  my $file = ".perlall=";
+  for ( "/etc/perlall", "$ENV{HOME}/.perlall" ) {
+    $file .= $_.":" if -f $_;
+  }
+  print substr($file,0,-1),"\n";
+  for (keys %{$c->config}) {
+    print $_,"=",$c->config->{$_},"\n";
+  }
+  if ($c->options->{options}) {
+    delete $c->options->{options};
+    for (keys %{$c->options}) {
+      print $_,"=",$c->options->{$_},"\n";
+    }
+  }
 }
 
 =item B<selfupgrade> [ --latest ]

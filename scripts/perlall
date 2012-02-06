@@ -664,13 +664,17 @@ sub __system {
       }
       my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf) =
 	IPC::Cmd::run('command' => [ @_ ],
-		      'verbose' => $c->options->{verbose},
+		      ($c->options->{verbose}
+		       ? ('verbose' => 1) : ()),
 		      (defined $c->options->{timeout}
 		       ? ('timeout' => $c->options->{timeout} )
 		       : ())
 	);
       if ($fh and !$c->options->{verbose} and @$full_buf) {
 	print $fh $_ for @$full_buf;
+	if (!$c->options->{quiet} and $c->cmd =~ /^smoke|do|make.*|cpan.*/) {
+	  print $_ for @$stdout_buf;
+	}
       }
       if (@$stderr_buf and !$c->options->{quiet}) {
 	print STDERR $_ for @$stderr_buf;
@@ -1865,10 +1869,11 @@ sub do
   my $argv = join " ",@{$c->argv};
   return "missing args" unless $argv;
   $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
-  $c->options->{verbose} = 1 unless $c->options->{quiet};
+  # $c->options->{verbose} = 1 unless $c->options->{quiet};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
     local $ENV{p} = $p;
+    local $c->options->{quiet};
     $c->_system0( "$p $argv");
   }
   $c->_set_alias() if @{$c->stash->{perlall}} < 5;
@@ -1982,8 +1987,9 @@ sub make
     # undef $c->stash->{log_fh};
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
-      $c->options->{verbose} = 1 unless $c->options->{quiet};
+      #$c->options->{verbose} = 1 unless $c->options->{quiet};
       local $ENV{p} = $p;
+      local $c->options->{quiet};
       $c->_system0( "$p $argv" );
     }
   }
@@ -2036,6 +2042,7 @@ sub maketest
       $c->_log(0, $result) if $result;
     }
     if (@{$c->argv}) {
+      local $c->options->{quiet};
       # optionally additional tests
       $c->_system0( "p=$p $p @{$c->argv}");
     }

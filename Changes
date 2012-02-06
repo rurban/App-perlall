@@ -1,7 +1,7 @@
 -*- change-log -*-
 
-0.06	2012-02-xx rurban
-	added cygwin support, win32 not yet
+0.06	2012-02-06 rurban
+	added cygwin and partial win32 support, win32 build not yet
 	* do not overwrite old logfiles, backup numbered
 	* build: use config vars from .perlall for building new perls: prefix, bindir
 	* build: check for -thread in archname, wrong hints overrides
@@ -11,6 +11,8 @@
 	* build: fix post-configure on cygwin, -i print missing
 	* build: patch installperl for custom perldll on cygwin
 	* build --install: support PERLALL_BINDIR
+	* fixed printing do and make results even with -q
+	* help with quoting issues on win32, convert ' to "
 	* INSTALL: added INSTALL instructions for root, sudo and non-sudo
 	* .perlall: add perlall_timeout and more aliases
 	* config: new command

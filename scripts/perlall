@@ -1484,34 +1484,35 @@ EOP
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable
-  if (-f "$root/inst-$p$bindir/perl$ps") {
-    my @c = ($cp, "$root/inst-$p$bindir/perl$ps","$prefix/bin/perl$p");
-    $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
+  $bindir = $c->config->{PERLALL_BINDIR} unless $bindir;
+  if (-f "$root/$prefix/bin/perl$ps") {
+    my @c = ($cp, "$root/$prefix/bin/perl$ps","$bindir/perl$p");
+    $sudo = "" if $sudo and -w "$bindir/perl$p";
     unshift @c, $sudo if $sudo;
     $c->_system1( @c );
     if ($^O =~ /^MSWin32|cygwin/) {
-      $c->_system1( "$cp $root/inst-$p$bindir/*.dll $prefix/bin/" );
+      $c->_system1( "$cp $root/$prefix/bin/*.dll $bindir/" );
     }
     # symlink to symbolic name (blead, smoke-me, ...)
     if ($from eq 'blead' and $^O ne 'MSWin32') {
       my $s = $p;
       $s =~ s/\@.*//;
       my @c = ('ln', '-sf', "$bindir/perl$p", "$bindir/perl$s\@blead");
-      $sudo = "" if $sudo and -w "$prefix/bin/perl$p";
+      $sudo = "" if $sudo and -w "$bindir/perl$p";
       unshift @c, $sudo if $sudo;
       $c->_system( @c );
 
       # move away perl5.x
-      $c->_system( 'mv', "$root/inst-$p$bindir/perl$ps", "$root/inst-$p$prefix/perl$ps" );
+      $c->_system( 'mv', "$root/$prefix/bin/perl$ps", "$root/inst-$p$prefix/perl$ps" );
       # copy all versioned tools
-      my @c = ($cp, "$root/inst-$p$bindir/*", "$bindir/");
+      my @c = ($cp, "$root/$prefix/bin/*", "$bindir/");
       unshift @c, $sudo if $sudo;
       $c->_system( @c );
       # move back perl5.x
-      $c->_system( 'mv', "$root/inst-$p$prefix/perl$ps", "$root/inst-$p$bindir/perl$ps" );
+      $c->_system( 'mv', "$root/inst-$p$prefix/perl$ps", "$root/$prefix/bin/perl$ps" );
     } else {
       for (qw(cpan perldoc pod2man perlbug)) {
-	my @c = ($cp, "$root/inst-$p$bindir/$_$ps","$prefix/bin/");
+	my @c = ($cp, "$root/$prefix/bin/$_$ps","$bindir/");
 	unshift @c, $sudo if $sudo;
 	$c->_system1( @c );
       }
@@ -1531,10 +1532,10 @@ EOP
   $c->_set_alias($p);
 
   print $c->output() if $c->options->{verbose};
-  return "$prefix/bin/perl$p faked" if $dryrun;
-  return -f "$prefix/bin/perl$p"
-    ? "$prefix/bin/perl$p installed"
-    : "$prefix/bin/perl$p failed to install";
+  return "$bindir/perl$p faked" if $dryrun;
+  return -f "$bindir/perl$p"
+    ? "$bindir/perl$p installed"
+    : "$bindir/perl$p failed to install";
 }
 
 =item B<install> [ perl<version><suffix> [ from ]]

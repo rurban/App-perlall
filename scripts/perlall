@@ -1446,7 +1446,7 @@ INSTALL:
 EOP
 
     $c->debug("patch installperl for perldll");
-    $c->_grep('-i s|$perldll =~ s/^lib/cyg/;|$perldll = $libperl;|; print', 'installperl');
+    $c->_grep('-i s{\$perldll =~ s/^lib/cyg/}{\$perldll = \$libperl}; print', 'installperl');
   }
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");

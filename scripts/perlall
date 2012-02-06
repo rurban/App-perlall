@@ -10,8 +10,8 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 #   cmd --help
-#   classic win32 support (from win32/)
 #   get msys compiled, bootstrap a mingw perl without strawberry
+#   build win32 from win32/
 # TEST:
 #   tee with -v
 #   testvm logs back from forks
@@ -42,7 +42,7 @@ BEGIN { # check platform support: perldoc perlport
     if ($^O =~ /^vms|dos|bsdos$/) {
       die "unsupported OS $^O"; # fixes welcome
     } elsif ($^O =~ /^MSWin32|msys/) {
-      warn "$^O support in work, some commands may not work yet";
+      warn "$^O not yet fully supported\n";
     } else { # should theoretically work:
              #        netbsd sunos aix haiku hpux irix next svr4 unicos* plan9
              # scary: VOS os390 os400 posix-bc vmesa riscos amigaos beos mpeix
@@ -218,6 +218,16 @@ F<log.makeinstall-osx10.6.8-5.15.4>, F<log.build-osx10.6.8-5.15.4d-nt@30cb48da>.
 
 In the L<B::C> perl-compiler distribution there are some post-processing scripts
 F<status_upd>, F<store_rpt>, F<download-reports> for such logfiles.
+
+Windows
+
+Note in cmd.exe you need different quoting rules.
+
+You can try:
+    perlall do -e"""print $^O"""
+
+But easier is:
+    perlall do '-e"print $^O"'
 
 =cut
 
@@ -403,10 +413,12 @@ sub _get_perlall {
   my $prefix = $c->config->{PERLALL_BINDIR};
   $prefix = "/usr/local/bin" unless $prefix;
   my @p;
+  my $pathsep = $^O eq 'MSWin32' ? '\\' : '/';
+  my $perl = "$prefix$pathsep"."perl";
   if ($c->options->{dryrun} and $ENV{HARNESS_ACTIVE}) { # testing only
     @p = map{"/usr/local/bin/perl$_"} qw(5.8.9d 5.12.1-nt 5.14.2 5.15.4@ababab);
   } else {
-    @p = glob "$prefix/perl$glob";
+    @p = glob "$perl$glob";
   }
   # do the filtering
   my %skip;
@@ -426,7 +438,7 @@ sub _get_perlall {
 	}
       }
     } else {
-      %skip = map {$_ => 1} glob "$prefix/perl".$c->options->{skip};
+      %skip = map {$_ => 1} glob $perl.$c->options->{skip};
     }
   }
   @p = grep !/(\@|-git)/,@p if $c->options->{nogit};
@@ -644,8 +656,12 @@ sub __system {
       }
     } else {
       my $fh = $c->stash->{log_fh};
-      # XXX we rather want a tee STDOUT/ERR to print to fh at the same time as to STDOUT/ERR
-      # stdout_handler+stderr_handler
+      if ($^O eq 'MSWin32') {
+	# Need to replace ' with " otherwise we would need to write
+        # perlall do -e"""print $^O""". Now we only need to do
+        # perlall do '-e"print $^O"'
+	map { s/\'/"/g } @_;
+      }
       my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf) =
 	IPC::Cmd::run('command' => [ @_ ],
 		      'verbose' => $c->options->{verbose},

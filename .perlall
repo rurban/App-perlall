@@ -63,6 +63,6 @@ alias mi='make -j4 test && sudo make install'
 alias perldoc=cpandoc
 alias smi='sudo make install'
 # set p alias from Makefile
-function ppm { p=$(perl -ane'print $F[2] if /^FULLPERL =/' Makefile); echo alias p=$p; test -n "$p" && alias p='$p' }
+function ppm { p=$(perl -ane'print $F[2] if /^FULLPERL =/' Makefile); echo alias p=$p; test -n "$p" && alias p='$p'; }
 alias pgrp='pgrep -fl perl'
 alias perlallkill='pkill t/release-testing.sh; pkill perlall; pkill perl'

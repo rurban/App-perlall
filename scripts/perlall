@@ -28,7 +28,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.06';
+our $VERSION = '0.06_20120207_0914';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1118,11 +1118,16 @@ sub _build {
   $sudo = "" unless $<; # already sudo
   # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
-  my $testerr;
+  my ($testerr, $archname);
 
   my $dryrun = $c->options->{dryrun};
   my $srcdir = $c->config->{'perl-git'};
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
+  my $debug = substr($suffix,0,1) eq 'd';
+  my $ithreads = $suffix !~ /^d?-nt/;
+  my $multi = $suffix =~ /^d?-m/;
+  my $bindir = $c->config->{PERLALL_BINDIR};
+
   # assert $p = $ps . $suffix;
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
   if ($c->stash->{log_fh}) {
@@ -1221,9 +1226,6 @@ sub _build {
   $c->_system( $rm, "-rf", "UU") if -d "UU";
   $c->_system( $rm, "-rf", ".config") if -d ".config";
 
-  my $debug = substr($suffix,0,1) eq 'd';
-  my $ithreads = $suffix !~ /^d?-nt/;
-  my $multi = $suffix =~ /^d?-m/;
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none",
@@ -1263,7 +1265,6 @@ sub _build {
   }
   $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
-  my $bindir = $c->config->{PERLALL_BINDIR};
   for my $tryperl ("$bindir/bin/perl", "/usr/bin/perl") {
     if (-e $tryperl) { # use tryperl as template and merge options
       my $tryargs = `$tryperl -V:config_args`;
@@ -1355,7 +1356,7 @@ sub _build {
   $c->_log(1,"post-configure fixes");
 
   # fix libs on debug and git-stuff
-  my $archname = $dryrun ? "fake-arch"
+  $archname = $dryrun ? "fake-arch"
     : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh");
   my $new = $archname;
   for my $d (@{$c->options->{D}}) {
@@ -1508,7 +1509,7 @@ sub _build {
 
 INSTALL:
   if ($^O eq 'cygwin') { # patch installperl for cygwin
-    my $patch = <<'EOP';
+    my $patch = <<'EOP'; # ignored
 --- installperl.orig    2012-02-03 16:10:51.000000000 -0600
 +++ installperl 2012-02-03 19:53:29.614891000 -0600
 @@ -263,9 +263,11 @@
@@ -1530,6 +1531,11 @@ EOP
 
     $c->debug("patch installperl for perldll");
     $c->_grep('-i s{\$perldll =~ s/^lib/cyg/}{\$perldll = \$libperl}; print', 'installperl');
+  }
+  # XXX $archname is empty if --install
+  if (!$archname) {
+    $archname = $dryrun ? "fake-arch"
+      : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh");
   }
   if (!$testerr or $c->options->{force}) {
     $c->_system1( "rm","-rf","$root/inst-$p");
@@ -1554,9 +1560,6 @@ EOP
   my $static_ext;
   if (-d "$root/inst-$p" and $static_ext = $c->_grep("m|static_ext='(.+?)'| and print \$1", "config.sh")) {
     $c->debug("post-make install static extensions $static_ext") if $static_ext;
-    my $archname = $dryrun ? "fake-arch"
-      : $c->_grep("/^archname='(.+?)'\$/ and print \$1", "config.sh")
-      unless $archname;
     for my $ext (split(/ /,$static_ext)) { # may be PerlIO/scalar
       my $base = basename($ext);
       my $dir = "$root/inst-$p$prefix/lib/perl5/$ps/$archname/auto/$ext";
@@ -1567,7 +1570,6 @@ EOP
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable
-  $bindir = $c->config->{PERLALL_BINDIR} unless $bindir;
   if (-f "$root/$prefix/bin/perl$ps") {
     my @c = ($cp, "$root/$prefix/bin/perl$ps","$bindir/perl$p");
     $sudo = "" if $sudo and -w "$bindir/perl$p";
@@ -1588,7 +1590,7 @@ EOP
       # move away perl5.x
       $c->_system( 'mv', "$root/$prefix/bin/perl$ps", "$root/inst-$p$prefix/perl$ps" );
       # copy all versioned tools
-      my @c = ($cp, "$root/$prefix/bin/*", "$bindir/");
+      @c = ($cp, "$root/$prefix/bin/*", "$bindir/");
       unshift @c, $sudo if $sudo;
       $c->_system( @c );
       # move back perl5.x
@@ -1733,7 +1735,7 @@ sub init
   my @argv = @{$c->argv};
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
   if ($c->options->{deps}) {
-    $mods = `ack -ho '(^\s*|\{\s*)(use|require) ([\w:]+);' blib/lib t | perl -lpe's/^\s*(\{|;|use|require)\s*//g;s/;?\s*\$//;' | sort -u`;
+    $mods = `'ack -ho '(^\s*|\{\s*)(use|require) ([\w:]+);' blib/lib t | perl -lpe's/^\s*(\{|;|use|require)\s*//g;s/;?\s*\$//;' | sort -u'`;
     $mods = join(" ",split(/\n/, $mods));
     return "no --deps found" unless $mods;
   }
@@ -2321,7 +2323,7 @@ sub testvm
 	$remotecmd .= " --gittag=$commit";
       }
       if ($do_fork) { # run cmds in parallel
-	$remotecmd .= ' --forked' if $cmd = 'maketest' and $cmd !~ /--forked/;
+	$remotecmd .= ' --forked' if $cmd eq 'maketest' and $cmd !~ /--forked/;
 	my @cmd = ("sh","-c",
 		   "if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; fi");
         # if virsh was resumed, pause it back afterwards

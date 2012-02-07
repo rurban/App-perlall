@@ -28,7 +28,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.06_20120207_0914';
+our $VERSION = '0.07';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1005,6 +1005,7 @@ sub build
     $c->_fail("Empty PERLALL_BUILDROOT in .perlall");
   }
   if (!-d $root and !$dryrun) {
+    $c->_log1( "mkdir $root # PERLALL_BUILDROOT");
     $c->_system1( "mkdir",$root)
       and $c->_fail("Cannot create PERLALL_BUILDROOT $root");
   }
@@ -1168,7 +1169,8 @@ sub _build {
   else { # git, much better
     $c->_fail("perl-git $srcdir missing") if !-d $srcdir and !$dryrun;
     my @cmd = ("mkdir", $builddir);
-    unshift @cmd, $sudo if $sudo and !-w $builddir;
+    unshift @cmd, $sudo if $sudo and !-w $root;
+    $c->_log(1,"mkdir $root/$builddir # PERLALL_BUILDROOT") unless -d $builddir;
     $c->_system1( @cmd) unless -d $builddir;
     $c->_fail( "invalid builddir $builddir") if !-d $builddir and !$dryrun;
     $c->_system($sudo, "chown", $<, $builddir) if $sudo eq $cmd[0];
@@ -1553,7 +1555,8 @@ EOP
     }
 
     my @c = ($make, @j, "install", "DESTDIR=$root/inst-$p");
-    push @c, "sudo" if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
+    $sudo = "" if $sudo and -w "$root";
+    unshift @c, $sudo if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
     $c->_system1(@c);
   }
   # make install for static extensions severely broken
@@ -1570,13 +1573,13 @@ EOP
 
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable
-  if (-f "$root/$prefix/bin/perl$ps") {
-    my @c = ($cp, "$root/$prefix/bin/perl$ps","$bindir/perl$p");
+  if (-f "$root/inst-$p$prefix/bin/perl$ps") {
+    my @c = ($cp, "$root/inst-$p$prefix/bin/perl$ps","$bindir/perl$p");
     $sudo = "" if $sudo and -w "$bindir/perl$p";
     unshift @c, $sudo if $sudo;
     $c->_system1( @c );
     if ($^O =~ /^MSWin32|cygwin/) {
-      $c->_system1( "$cp $root/$prefix/bin/*.dll $bindir/" );
+      $c->_system1( "$cp $root/inst-$p$prefix/bin/*.dll $bindir/" );
     }
     # symlink to symbolic name (blead, smoke-me, ...)
     if ($from eq 'blead' and $^O ne 'MSWin32') {
@@ -1588,16 +1591,16 @@ EOP
       $c->_system( @c );
 
       # move away perl5.x
-      $c->_system( 'mv', "$root/$prefix/bin/perl$ps", "$root/inst-$p$prefix/perl$ps" );
+      $c->_system( 'mv', "$root/inst-$p$prefix/bin/perl$ps", "$root/inst-$p$prefix/perl$ps" );
       # copy all versioned tools
-      @c = ($cp, "$root/$prefix/bin/*", "$bindir/");
+      @c = ($cp, "$root/inst-$p$prefix/bin/*", "$bindir/");
       unshift @c, $sudo if $sudo;
       $c->_system( @c );
       # move back perl5.x
-      $c->_system( 'mv', "$root/inst-$p$prefix/perl$ps", "$root/$prefix/bin/perl$ps" );
+      $c->_system( 'mv', "$root/inst-$p$prefix/perl$ps", "$root/inst-$p$prefix/bin/perl$ps" );
     } else {
       for (qw(cpan perldoc pod2man perlbug)) {
-	my @c = ($cp, "$root/$prefix/bin/$_$ps","$bindir/");
+	my @c = ($cp, "$root/inst-$p$prefix/bin/$_$ps","$bindir/");
 	unshift @c, $sudo if $sudo;
 	$c->_system1( @c );
       }

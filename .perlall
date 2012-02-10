@@ -55,7 +55,7 @@ cpan=-MCPAN
 # just some suggestions
 alias m=make
 alias pb="p -Iblib/arch -Iblib/lib"
-alias pmf="p Makefile.PL"
+alias pmf="if [ -f Makefile.PL ]; then p Makefile.PL; else rm -rf _build; p Build.PL; fi"
 alias pm='pmf && m'
 alias ppan='p -S cpan'
 alias jpan='ppan -j ~/.cpan/CPAN/nosqlite.pm'

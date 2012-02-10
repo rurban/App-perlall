@@ -4,6 +4,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   maketest or -q: mark FAIL tests *RED*, p line bold black (see t/testc.sh)
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   more testvm_ctl: xen-shell, vmrun, VBoXManage

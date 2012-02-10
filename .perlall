@@ -6,14 +6,17 @@ alias perl-git='cd /usr/src/perl/blead/perl-git'
 
 # default Configure -Dprefix
 # PERLALL_PREFIX=/usr/local
-# default dir to build and tmp. install perls
-# PERLALL_BUILDROOT=/usr/src/perl
-# PERLALL_PREFIX=~/perl5/
-# PERLALL_BUILDROOT=~/perl5/
-# PERLALL_PREFIX=~/perl5/perlbrew
-# PERLALL_BUILDROOT=~/perl5/perlbrew/build
 # where perl5* are expected (default: /usr/local/bin)
 # PERLALL_BINDIR=~/bin
+# default dir to build and tmp. install perls
+# PERLALL_BUILDROOT=/usr/src/perl
+# non-sudo:
+# PERLALL_PREFIX=~/perl5/
+# PERLALL_BUILDROOT=~/perl5/src
+# PERLALL_BINDIR=~/perl5/bin
+# perlbrew alike:
+# PERLALL_PREFIX=~/perl5/perlbrew
+# PERLALL_BUILDROOT=~/perl5/perlbrew/build
 # PERLALL_BINDIR=~/perl5/perlbrew/bin
 
 # use -thr suffix, if not use -nt for "non threaded"
@@ -26,9 +29,9 @@ perlall_timeout=3600
 alias p=perl5.15.6d-nt
 
 # for init
-cpan=cpan
+#cpan=cpan
 #cpan=cpanm
-#cpan=-MCPAN
+cpan=-MCPAN
 #init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
 #   Params::Util Bundle::CPANReporter2 \
 #   B::Flags Opcodes Set::Object Math::Round Params::Classify \
@@ -50,19 +53,18 @@ cpan=cpan
 
 
 # just some suggestions
-alias pb="p -Mblib"
 alias m=make
-alias pb="p -Mblib"
+alias pb="p -Iblib/arch -Iblib/lib"
 alias pmf="p Makefile.PL"
 alias pm='pmf && m'
 alias ppan='p -S cpan'
 alias jpan='ppan -j ~/.cpan/CPAN/nosqlite.pm'
 alias mt='make -j4 test'
-alias mtv='make -j4 test TEST_VERBOSE=1'
-alias mi='make -j4 test && sudo make install'
-alias perldoc=cpandoc
+alias mtv='mt TEST_VERBOSE=1'
 alias smi='sudo make install'
+alias mi='mt && smi'
+#alias perldoc=cpandoc
 # set p alias from Makefile
-function ppm { p=$(perl -ane'print $F[2] if /^FULLPERL =/' Makefile); echo alias p=$p; test -n "$p" && alias p='$p'; }
+function ppm { p=$(perl -ane'print $F[2] if /^FULLPERL =/' Makefile); echo alias p=$p; test -n "$p" && alias p=$p; }
 alias pgrp='pgrep -fl perl'
 alias perlallkill='pkill t/release-testing.sh; pkill perlall; pkill perl'

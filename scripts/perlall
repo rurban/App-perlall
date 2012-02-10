@@ -28,7 +28,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.07';
+our $VERSION = '0.07_20120209_1851';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1269,7 +1269,7 @@ sub _build {
   }
   $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
-  for my $tryperl ("$bindir/bin/perl", "/usr/bin/perl") {
+  for my $tryperl ("$bindir/perl", "/usr/local/bin/perl", "/usr/bin/perl") {
     if (-e $tryperl) { # use tryperl as template and merge options
       my $tryargs = `$tryperl -V:config_args`;
       $c->debug("old args: $tryargs");
@@ -2038,7 +2038,7 @@ sub maketest
     my $fh = $c->stash->{log_fh};
     print $fh $gitshort if $fh and $gitshort;
     $c->_make($p);
-    my @opts = ("test", $c->options->{quiet} ? () : "TEST_VERBOSE=1");
+    my @opts = ("test", $c->options->{verbose} ? "TEST_VERBOSE=1" : ());
     unshift @opts,"-j".$c->options->{j}
       if $c->options->{j} and !$c->_older( $p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {

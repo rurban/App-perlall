@@ -1557,8 +1557,7 @@ EOP
     }
 
     my @c = ($make, @j, "install", "DESTDIR=$root/inst-$p");
-    $sudo = "" if $sudo and -w "$root";
-    unshift @c, $sudo if $c->_older($p,'5.8.1') and $^O ne 'MSWin32';
+    unshift @c, $sudo if $sudo and (!-w "$root" or $c->_older($p,'5.8.1'));
     $c->_system1(@c);
   }
   # make install for static extensions severely broken
@@ -1580,8 +1579,7 @@ EOP
   }
   elsif (-f "$root/inst-$p$prefix/bin/perl$ps") {
     my @c = ($cp, "$root/inst-$p$prefix/bin/perl$ps","$bindir/perl$p");
-    $sudo = "" if $sudo and -w "$bindir/perl$p";
-    unshift @c, $sudo if $sudo;
+    unshift @c, $sudo if $sudo and !-w "$bindir/perl$p";
     $c->_system1( @c );
     if ($^O =~ /^MSWin32|cygwin/) {
       $c->_system1( "$cp $root/inst-$p$prefix/bin/*.dll $bindir/" );
@@ -1591,29 +1589,27 @@ EOP
       my $s = $p;
       $s =~ s/\@.*//;
       my @c = ('ln', '-sf', "$bindir/perl$p", "$bindir/perl$s\@blead");
-      $sudo = "" if $sudo and -w "$bindir/perl$p";
-      unshift @c, $sudo if $sudo;
+      unshift @c, $sudo if $sudo and !-w "$bindir/perl$p";
       $c->_system( @c );
 
       # move away perl5.x
       $c->_system( 'mv', "$root/inst-$p$prefix/bin/perl$ps", "$root/inst-$p$prefix/perl$ps" );
       # copy all versioned tools
       @c = ($cp, "$root/inst-$p$prefix/bin/*", "$bindir/");
-      unshift @c, $sudo if $sudo;
+      unshift @c, $sudo if $sudo and !-w "$bindir/perl$p";
       $c->_system( @c );
       # move back perl5.x
       $c->_system( 'mv', "$root/inst-$p$prefix/perl$ps", "$root/inst-$p$prefix/bin/perl$ps" );
     } else {
       for (qw(cpan perldoc pod2man perlbug)) {
 	my @c = ($cp, "$root/inst-$p$prefix/bin/$_$ps","$bindir/");
-	unshift @c, $sudo if $sudo;
+	unshift @c, $sudo if $sudo and !-w "$bindir/perl$p";
 	$c->_system1( @c );
       }
     }
 
     @c = ($cp, "-r", "$root/inst-$p$prefix/lib", "$prefix/");
-    # $sudo = "" if $sudo and -w "$prefix/lib/perl5/$ps"; #wrong
-    unshift @c, $sudo if $sudo;
+    unshift @c, $sudo if $sudo and !-w "$prefix/lib/perl5/$ps";
     $c->_system1( @c );
 
     if (!$testerr and $srcdir eq "." and -d '.git') {

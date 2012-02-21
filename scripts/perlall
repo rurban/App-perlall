@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.07_20120221_1453';
+our $VERSION = '0.07_20120221_1706';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -2286,6 +2286,8 @@ sub testvm
     $c->_log(1,"Creating $f");
     open M,'<',$man; open F,'>',$f;
     while (<M>) {
+      s/ +$//;
+      s/^(\S+)(\s+.+)$/$1/;
       print F $_ unless /^#/;
     }
     close M; close F;

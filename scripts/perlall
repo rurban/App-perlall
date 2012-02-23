@@ -120,8 +120,8 @@ perlall - build, test and do with all perls
 
     perlall maketest --all
     perlall smoke -j4 bleadd-nt smoke-me/*
-    perlall bench [ what  [ how ]]
-    perlall cpan Devel::*
+    perlall=5*[0-9]-nt perlall bench [ what  [ how ]]
+    perlall cpan Devel::*Prof*
 
 =head1 OPTIONS
 

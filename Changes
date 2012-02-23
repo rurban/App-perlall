@@ -1,9 +1,10 @@
 -*- change-log -*-
 
-0.08    2012-02-09 rurban
+0.08    2012-02-xx rurban
 	* fix $bindir/bin/perl -D default for new builds
 	* now maketest -v does TEST_VERBOSE=1
 	* fix build sudo install
+	* testvm: skip MANIFEST ending whitespace and comments
 
 0.07    2012-02-07 rurban
 	* fixed wrong sudo requirement for build

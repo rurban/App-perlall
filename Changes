@@ -4,6 +4,8 @@
 	* fix $bindir/bin/perl -D default for new builds
 	* now maketest -v does TEST_VERBOSE=1
 	* fix build sudo install
+	* fix build -m: no ithreads
+	* stabilize build from template config_args
 	* testvm: skip MANIFEST ending whitespace and comments
 
 0.07    2012-02-07 rurban

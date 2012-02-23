@@ -192,7 +192,7 @@ Version numbers look like C<5.xx.x> and the perl C<suffix> can be any of:
 
     C<d>    DEBUGGING
     C<-nt>  non-threaded, or
-    C<-m>   multi
+    C<-m>   multi (non-threaded)
     C<@xxxxxx> git ids / branch names
 
 You want to switch to use the "thr" suffix, then the default
@@ -1130,8 +1130,9 @@ sub _build {
   my $srcdir = $c->config->{'perl-git'};
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   my $debug = substr($suffix,0,1) eq 'd';
-  my $ithreads = $suffix !~ /^d?-nt/;
   my $multi = $suffix =~ /^d?-m/;
+  my $ithreads = $suffix !~ /^d?-nt/;
+  $ithreads = undef if $multi;
   my $bindir = $c->config->{PERLALL_BINDIR};
 
   # assert $p = $ps . $suffix;
@@ -1240,7 +1241,7 @@ sub _build {
   # we cannot force archname, because we don't know the resulting name yet
   # we fix that post-configure
   my ($libperl);
-  if ($c->config->{usethrsuffix}) {
+  if ($c->config->{usethrsuffix} and !$multi) {
     $ithreads = $suffix =~ /^d?thr/; # perl5.14.2dthr
   }
   push @conf, "-Dmksymlinks" if $srcdir ne ".";

@@ -1273,6 +1273,7 @@ sub _build {
   $c->debug("config_args: ".join(" ",@conf));
   for my $tryperl ("$bindir/perl", "/usr/local/bin/perl", "/usr/bin/perl") {
     if (-e $tryperl) { # use tryperl as template and merge options
+      # same overrides as with tryperl
       my $tryargs = `$tryperl -V:config_args`;
       $c->debug("old args: $tryargs");
       for my $f (qw(cc ld ccflags ldflags libpth incpth pager
@@ -1282,7 +1283,8 @@ sub _build {
 	     or grep /^$f[= ]/, @{$c->options->{A}}
 	     or grep /^$f[= ]/, @{$c->options->{U}};
 	# -Dlibpth=/usr/local/lib64 /lib64 /usr/lib64 -D
-	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) -[ADU]/; # Not until -L
+	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) (-[ADU]|;)/; # Not until -L
+	# check the
 	if ($f =~ /^use/ and !$v) {
 	  my ($u) = $tryargs =~ /-([DU])$f /;
 	  $c->debug("-$u$f") if $u;
@@ -1291,7 +1293,7 @@ sub _build {
 	  $v =~ s/([^\\]) /$1\\ /g;
 	  # There can be multiple -A$f=$v
 	  if ($d eq 'A') {
-	    my @v = ($tryargs =~ /-A$f=(.+?) /g);
+	    my @v = ($tryargs =~ /-A$f=(.+?) (-[ADU]|;)/g);
 	    for my $v (@v) {
 	      $c->debug("-$d$f=$v") if $v;
 	      $v =~ s/([^\\]) /$1\\ /g;

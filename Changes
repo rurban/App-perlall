@@ -7,6 +7,7 @@
 	* fix build -m: no ithreads
 	* stabilize build from template config_args
 	* testvm: skip MANIFEST ending whitespace and comments
+	* uninstall: multiple versions. e.g. perlall=5.*-m perlall uninstall
 
 0.07    2012-02-07 rurban
 	* fixed wrong sudo requirement for build

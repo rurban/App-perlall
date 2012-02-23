@@ -1639,7 +1639,7 @@ Same as build
 
 =item B<uninstall> perl<version><suffix>
 
-Uninstalls the given version.
+Uninstalls the given version(s).
 
 =cut
 
@@ -1648,31 +1648,32 @@ sub uninstall
   :Help('sudo rm /usr/local/bin/perl<arg> and its archlibs')
 {
   my $c = shift;
-  #my @argv = @{$c->argv};
-  my $p = shift @{$c->stash->{perlall}};
-  my $bindir = $c->config->{PERLALL_BINDIR};
-  $bindir = "/usr/local/bin" unless $bindir;
-  $c->_fail("$bindir/$p does not exist") unless -e "$bindir/$p";
-  my $pq = $p;
-  $pq =~ s/([\@\$\%])/\\$1/;
+  for my $p (@{$c->stash->{perlall}}) {
+    my $bindir = $c->config->{PERLALL_BINDIR};
+    $bindir = "/usr/local/bin" unless $bindir;
+    $p = basename($p);
+    $c->_fail("$bindir/$p does not exist") unless -e "$bindir/$p";
+    my $pq = $p;
+    $pq =~ s/([\@\$\%])/\\$1/;
 
-  my $archlib = `$bindir/$pq -MConfig -e'print \$Config{archlibexp}'`;
-  $archlib = `$bindir/$pq -MConfig -e'print \$Config{archlib}'` unless $archlib;
-  my $sitearch = `$bindir/$pq -MConfig -e'print \$Config{sitearchexp}'`; # may be empty
-  if ($c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib)) {
-    $c->_system0("sudo","rm","-rf", "$bindir/$p", $archlib, $sitearch);
-  } else {
-    $c->_fail("$p archlib $archlib did not exist");
+    my $archlib = `$bindir/$pq -MConfig -e'print \$Config{archlibexp}'`;
+    $archlib = `$bindir/$pq -MConfig -e'print \$Config{archlib}'` unless $archlib;
+    my $sitearch = `$bindir/$pq -MConfig -e'print \$Config{sitearchexp}'`; # may be empty
+    if ($c->options->{dryrun} or (-f "$bindir/$p" and -d $archlib)) {
+      $c->_system0("sudo","rm","-rf", "$bindir/$p", $archlib, $sitearch);
+    } else {
+      $c->_fail("$p archlib $archlib did not exist");
+    }
+    my $root = $c->config->{PERLALL_BUILDROOT};
+    if (-d "$root/inst-$p") {
+      $c->_system1("rm","-rf","$root/inst-$p");
+    }
+    # XXX ask
+    if (-d "$root/build-$p") {
+      $c->_log("rm","-rf","$root/build-$p");
+    }
+    print "perl$p uninstalled\n";
   }
-  my $root = $c->config->{PERLALL_BUILDROOT};
-  if (-d "$root/inst-$p") {
-    $c->_system1("rm","-rf","$root/inst-$p");
-  }
-  # XXX ask
-  if (-d "$root/build-$p") {
-    $c->_log("rm","-rf","$root/build-$p");
-  }
-  "perl$p uninstalled"
 }
 
 =item B<smoke> [OPTIONS] perl<version><suffix> [ branch|from ]

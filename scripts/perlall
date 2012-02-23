@@ -233,6 +233,7 @@ But easier is:
 
 =cut
 
+
 sub setup {
   $_[0]->register_commands( {-ignore_prefix => '_'} );
   $_[0]->register('install', \&build, "alias to build");
@@ -1379,7 +1380,8 @@ sub _build {
   if (($new ne $archname) or $gitsuffix or $debug) {
     if ($new eq $archname) {
       $new .= "-debug" if $debug and $archname !~ /-debug/;
-      $new .= $gitsuffix if $gitsuffix  and $archname !~ /$gitsuffix$/;
+      $new .= $gitsuffix if $gitsuffix and $archname !~ /$gitsuffix$/
+	and $gitsuffix ne '-m';
       if (!$ithreads and $new =~ /-thread/) {
 	$new =~ s/-thread//;
       } elsif ($ithreads and $new !~ /-thread/) {
@@ -2593,9 +2595,8 @@ See L</testvm>.
 The bash scripts, which I used for some years:
 L<http://github.com/rurban/dot-bin/blob/master/perlall-makeinstall>
 
-L<App::perlbrew> which looked like my bash scripts and B<perlall>,
-but pollutes PERL5LIB and thus your whole environment, similar to
-the horrible Oracle perl.
+L<App::perlbrew> which is good for complete private unshared installations.
+It looked like my bash scripts and B<perlall>, but cannot be used as easily.
 
 L<App::SmokeBrew> which also builds a lot of perls to smoke cpan
 releases with them.

@@ -26,17 +26,18 @@ alias perl-git='cd /usr/src/perl/blead/perl-git'
 perlall_timeout=3600
 
 # currently used perl (set by perlall)
-alias p=perl5.15.6d-nt
+alias p=perl5.15.8d-nt
 
 # for init
 #cpan=cpan
 #cpan=cpanm
 cpan=-MCPAN
-#init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
-#   Params::Util Bundle::CPANReporter2 \
-#   B::Flags Opcodes Set::Object Math::Round Params::Classify \
-#   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse \
-#   MouseX::Types Task::Kensho
+# Note: `cmd` is also expanded for init-modules
+init-modules=YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
+   Params::Util Bundle::CPANReporter2 \
+   IPC::Run B::Flags Opcodes Set::Object Math::Round Params::Classify Net::SSLeay IO::Socket::SSL \
+   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse \
+   MouseX::Types Task::Kensho
 
 # testvm settings taken from default perl (/usr/local/bin/perl, /usr/bin/perl)
 # and remote perlall. e.g. freebsd make=gmake

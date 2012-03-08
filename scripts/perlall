@@ -1285,11 +1285,13 @@ sub _build {
       push @conf, "-Dlibperl=$libperl";
     }
   }
+  # ensure ldflags and lddflags -faddress-sanitizer on ccflags=-faddress-sanitizer
+  # XXX this should go into darwin and linux hints somewhen
   if (grep /-[DA]'ccflags=.*-faddress-sanitizer/, @conf) {
-    # XXX this should go into darwin and linux hints somewhen
-    push @conf, "-Aldflags=-faddress-sanitizer",
-                "-Alddlflags=-faddress-sanitizer";
-    if ($^O eq 'darwin') {
+    for my $f (qw(ldflags lddlflags)) {
+      push @conf, "-A$f=-faddress-sanitizer" if !(grep /-[DA]'$f=.*-faddress-sanitizer/, @conf);
+    }
+    if ($^O eq 'darwin' and !(grep /-[DA]'ldflags=.*no_pie/, @conf)) {
       push @conf, "-Aldflags=-Wl,no_pie", "-Alddlflags=-Wl,no_pie";
     }
   }

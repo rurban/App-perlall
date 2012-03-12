@@ -32,7 +32,10 @@ Configuration in source-able shell script ~/.perlall
 You might want to link perlall to a valid command with "-command" appended
   perlall-make perlall-do perlall-cpan perlall-maketest...
 
-I always disliked perlbrew, this is better.
+For the purposes I'm doing this for perlbrew is both overkill and really
+wants to be installed in a more intrusive fashion than my primary use
+case needs. This code does the specific things I need more simply and
+therefore more reliably.
 
 This software is copyright (c) 2011 by cPanel Inc.
 

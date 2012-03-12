@@ -4,18 +4,18 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
+#   tee make test with -v (unbuffered IPC::Run or via fork-like callback?)
 #   maketest or -q: mark FAIL tests *RED*, p line bold black (see t/testc.sh)
 #   implement smoke, bench
 #   maketest --all (locally and testvm --all)
 #   more testvm_ctl: xen-shell, vmrun, VBoXManage
-#   init-modules: \ handling
 #   uninstall: packfile of installed files instead of rather unsafe globbing
 #   cmd --help
 #   get msys compiled, bootstrap a mingw perl without strawberry
 #   build win32 from win32/
 #   -v --help fails on some machines, broken Pod::Usage
 # TEST:
-#   tee with -v
+#   init-modules: \ handling and `` expansion
 #   testvm logs back from forks
 #   fix testvm forked and --fork arg
 #   'perlall=5.8* perlall do -m' should filter only main 5.8*
@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.08';
+our $VERSION = '0.08_20120308_0913';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -253,7 +253,7 @@ sub pre_process {
   $c->config->{PERLALL_PREFIX} = '/usr/local';
   # build only
   $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
-  if ($cmd =~ "init") {
+  if ($cmd eq 'init') {
     $c->config->{cpan} = 'cpan';
     $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info'
       .' Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor'
@@ -361,50 +361,50 @@ sub App::Rad::addopts {
 # only process opts before the command.
 # all other opts are passed verbatim to the subprocesses
 sub App::Rad::_get_input {
-    my $c = shift;
-    require Getopt::Long;
-    die "Getopt::Long needs to be version 2.36 or above"
-        unless $Getopt::Long::VERSION >= 2.36;
+  my $c = shift;
+  require Getopt::Long;
+  die "Getopt::Long needs to be version 2.36 or above"
+    unless $Getopt::Long::VERSION >= 2.36;
 
-    my (@options, @params);
-    my $base = basename($0);
-    my $cmd;
-    if ($base ne 'perlall') {
-      # take cmd from link name
-      ($cmd) = $base =~ /perlall-(\w+)$/;
-      $c->{'cmd'} = $cmd;
-      unless ($c->is_command($cmd)) {
-	warn "invalid link $base: unknown Command $cmd\n";
-	return;
-      }
-      $c->config->{linked} = $cmd; # yet unused
+  my (@options, @params);
+  my $base = basename($0);
+  my $cmd;
+  if ($base ne 'perlall') {
+    # take cmd from link name
+    ($cmd) = $base =~ /perlall-(\w+)$/;
+    $c->{'cmd'} = $cmd;
+    unless ($c->is_command($cmd)) {
+      warn "invalid link $base: unknown Command $cmd\n";
+      return;
     }
-    for (my $i=0; $i<@ARGV; $i++) { # the first non-option is the cmd, the rest its args
-      if (defined ($ARGV[$i]) and substr($ARGV[$i], 0, 1) ne '-') {
-	$c->{'cmd'} = $ARGV[$i] unless $cmd;
-	@params = (@ARGV[$i..$#ARGV]);
-	shift @params unless $c->config->{linked};
-	last;
-      }
-      push @options, ($ARGV[$i]);
+    $c->config->{linked} = $cmd; # yet unused
+  }
+  for (my $i=0; $i<@ARGV; $i++) { # the first non-option is the cmd, the rest its args
+    if (defined ($ARGV[$i]) and substr($ARGV[$i], 0, 1) ne '-') {
+      $c->{'cmd'} = $ARGV[$i] unless $cmd;
+      @params = (@ARGV[$i..$#ARGV]);
+      shift @params unless $c->config->{linked};
+      last;
     }
-    @{$c->argv} = (@params);
-    $c->{'cmd'} = '' unless $c->{'cmd'};
-    my $parser = new Getopt::Long::Parser;
-    $parser->configure( qw(bundling) );
-    @ARGV = @options; # getoptions eats @ARGV
-    my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
-    $c->options->{timeout} = $c->config->{perlall_timeout} unless exists $c->options->{timeout};
-    delete $c->options->{timeout} unless $c->options->{timeout};
-    $c->debug('received options: ' . join(' ',@options) . ' => '
-	      . _opts($c->options));
-    $c->debug('received command: ' . $c->{'cmd'});
-    $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
-    @ARGV = @{$c->argv};
-    if (!$c->{'cmd'} and $c->options->{version}) {
-      return $c->version();
-    }
-    return $c;
+    push @options, ($ARGV[$i]);
+  }
+  @{$c->argv} = (@params);
+  $c->{'cmd'} = '' unless $c->{'cmd'};
+  my $parser = new Getopt::Long::Parser;
+  $parser->configure( qw(bundling) );
+  @ARGV = @options; # getoptions eats @ARGV
+  my $ret = $parser->getoptions($c->{'_options'}, map {$_->[0]} @opts);
+  $c->options->{timeout} = $c->config->{perlall_timeout} unless exists $c->options->{timeout};
+  delete $c->options->{timeout} unless $c->options->{timeout};
+  $c->debug('received options: ' . join(' ',@options) . ' => '
+	    . _opts($c->options));
+  $c->debug('received command: ' . $c->{'cmd'});
+  $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
+  @ARGV = @{$c->argv};
+  if (!$c->{'cmd'} and $c->options->{version}) {
+    return $c->version();
+  }
+  return $c;
 }
 
 # from cmdline arg or ENV perlall
@@ -536,11 +536,24 @@ sub _dot_perlall {
     $s = $_ if $write; # backup
     chomp;
     s/#.*//;
-    s/^\s+//;
     s/\s+$//;
     print $NEW $s if $s and !length;
     next unless length;
 
+    if (/\\\s*$/) {
+      my $t = '';
+      do {
+	s/\\\s*$//;
+	s/#.*//;
+	chomp;
+	$t .= $_;
+      } while ($_ = <$CONFIG> and $_ =~ /\\\s*$/);
+      s/#.*//;
+      chomp;
+      $t .= $_;
+      $_ = $t;
+    }
+    s/^\s+//;
     if ( m/^alias\s([^\=\:\s]+) # alias key=value
 	   (?:=['"]?)   # ='
 	   ([^'"]+)     # value
@@ -1272,6 +1285,16 @@ sub _build {
       push @conf, "-Dlibperl=$libperl";
     }
   }
+  # ensure ldflags and lddflags -faddress-sanitizer on ccflags=-faddress-sanitizer
+  # XXX this should go into darwin and linux hints somewhen
+  if (grep /-[DA]'ccflags=.*-faddress-sanitizer/, @conf) {
+    for my $f (qw(ldflags lddlflags)) {
+      push @conf, "-A$f=-faddress-sanitizer" if !(grep /-[DA]'$f=.*-faddress-sanitizer/, @conf);
+    }
+    if ($^O eq 'darwin' and !(grep /-[DA]'ldflags=.*no_pie/, @conf)) {
+      push @conf, "-Aldflags=-Wl,no_pie", "-Alddlflags=-Wl,no_pie";
+    }
+  }
   $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
   for my $tryperl ("$bindir/perl", "/usr/local/bin/perl", "/usr/bin/perl") {
@@ -1286,7 +1309,7 @@ sub _build {
 	     or grep /^$f[= ]/, @{$c->options->{A}}
 	     or grep /^$f[= ]/, @{$c->options->{U}};
 	# -Dlibpth=/usr/local/lib64 /lib64 /usr/lib64 -D
-	my ($d,$v) = $tryargs =~ /-([AUD])$f=(.+?) (-[ADU]|;)/; # Not until -L
+	my ($d,$v) = $tryargs =~ m/-([AUD])$f=(.+?) (?:-[ADU]|;)/; # Not until -L
 	# check the
 	if ($f =~ /^use/ and !$v) {
 	  my ($u) = $tryargs =~ /-([DU])$f /;
@@ -1296,8 +1319,7 @@ sub _build {
 	  $v =~ s/([^\\]) /$1\\ /g;
 	  # There can be multiple -A$f=$v
 	  if ($d eq 'A') {
-	    my @v = ($tryargs =~ /-A$f=(.+?) (-[ADU]|;)/g);
-	    for my $v (@v) {
+	    for my $v ($tryargs =~ m/-A$f=(.+?) /g) {
 	      $c->debug("-$d$f=$v") if $v;
 	      $v =~ s/([^\\]) /$1\\ /g;
 	      push @conf, "-$d$f='$v'";
@@ -1305,15 +1327,6 @@ sub _build {
 	  } else {
             # avoid the BSDPAN ports hack, we do not want to register our modules with ports
 	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
-	    if ($f eq "cc" and $v =~ /asan_clang/) {
-	      # XXX this should go into darwin and linux hints somewhen
-	      push @conf, "-Accflags='-faddress-sanitizer'",
-	                  "-Aldflags='-faddress-sanitizer'",
-	                  "-Alddlflags='-faddress-sanitizer'";
-	      if ($^O eq 'darwin') {
-		push @conf, "-Aldflags='-Wl,no_pie'", "-Alddlflags='-Wl,no_pie'";
-	      }
-	    }
 	    $c->debug("-$d$f=$v");
 	    $v =~ s/([^\\]) /$1\ /g;
 	    push @conf, "-$d$f='$v'";
@@ -1726,11 +1739,11 @@ sub bench
 Installs and updates basic CPAN modules.
 
 Default: C<init-modules> in F<~/.perlall>
-   (YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info
-   Params::Util Bundle::CPANReporter2
-   B::Flags Opcodes  Math::Round Params::Classify $(cat ~/Perl/B-C/t/top100)
-   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse
-   MouseX::Types Task::Kensho)
+   YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info \
+   Params::Util Bundle::CPANReporter2 \
+   B::Flags Opcodes  Math::Round Params::Classify `cat ~/Perl/B-C/t/top100` \
+   Bundle::CygwinVendor YAML::XS DBIx::Class SQL::Abstract Module::Find Mouse \
+   MouseX::Types Task::Kensho
 
 Specific Options:
 
@@ -1747,6 +1760,10 @@ sub init
   $c->addopts( "cpan=s", "deps" );
   my @argv = @{$c->argv};
   my $mods = @argv ? join(" ",@argv) : $c->config->{'init-modules'};
+  if (!@argv and $mods =~ /`(.+?)`/) { # expand `` in init-modules
+    my $sh = `$1`;
+    $mods =~ s/`(.+?)`/$sh/;
+  }
   if ($c->options->{deps}) {
     $mods = `'ack -ho '(^\s*|\{\s*)(use|require) ([\w:]+);' blib/lib t | perl -lpe's/^\s*(\{|;|use|require)\s*//g;s/;?\s*\$//;' | sort -u'`;
     $mods = join(" ",split(/\n/, $mods));

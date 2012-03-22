@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.08_20120308_0913';
+our $VERSION = '0.08_20120322_1315';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1358,6 +1358,9 @@ sub _build {
   if ($^O eq 'msys') { # msys: mingw bootstrapping
     push @conf, "-Dlibc=/usr/lib.libmsys-1.0.dll.a", "-Dusenm=no";
   }
+  if (join(" ",@conf) =~ /-D'?cc='?clang'?/) { # our macros are just too bad
+    push @conf, "-Accflags=-Wno-unused-value"; # this belongs into Configure
+  }
 
   if ($^O ne 'MSWin32') {
     $c->_system1( @conf);
@@ -1370,12 +1373,14 @@ sub _build {
     my $makefile = $aperl ? 'Makefile' : 'makefile.mk';
     # XXX copy and tune config.h and Makefile (INST_DRV, INST_TOP)
     if ($ENV{WIN64}) { # XXX check if our compiler can do 64bit, else unset WIN64
+      $w64++;
+      warn "WIN64 not yet tested";
     }
     if ($w64) { $config = $aperl ? 'config.vc64' : 'config.gc64'; }
     else {$config = $aperl ? 'config.vc' : 'config.gc';}
     $c->_log(1,"win32 configure $config $make");
-    $c->_system1($cp,$config,'config.h');
-    $dryrun = 1;
+    $c->_system1($cp, $config, 'config.h');
+    $dryrun = 1; # hack to skip post-configure patchups
   }
   $c->_log(1,"post-configure fixes");
 

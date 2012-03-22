@@ -1,5 +1,12 @@
 -*- change-log -*-
 
+0.09    2012-03-22 rurban
+	* add -Wno-unused-value to clang ccflags
+	* add -Accflags=-faddress-sanitizer support
+	  ensure ldflags and lddflags -faddress-sanitizer on ccflags=-faddress-sanitizer
+	* improve handling of mult. -A in /usr/local/bin/perl -V:config_args
+	* .perlall: implemented init-modules: \ handling and `` expansion
+
 0.08    2012-02-23 rurban
 	* fix $bindir/bin/perl -D default for new builds
 	* now maketest -v does TEST_VERBOSE=1

@@ -32,9 +32,10 @@ Configuration in source-able shell script ~/.perlall
 You might want to link perlall to a valid command with "-command" appended
   perlall-make perlall-do perlall-cpan perlall-maketest...
 
-I always disliked perlbrew, this is better.
+I always disliked perlbrew. This uses perl installations as intended
+by standard Configure.
 
-This software is copyright (c) 2011 by cPanel Inc.
+This software is copyright (c) 2011-12 by cPanel Inc.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

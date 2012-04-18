@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.09';
+our $VERSION = '0.09_20120418_1251';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -2020,13 +2020,15 @@ sub make
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
     print $fh $gitshort if $fh and $gitshort;
-    local $c->options->{verbose} = $v;
+    local $c->options->{verbose} = 0;
+    local $c->options->{quiet} = 1;
     # undef $c->stash->{log_fh};
     $c->_make( $p);
     if ($argv) { # preserves quotes as in -e'my $a;'
       #$c->options->{verbose} = 1 unless $c->options->{quiet};
       local $ENV{p} = $p;
       local $c->options->{quiet};
+      local $c->options->{verbose} = $v;
       $c->_system0( "$p $argv" );
     }
   }
@@ -2060,12 +2062,15 @@ sub maketest
   my $make = $Config{make};
   $c->addopts( "verbose|v", "quiet|q", "dryrun!", 'forked', "gittag=s" );
   my $gitshort = $c->_gitoneliner();
+  my $v = $c->options->{verbose};
   for my $p (@{$c->stash->{perlall}}) {
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
     print $fh $gitshort if $fh and $gitshort;
+    local $c->options->{verbose} = 0;
+    local $c->options->{quiet} = 1;
     $c->_make($p);
-    my @opts = ("test", $c->options->{verbose} ? "TEST_VERBOSE=1" : ());
+    my @opts = ("test", $v ? "TEST_VERBOSE=1" : ());
     unshift @opts,"-j".$c->options->{j}
       if $c->options->{j} and !$c->_older( $p,"5.10.0");
     if (!-f "Makefile" and -f "Build") {
@@ -2073,13 +2078,14 @@ sub maketest
     } else {
       $c->_system1( $make, @opts);
     }
-    unless ($c->options->{verbose}) {
+    unless ($v) {
       my $log = $c->stash->{log};
       my $result = `grep -a Result: $log`;
       $c->_log(0, $result) if $result;
     }
     if (@{$c->argv}) {
       local $c->options->{quiet};
+      local $c->options->{verbose} = $v;
       # optionally additional tests
       $c->_system0( "p=$p $p @{$c->argv}");
     }

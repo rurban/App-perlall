@@ -32,6 +32,8 @@ Configuration in source-able shell script ~/.perlall
 You might want to link perlall to a valid command with "-command" appended
   perlall-make perlall-do perlall-cpan perlall-maketest...
 
+See the presentation at https://docs.google.com/present/view?id=dcqmmdbh_4dmsxdqgx
+
 I always disliked perlbrew. This uses perl installations as intended
 by standard Configure.
 

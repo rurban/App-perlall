@@ -3,6 +3,7 @@ LICENSE
 MANIFEST
 Makefile.PL
 README
+INSTALL
 .perlall
 scripts/perlall
 t/00-compile.t

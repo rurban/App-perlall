@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.10    2012-05-03 rurban
+	* add INSTALL and link to Google slideshow in README
+	* less verbose maketest messages during make
+
 0.09    2012-03-22 rurban
 	* add -Wno-unused-value to clang ccflags
 	* add -Accflags=-faddress-sanitizer support

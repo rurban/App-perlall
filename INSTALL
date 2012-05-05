@@ -29,12 +29,13 @@ cp scripts/perlall ~/bin/perlall
 # ensure that $HOME/bin is in your $PATH. better then ~/perl5/bin
 test -f ~/.perlall || cp .perlall ~/
 cd ~
-mkdir -p ~/perl5/blead/perl-git
-sed -i 's,/usr/src/perl/blead/perl-git,~/perl5/blead/perl-git,' .perlall
-sed -i 's,PERLALL_PREFIX=/usr/local,PERLALL_PREFIX=~/perl5,' .perlall
-sed -i 's,PERLALL_BUILDROOT=/usr/src/perl,PERLALL_BUILDROOT=~/perl5,' .perlall
-sed -i 's,# PERLALL_BINDIR=~/perl5/perlbrew/bin,PERLALL_BINDIR=~/bin,' .perlall
-cd ~/perl5/blead/
+mkdir -p ~/perl5/src/perl-git
+
+sed -i "s,/usr/src/perl/blead/perl-git,$HOME/perl5/src/perl-git," .perlall
+sed -i "s,# PERLALL_PREFIX=~/perl5/$,PERLALL_PREFIX=$HOME/perl5," .perlall
+sed -i "s,# PERLALL_BUILDROOT=~/perl5/src$,PERLALL_BUILDROOT=$HOME/perl5/src," .perlall
+sed -i "s,# PERLALL_BINDIR=~/perl5/bin$,PERLALL_BINDIR=$HOME/perl5/bin," .perlall
+cd ~/perl5/src/
 
 for all three variants:
 ======================

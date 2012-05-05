@@ -25,7 +25,7 @@ cd /usr/src/perl/blead/
 without sudo (local as with perlbrew)
 =====================================
 
-cp script/perlall ~/bin/perlall
+cp scripts/perlall ~/bin/perlall
 # ensure that $HOME/bin is in your $PATH. better then ~/perl5/bin
 test -f ~/.perlall || cp .perlall ~/
 cd ~

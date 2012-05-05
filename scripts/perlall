@@ -1042,7 +1042,7 @@ sub build
       # get perl-release from CPAN-Perl-Releases
       _auto_use("CPAN::Perl::Releases");
       my $urls = CPAN::Perl::Releases::perl_tarballs($ps);
-      my $url = (keys %$urls)[0];
+      my $url = (values%$urls)[0];
       require CPAN; CPAN->import;
       warn "CPAN::Shell->get(qw($url))\n";
       CPAN::Shell->get($url);
@@ -1135,6 +1135,7 @@ sub _build {
   my $rm = $Config{rm};
   $rm = "rm" unless $rm;
   my $sudo = $c->config->{sudo};
+  $sudo = "" if $root =~ m!^/home!; # don't sudo if installing locally
   $sudo = "" unless $<; # already sudo
   # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");

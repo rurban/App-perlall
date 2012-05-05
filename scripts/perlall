@@ -1022,7 +1022,7 @@ sub build
     $c->_fail("Empty PERLALL_BUILDROOT in .perlall");
   }
   if (!-d $root and !$dryrun) {
-    $c->_log1( "mkdir $root # PERLALL_BUILDROOT");
+    $c->_log( 1, "mkdir $root # PERLALL_BUILDROOT");
     $c->_system1( "mkdir",$root)
       and $c->_fail("Cannot create PERLALL_BUILDROOT $root");
   }

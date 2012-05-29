@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1150,7 +1150,10 @@ sub _build {
   $ithreads = undef if $multi;
   my $bindir = $c->config->{PERLALL_BINDIR};
 
-  # assert $p = $ps . $suffix;
+  # XXX assert $p = $ps . $suffix;
+  if ($c->options->{install}) {
+    $c->stash->{logprefix} =~ s/^log.build-/log.build-install-/;
+  }
   $c->stash->{log} = "$root/" . $c->stash->{logprefix} . $p;
   if ($c->stash->{log_fh}) {
     close $c->stash->{log_fh};
@@ -1622,9 +1625,9 @@ EOP
       # move away perl5.x
       $c->_system( 'mv', "$root/inst-$p$prefix/bin/perl$ps", "$root/inst-$p$prefix/perl$ps" );
       # copy all versioned tools
-      @c = ($cp, "$root/inst-$p$prefix/bin/*", "$bindir/");
-      unshift @c, $sudo if $sudo and !-w "$bindir/perl$p";
-      $c->_system( @c );
+      my $cmd = "$cp $root/inst-$p$prefix/bin/* $bindir/";
+      $cmd = "$sudo $cmd" if $sudo and !-w "$bindir/perl$p";
+      $c->_system( $cmd );
       # move back perl5.x
       $c->_system( 'mv', "$root/inst-$p$prefix/perl$ps", "$root/inst-$p$prefix/bin/perl$ps" );
     } else {

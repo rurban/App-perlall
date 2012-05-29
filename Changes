@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.13    2012-05-29  rurban
+	* create seperate log.build-install not to overwrite log.build
+	* fix system sudo cp * bindir/ on blead install
+
 0.12    2012-05-05 rurban
 	* fix INSTALL and perlall to work under ~ (mrmuskrat)
 	* fix build to download perl source tar.gz via CPAN (mrmuskrat)

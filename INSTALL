@@ -1,5 +1,5 @@
-prereq's: perl, make, git, sh
-=============================
+prereq's: perl, make, git, sh, patch
+====================================
 
 perl Makefile.PL
 make

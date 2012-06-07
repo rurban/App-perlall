@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.13_20120605_0926';
+our $VERSION = '0.13_20120607_1053';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1038,7 +1038,10 @@ sub build
   unless ($from) { # XXX git only at first
     if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
       $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
+    } elsif ($c->options->{install}) {
+      ;
     } else {
+      $c->_log(1, "downloading perl-$ps via CPAN::Perl::Releases");
       # get perl-release from CPAN-Perl-Releases
       _auto_use("CPAN::Perl::Releases");
       my $urls = CPAN::Perl::Releases::perl_tarballs($ps);
@@ -1241,6 +1244,11 @@ sub _build {
   if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
+    if ($ps =~ /^5\.6\.2/) {
+      $c->_log('',"patch to use 5.8.0 lib/File/Find.pm");
+      $c->_system("git show HEAD..perl-5.8.0 lib/File/Find.pm | patch -N -p1")
+	and warn("patch HEAD..perl-5.8.0 lib/File/Find.pm had some errors\n");
+    }
   } elsif (!$dryrun) {
     warn "Warning: Building -Dmksymlink with no Devel::PatchPerl patches applied.\n"
       ."Use --no-link if this fails.\n";
@@ -1608,7 +1616,9 @@ EOP
   # XXX on freebsd and windows there's no sudo. well in freebsd ports there is.
   # do we need sudo? check writable
   if ($c->_older($p,'5.8.1')) {
-    $c->_system1( $mv, "$bindir/perl$ps","$bindir/perl$p" );
+    my @c = ( $mv, "$bindir/perl$ps","$bindir/perl$p" );
+    unshift @c, $sudo if $sudo and !-w "$bindir/perl$p";
+    $c->_system1( @c );
   }
   elsif (-f "$root/inst-$p$prefix/bin/perl$ps") {
     my @c = ($cp, "$root/inst-$p$prefix/bin/perl$ps","$bindir/perl$p");

@@ -44,7 +44,7 @@ BEGIN { # check platform support: perldoc perlport
     if ($^O =~ /^vms|dos|bsdos$/) {
       die "unsupported OS $^O"; # fixes welcome
     } elsif ($^O =~ /^MSWin32|msys/) {
-      ; # warn "$^O not yet fully supported\n";
+      warn "$^O not yet fully supported\n";
     } else { # should theoretically work:
              #        netbsd sunos aix haiku hpux irix next svr4 unicos* plan9
              # scary: VOS os390 os400 posix-bc vmesa riscos amigaos beos mpeix

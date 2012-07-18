@@ -1,0 +1,568 @@
+
+perlall
+
+do something with all my perls
+
+Reini Urban / rurban                     houston.pm, 2012
+
+Design Goals
+
+parallel perl installations as supported by Configure (or not).
+
+no chdir or switching to other perls (better perlbrew)
+
+
+
+
+/usr/local/bin/perl5.15.8
+
+/usr/local/bin/perl5.14.2
+
+/usr/local/bin/perl5.12.4
+
+/usr/local/bin/perl5.10.1
+
+/usr/local/bin/perl5.8.9
+
+/usr/local/bin/perl5.8.8
+
+/usr/local/bin/perl5.8.5
+
+/usr/local/bin/perl5.8.4
+
+/usr/local/bin/perl5.6.2
+
+
+
+
+Design Goals
+
+Build, maintain and test with a lot of perls, on a lot of machines.
+
+Your private cpantesters framework.
+
+
+
+
+Standardize feature names: DEBUGGING and threads.
+
+
+
+
+Single file    - scp to all remote vm's. Only 4 external modules - self-installer independent on CPAN.
+
+
+
+
+
+
+
+perlall              vs      perlbrew
+
+Globally shared non-arch modules
+
+
+
+
+manual installation process (root, sudo or non-sudo)
+
+
+
+
+Not only build. Use it:
+
+  init cpan cpanm 
+
+  maketest makeinstall, ...
+
+
+
+
+MSWin32, msys
+
+
+
+
+Private non-arch - good for usedevel testing
+
+
+
+
+automatic bash installation
+
+
+
+
+
+
+
+No parallel usage
+
+
+
+
+
+
+
+
+
+
+No MSWin32, what is msys?
+
+Common tasks: setup + test + install
+
+for p in 6.2 8.4 8.5 8.8 8.9 10.1 12.4 14.2 15.8
+
+do
+
+  perlall build 5.${p};  perlall build 5.${p}-nt
+
+  perlall build 5.${p}d; perlall build 5.${p}d-nt
+
+  perlall build 5.${p}-m
+
+done                  # and wait ~2h
+
+
+
+
+perlall list          # what failed?
+
+perlall=5.15.* perlall cpanm -f --sudo YAML
+
+perlall init          # installs e.g. Bundle::CPANReporter2
+
+                                                   # wait and prompt for the next 2hrs
+
+
+
+
+cd ~/Perl/B-Generate
+
+perlall maketest
+
+perlall makeinstall    # generate and upload cpanreports
+
+
+
+
+
+
+
+
+
+
+Creating test reports
+
+cd ~/Perl/B-Generate
+
+
+
+
+perlall maketest            local
+
+
+
+
+perlall testvm --all               and remote (vm or phys)
+
+
+
+
+
+
+
+=» log.test-osx10.6.8-5.10.1d-nt, log.test-linuxmint1-5.15.8d-nt, log.test-freebsd7.4-5.10.1, log.test-cygwin1.7.10s_winxp-5.14.2d-nt, ... (» 50 logfiles)
+
+
+
+
+
+
+
+$ ../B-C/store_rpt            save reports away
+
+
+
+
+
+
+
+Working with test reports
+
+$ ../B-C/status_upd -fqd
+
+
+
+
+cygwin1.7.10s_winxp-5.14.2d-nt:
+
+t/cc.t Failed tests:  10, 38, 46, 101
+
+t/e_perlcc.t Failed tests:  22, 52
+
+
+
+
+linuxmint1-5.14.2-m:
+
+t/c_o1.t Failed test:  15
+
+t/c_o2.t Failed test:  15
+
+t/c_o3.t Failed test:  15
+
+t/c_o4.t Failed test:  15
+
+t/cc.t Failed test:  15
+
+t/e_perlcc.t Failed tests:  53..54
+
+
+
+
+linuxmint1-5.15.8d:
+
+
+
+
+linuxmint1-5.15.8d-nt:
+
+t/c_o1.t Failed test:  15
+
+t/c_o2.t Failed test:  15
+
+t/c_o3.t Failed test:  15
+
+t/e_perlcc.t Failed tests:  53..54
+
+Working with test reports
+
+Download external cpanreports:
+
+
+
+
+$ ../B-C/t/download-reports 1.43
+
+
+
+
+
+
+
+And check all reports, yours and theirs:
+
+
+
+
+$ ../B-C/status_upd -fqd t/reports/1.43
+
+
+
+
+-fqd     fail only, quiet, no dump display (broken)
+
+
+
+
+
+
+
+Reports are created by:
+
+  make test TEST_VERBOSE=1 2»&1 | tee log.test
+
+  git diff »» log.test
+
+  perl -V  »» log.test
+
+
+
+
+Cfg and Shortcuts  in  ~/.perlall
+
+.perlall is in bash format. source it from your .profile
+
+
+
+
+env and alias
+
+
+
+
+PERLALL_BUILDROOT=~/perl5/src
+
+alias perl-git='cd /usr/src/perl/blead/perl-git'
+
+# currently used perl (set by perlall)
+
+alias p=perl5.15.8d-nt
+
+
+
+
+
+
+
+
+
+
+Shortcuts  in  ~/.perlall
+
+# some aliases suggestions
+
+alias pb="p -Iblib/arch -Iblib/lib" # no -Mblib!
+
+alias pmf="if [ -f Makefile.PL ]; then p Makefile.PL; else rm -rf _build; p Build.PL; fi"
+
+alias pm='pmf && m'
+
+alias ppan='p -S cpan'
+
+
+
+
+alias m=make
+
+alias mt='make -j4 test'
+
+alias mi='mt && smi'
+
+alias mtee='mt 2»&1 | tee log.test'
+
+alias smi='sudo make install'
+
+
+
+
+#set p alias from current Makefile
+
+function ppm { p=$(perl -ane'print $F[2] if /^FULLPERL =/' Makefile); echo alias p=$p; test -n "$p" && alias p=$p; }
+
+alias pgrp='pgrep -fl perl'
+
+
+
+
+
+
+
+
+
+
+
+
+
+Typical test session
+
+alias pb="p -Iblib/arch -Iblib/lib"
+
+alias pmf="if [ -f Makefile.PL ]; then p Makefile.PL; else rm -rf _build; p Build.PL; p Build; fi"
+
+alias pm='pmf && m'
+
+
+
+
+$ pm                           # make with your current perl
+
+$ pb t/02failing_test.t        # single test
+
+$ pb -d t/02failing_test.t     # debug it
+
+
+
+
+$ mt                           # test with this perl
+
+$ perlall -m --nogit maketest  # all major perls
+
+
+
+
+perlall do
+
+# who has no YAML?
+
+perlall do -MYAML -e0
+
+
+
+
+# install on older versions
+
+perlall=5.8.* perlall cpanm -f -S YAML
+
+
+
+
+# check memory leaks, with fresh make before
+
+# use current p as \$p         (pb not, sorry)
+
+perlall make '-e1 && valgrind \$p -Mblib test.pl'
+
+
+
+
+perlall make does always a do, i.e $p $@
+
+
+
+
+testvm
+
+Need to setup every vm, with perlall of course. See INSTALL.
+
+ssh-copy-id your .ssh key, adjust .profile or .bashrc.
+
+Create the same layout as on the master for your work modules.
+
+ssh win mkdir -p Perl/MyModule
+
+perlall testvm win centos5 freebsd10 --fork
+
+
+
+
+If win is on a vm, then the vm is started/resumed. (kvm only so far). Switched from vmware,xen,virtualbox to kvm.
+
+With -j4 ensure that max. 4 vm's run concurrently. Memory and IO pressure destabilizes the system, esp. with cgroups and 3.x kernels.
+
+TODO: Automated mingw/activeperl testing. ssh with cmd.exe?
+
+New perl release
+
+perl-git                      # cd to git srcdir
+
+git co blead; git fetch       # get new tags
+
+perl-root                     # cd to buildroot
+
+
+
+
+# for testing
+
+perlall build 5.15.8d
+
+perlall build 5.15.8d-nt
+
+# for benchmarking
+
+perlall build 5.15.8-nt
+
+# start CPAN update
+
+perlall=5.15.8* perlall init
+
+# how does it look like?
+
+cd ~/Perl/MyModule
+
+alias p=perl5.15.8d-nt
+
+pm && mtee
+
+
+
+
+Test blead
+
+perl-git                      # cd to git srcdir
+
+git co blead; git fetch       # get latest
+
+perlall -v build bleadd-nt --link -Dcc=gcc-mp-4.7
+
+=» /usr/local/bin/perl5.15.8d-nt@8129baca installed
+
+
+
+
+    blead - magic version,  --link    -Dmksymlinks to perl-git
+
+
+
+
+perlall -v build bleadd-nt --link -Dcc=clang \
+
+  -Dld=clang --as perl5.15.8d-nt-clang
+
+...test error...
+
+perlall -v build bleadd-nt \ 
+
+  --as perl5.15.8d-nt-clang --install   # continue
+
+
+
+
+perlall build bleadd-nt smoke-me/khw-tk # branch
+
+=» perl5.15.8d-nt@khw-tk
+
+Planned
+
+perlall smoke -j4 bleadd-nt smoke-me/*
+
+
+
+
+=» TODO: send smoke reports
+
+
+
+
+perlall=5*[0-9]-nt perlall -m bench t/benchscript.t
+
+
+
+
+=» TODO: stable Benchmark.pm (check load, wait until stable)
+
+
+
+
+perlall cpan Devel::*Prof*
+
+
+
+
+=» query CPAN for matching modules. metacpan not yet good enough. CPAN is better
+
+
+
+
+cpan App::perlall
+
+cd ~/Perl
+
+git clone https://github.com/rurban/App-perlall.git
+
+cd App-perlall
+
+perl Makefile.PL && make test install
+
+cd ~/bin
+
+ln -s ~/Perl/App-perlall/scripts/perlall
+
+
+
+
+ln perlall perlall-maketest
+
+ln perlall perlall-do
+
+ln perlall perlall-cpan
+
+ln perlall perlall-init
+
+
+
+
+# See INSTALL
+

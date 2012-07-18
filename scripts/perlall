@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.14';
+our $VERSION = '0.14_20120608_1604';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -2385,11 +2385,11 @@ sub testvm
       if ($do_fork) { # run cmds in parallel
 	$remotecmd .= ' --forked' if $cmd eq 'maketest' and $cmd !~ /--forked/;
 	my @cmd = ("sh","-c",
-		   "if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; fi");
+		   "if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; grep Result $logglob; fi");
         # if virsh was resumed, pause it back afterwards
 	if ($c->stash->{vm} and my $prevstat = $c->_vm_prevstatus($m)) {
 	  @cmd = ("sh","-c",
-		  "if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; "
+		  "if ssh $m '$remotecmd'; then rsync -avz $m:$base/$logglob .; grep Result $logglob; "
 		  ."sudo virsh $m $prevstat; fi");
 	  _vm_delstatus($m);
 	}
@@ -2420,6 +2420,7 @@ sub testvm
       } else {
 	$c->_system1("ssh",$m,$remotecmd);
 	$c->_system1("rsync","-avz","$m:$base/$logglob",".");
+	$c->_system1("grep Result $logglob");
       }
     }
   }

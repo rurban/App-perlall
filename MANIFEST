@@ -5,7 +5,10 @@ Makefile.PL
 README
 INSTALL
 .perlall
+lib/App/perlall.pm
 scripts/perlall
+perlall.ppt
+perlall.txt
 t/00-compile.t
 t/01-build.t
 t/01-linked.t
@@ -19,4 +22,3 @@ t/07-help.t
 t/08-version.t
 t/release-pod-coverage.t
 t/release-pod-syntax.t
-lib/App/perlall.pm

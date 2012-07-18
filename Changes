@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.15    2012-07-18
+	* testvm: show the log results
+	* dummy lib/App/perlall.pm added to be able to persuade 'cpan App::perlall'
+
 0.14    2012-06-07
 	* use default build useshrplib with clang asan (add -shared to lddlflags,
           force -Duseshrplib)

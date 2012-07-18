@@ -19,3 +19,4 @@ t/07-help.t
 t/08-version.t
 t/release-pod-coverage.t
 t/release-pod-syntax.t
+lib/App/perlall.pm

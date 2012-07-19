@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.16    2012-07-19
+	* build 5.6: do not remove .git when we still need it (for the File::Find patch)
+	* fix File::Find from 5.8.0 patch
+
 0.15    2012-07-18
 	* testvm: show the log results
 	* dummy lib/App/perlall.pm added to be able to persuade 'cpan App::perlall'

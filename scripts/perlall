@@ -1231,11 +1231,6 @@ sub _build {
       $c->_fail( "git checkout -f $from") if !-f "Configure" and !$dryrun;
       $c->_system1( "git","reset","--hard");
       $c->_system1( "git","clean","-dxf");
-
-      # on versions rf .git now
-      if ( !$gitsuffix ) {
-	$c->_system1( "rm","-rf",".git");
-      }
     }
   }
 
@@ -1254,6 +1249,10 @@ sub _build {
       ."Use --no-link if this fails.\n";
   }
 
+  # on versions rf .git now
+  if ( !$gitsuffix and -d ".git" ) {
+    $c->_system1( $rm,"-rf",".git");
+  }
   # $c->_system( $make, @j, "clean") if -f "Makefile" and -f 'miniperl';
   $c->_system( $rm, "config.h") if -f "config.h";
   $c->_system( $rm, "Policy.sh") if -f "Policy.sh";

@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.17    2012-08-09
+	* dynamic --main from git tag
+
 0.16    2012-07-19
 	* build 5.6: do not remove .git when we still need it (for the File::Find patch)
 	* fix File::Find from 5.8.0 patch

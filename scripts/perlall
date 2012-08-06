@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -62,7 +62,8 @@ BEGIN { # check platform support: perldoc perlport
   }
   _auto_use( @extuse );
 }
-# 5.8.4: ??, 5.8.5: centos4, 5.8.8: centos5
+# 5.8.4: solaris, 5.8.5: centos4, 5.8.8: centos5
+# below dynamically parsed from git tags
 our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.16.0);
 
 push @App::Rad::ISA, 'main';
@@ -429,6 +430,24 @@ sub _get_perlall {
   if ($c->options->{skip} or $c->options->{main}) {
     if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
       # no @git releases only blead
+      # Check newer main releases from git tags
+      #@main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.16.0);
+      my $srcdir = $c->config->{'perl-git'};
+      if ($srcdir and -d $srcdir and -d "$srcdir/.git" ) {
+	my $major;
+	for (split(/\n/,`git --git-dir="$srcdir/.git" tag -l`)) {
+	  my ($mj, $mi) = $_ =~ m/^(?:v|perl-)5\.(\d+)\.(\d+)$/;
+	  push @{$major->{$mj}}, $mi if $mj and $mj % 2 == 0;
+	}
+	for my $mj (keys %$major) {
+	  my $max = 0;
+	  for (@{$major->{$mj}}) { $max = $_ if $_ > $max; }
+	  unless (grep {"5.$mj.$max" eq $_} @main_releases) {
+	    @main_releases = grep !/^5\.$mj\.\d+/, @main_releases;
+	    push @main_releases, "5.$mj.$max";
+	  }
+	}
+      }
       my @np;
       for my $p (grep !/\@/, @p) {
 	push @np, map{index($p, "perl$_")>=0 ? $p :()} @main_releases;
@@ -1261,6 +1280,7 @@ sub _build {
 
   # prepare configure options, dependent on options and $p
   my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
+	      #"-Uversiononly",
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none",
 	      "-Dinstallsiteman1dir=none","-Dinstallsiteman3dir=none");
   # we cannot force archname, because we don't know the resulting name yet

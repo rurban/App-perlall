@@ -1559,7 +1559,7 @@ sub _build {
   $c->debug("post-make versiononly");
   # TODO: need to install pureperl libs,
   # but also version the executables
-  if (!grep /^-Uversiononly/, @{$c->options->{U}) {
+  if (!grep /^-Uversiononly/, @{$c->options->{U}} ) {
       $c->_grep("-i s/versiononly='undef'/versiononly='define'/; print",
 		"config.sh", 'lib/Config_heavy.pl');
   }

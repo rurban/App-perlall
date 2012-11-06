@@ -1323,7 +1323,7 @@ sub _build {
   if (grep /-[DA]'ccflags=.*-faddress-sanitizer/, @conf) {
     my $f = 'ldflags';
     push @conf, "-A$f=-faddress-sanitizer" if !(grep /-[DA]'$f=.*-faddress-sanitizer/, @conf);
-    my $f = 'lddlflags';
+    $f = 'lddlflags';
     push @conf, ("-A$f='-shared\\ -faddress-sanitizer'","-Duseshrplib")
       if !(grep /-[DA]'$f=.*-faddress-sanitizer/, @conf)
       and !(grep /-U'?useshrplib/, @conf);
@@ -1559,7 +1559,7 @@ sub _build {
   $c->debug("post-make versiononly");
   # TODO: need to install pureperl libs,
   # but also version the executables
-  if (!grep /^-Uversiononly/, @{$c->options->{U}} ) {
+  if (!grep /^-Uversiononly/, @{$c->options->{U}}) {
       $c->_grep("-i s/versiononly='undef'/versiononly='define'/; print",
 		"config.sh", 'lib/Config_heavy.pl');
   }
@@ -1818,7 +1818,8 @@ sub init
     $mods =~ s/`(.+?)`/$sh/;
   }
   if ($c->options->{deps}) {
-    $mods = `'ack -ho '(^\s*|\{\s*)(use|require) ([\w:]+);' blib/lib t | perl -lpe's/^\s*(\{|;|use|require)\s*//g;s/;?\s*\$//;' | sort -u'`;
+    my $ack = q(ack -ho '(^\s*|\{\s*)(use|require) ([\w:]+);' blib/lib t | perl -lpe's/^\s*(\{|;|use|require)\s*//g;s/;?\s*\$//;' | sort -u);
+    $mods = `$ack`;
     $mods = join(" ",split(/\n/, $mods));
     return "no --deps found" unless $mods;
   }

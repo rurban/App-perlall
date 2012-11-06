@@ -15,6 +15,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   build win32 from win32/
 #   -v --help fails on some machines, broken Pod::Usage
 #   detect -asan suffix
+#   set (store alias p in .perlall, for scripts)
 # TEST:
 #   new versiononly logic
 #   init-modules: \ handling and `` expansion
@@ -32,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -104,6 +105,7 @@ perlall - build, test and do with all perls
     perlall uninstall perl5.15.4d-nt@khw-tk
 
     perlall init perl5.15.4d-nt@blead DBI CPAN::SQLite $(cat ~/Perl/B-C/t/top100)
+    perlall set perl5.16.2d
 
     perlall="5.1*" perlall do -MData::Dumper -e'my $a;$b={1=>\$a};$a=\$b;print Dumper($b)'
     perlall --older 5.12 make -Mblib t/0basic.t
@@ -1879,6 +1881,22 @@ sub list
   my $c = shift;
   warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
   return join "\n", @{$c->stash->{perlall}};
+}
+
+=item B<set> version
+
+Set alias p in .perlall
+
+=cut
+
+sub set
+  :Help('Set alias p in .perlall')
+{
+  my $c = shift;
+  my $p = pop @{$c->argv};
+  warn "additional arguments @{$c->argv} ignored\n" if @{$c->argv};
+  $c->_set_alias($p);
+  return;
 }
 
 =item B<do> [<version>] commands...

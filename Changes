@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.18    2012-11-06
+	* set: new command to store the p alias in .perlall
+
 0.17    2012-08-06
 	* dynamic --main from git tag
 

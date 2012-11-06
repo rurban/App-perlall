@@ -1395,7 +1395,9 @@ sub _build {
     push @conf, "-Dlibc=/usr/lib.libmsys-1.0.dll.a", "-Dusenm=no";
   }
   if (join(" ",@conf) =~ /-D'?cc='?clang'?/) { # our macros are just too bad
+    #if (grep /^-[DA]ccflags/, @conf) {
     push @conf, "-Accflags=-Wno-unused-value"; # this belongs into Configure
+    #}
   }
 
   if ($^O ne 'MSWin32') {

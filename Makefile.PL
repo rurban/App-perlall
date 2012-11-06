@@ -4,7 +4,7 @@ use warnings;
 use ExtUtils::MakeMaker 6.17; # perl-5.6.2
 use Config;
 
-my %WriteMakefileArgs = 
+my %WriteMakefileArgs =
   (
    "NAME" => "App::perlall",
    "VERSION_FROM" => "scripts/perlall",
@@ -28,7 +28,7 @@ my %WriteMakefileArgs =
    "SIGN" => 1,
    ($ExtUtils::MakeMaker::VERSION gt '6.46' ?
     ('META_MERGE'  =>
-     { 
+     {
       recommends =>
       {
        'File::Slurp' => "9999.13", # with B::C only

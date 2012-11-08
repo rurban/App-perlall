@@ -14,9 +14,9 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   get msys compiled, bootstrap a mingw perl without strawberry
 #   build win32 from win32/
 #   -v --help fails on some machines, broken Pod::Usage
-#   detect -asan suffix
 #   check installation of script
 # TEST:
+#   -asan suffix magic
 #   new versiononly logic
 #   init-modules: \ handling and `` expansion
 #   testvm logs back from forks
@@ -33,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -947,6 +947,14 @@ E.g. C<perlall build blead-nt> builds latest non-threaded.
 If the checkout from a bit branch is not a release, the suffix will be
 marked with C<@> and the sources are copied to the
 builddir.
+
+More special perl suffix rules:
+
+  d     -DDEBUGGING
+  -nt   non-threaded
+  -m    multiplicity
+  -asan clang -faddress-sanitizer
+
 C<-Dmksymlinks> is used for blead, unless the option C<--link> is
 specified.
 
@@ -1058,10 +1066,6 @@ sub build
   }
   my $from = shift @args ; # might be empty
   my $ps = _numonly($p);
-  # $ps =~ s/\-.+$//;
-  # $ps =~ s/\@.+$//;
-  # $ps =~ s/thr$// if $c->config->{usethrsuffix};
-  # $ps =~ s/d$//;
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   my $gitsuffix;
 
@@ -1099,7 +1103,7 @@ sub build
     }
   } else { # check implicit --as
     # normalize suffix
-    my ($suffix_as) = $suffix =~ /^d?(?:-nt|thr)?(?:@.+)?(.*)$/;
+    my ($suffix_as) = $suffix =~ /^d?(?:-nt|thr)?(?:-clang|-tsan|-asan)?(?:@.+)?(.*)$/;
     if ($suffix_as) { # 5.15.5d-nt-git-clang => -git-clang
       $gitsuffix = $suffix_as;
       $c->debug("implicit --as suffix $gitsuffix");
@@ -1180,6 +1184,16 @@ sub _build {
   my $debug = substr($suffix,0,1) eq 'd';
   my $multi = $suffix =~ /^d?-m/;
   my $ithreads = $suffix !~ /^d?-nt/;
+  if ($suffix =~ /-(clang|asan|tsan)/) {
+    push @{$c->options->{D}}, "cc=clang" unless grep /-Dcc=/, @{$c->options->{D}};
+    if ($suffix =~ /-asan/) {
+      push @{$c->options->{A}}, "ccflags=-faddress-sanitizer";
+    }
+    if ($suffix =~ /-tsan/) {
+      push @{$c->options->{A}}, "ccflags=-fthread-sanitizer", "ldflags=-fthread-sanitizer",
+                                "lddlflags=-fthread-sanitizer";
+    }
+  }
   $ithreads = undef if $multi;
   my $bindir = $c->config->{PERLALL_BINDIR};
 

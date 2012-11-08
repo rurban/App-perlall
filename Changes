@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.21    2012-11-08
+	* detect magic -clang, -asan and -tsan suffices
+
 0.20    2012-11-08
 	* fix option -l: do not print it double (hack)
 

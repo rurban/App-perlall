@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.20    2012-11-08
+	* fix option -l: do not print it double (hack)
+
 0.19    2012-11-08
 	* new option -l|--list for list
 

@@ -33,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -409,7 +409,9 @@ sub App::Rad::_get_input {
   $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
   @ARGV = @{$c->argv};
   if (!$c->{'cmd'} and $c->options->{list}) {
-    return $c->execute('list');
+    $c->execute('list');
+    $c->{'cmd'} = '';
+    exit;
   }
   if (!$c->{'cmd'} and $c->options->{version}) {
     return $c->version();

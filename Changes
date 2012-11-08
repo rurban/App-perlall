@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.19    2012-11-08
+	* new option -l|--list for list
+
 0.18    2012-11-06
 	* set: new command to store the p alias in .perlall
 

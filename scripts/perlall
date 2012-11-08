@@ -15,7 +15,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   build win32 from win32/
 #   -v --help fails on some machines, broken Pod::Usage
 #   detect -asan suffix
-#   set (store alias p in .perlall, for scripts)
+#   check installation of script
 # TEST:
 #   new versiononly logic
 #   init-modules: \ handling and `` expansion
@@ -33,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -67,7 +67,7 @@ BEGIN { # check platform support: perldoc perlport
 }
 # 5.8.4: solaris, 5.8.5: centos4, 5.8.8: centos5
 # below dynamically parsed from git tags
-our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.2 5.16.0);
+our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.4 5.14.3 5.16.2);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -81,7 +81,8 @@ our @opts = (
 	  [ "verbose|v","Make perlall command say more" ],
 	  [ "dryrun!",  "do not execute commands, only print" ],
 	  [ "nolog",    "skip writing log file(s)" ],
-	  [ "help|h",   "commands and options" ],
+	  [ "list|l",   "shortcut for command list" ],
+	  [ "help|h",   "print usage for commands and options" ],
 	  [ "debug|d",  "lots of internal debugging output" ],
           [ "gittag=s", "for the testvm logfile"],
           [ "timeout=i", "IPC::Cmd::run timeout in seconds, Default: 0"],
@@ -149,11 +150,12 @@ General options before the command:
     --verbose|v   make perlall command say more
     --dryrun!     do not execute commands, only print
     --nolog       skip writing log file(s)
-    --help|-h     commands and options
     --debug|-d,   lots of internal debugging output
     --timeout=i   IPC::Cmd::run timeout in seconds, Default: 0
     --gittag=s    Internally set by testvm for the logfile
     --forked!     Internally set by testvm
+
+    --list|-l     shortcut for command list
     --help|-h
     --version|-V
 
@@ -247,7 +249,7 @@ sub setup {
 }
 
 sub App::Rad::Help::usage {
-  return "Usage: ".basename($0)." [options] command [arguments]";
+  return "\nUsage: ".basename($0)." [options] command [arguments]";
 }
 
 sub pre_process {
@@ -406,6 +408,9 @@ sub App::Rad::_get_input {
   $c->debug('received command: ' . $c->{'cmd'});
   $c->debug('received parameters: ' . join (' ', @{$c->argv} ));
   @ARGV = @{$c->argv};
+  if (!$c->{'cmd'} and $c->options->{list}) {
+    return $c->execute('list');
+  }
   if (!$c->{'cmd'} and $c->options->{version}) {
     return $c->version();
   }

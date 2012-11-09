@@ -33,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -953,7 +953,7 @@ More special perl suffix rules:
   d     -DDEBUGGING
   -nt   non-threaded
   -m    multiplicity
-  -asan clang -faddress-sanitizer
+  -asan clang -fsanitize=address
 
 C<-Dmksymlinks> is used for blead, unless the option C<--link> is
 specified.
@@ -1184,14 +1184,17 @@ sub _build {
   my $debug = substr($suffix,0,1) eq 'd';
   my $multi = $suffix =~ /^d?-m/;
   my $ithreads = $suffix !~ /^d?-nt/;
+  my ($archsuffix) = $suffix =~ /d?(?:-nt|-m|thr)(.+)$/;
   if ($suffix =~ /-(clang|asan|tsan)/) {
     push @{$c->options->{D}}, "cc=clang" unless grep /-Dcc=/, @{$c->options->{D}};
     if ($suffix =~ /-asan/) {
-      push @{$c->options->{A}}, "ccflags=-faddress-sanitizer";
+      push @{$c->options->{A}}, 'ccflags=-fsanitize=address';
+      push @{$c->options->{D}}, 'optimize=-g\ -O1';
     }
     if ($suffix =~ /-tsan/) {
-      push @{$c->options->{A}}, "ccflags=-fthread-sanitizer", "ldflags=-fthread-sanitizer",
-                                "lddlflags=-fthread-sanitizer";
+      push @{$c->options->{A}}, 'ccflags=-fsanitize=thread\ -fPIE',
+                                'ldflags=-fsanitize=thread\ -pie',
+                                'lddlflags=-fsanitize=thread\ -pie';
     }
   }
   $ithreads = undef if $multi;
@@ -1316,7 +1319,8 @@ sub _build {
   }
   push @conf, "-Dmksymlinks" if $srcdir ne ".";
   push @conf, "-DEBUGGING" if $debug;
-  push @conf, "-Doptimize=-g3" if $debug and $Config{gccversion}; #-g is lame
+  push @conf, "-Doptimize=-g3"
+    if $debug and $Config{gccversion} and !grep(/^optimize=/, @{$c->options->{D}});
   push @conf, "-Dusemultiplicity" if $multi;
   if ($^O eq 'cygwin') { # fixed with 5.15.8 [perl #109968]
     push @conf, ($ithreads ? "-D" :"-U") . "usethreads";
@@ -1343,12 +1347,12 @@ sub _build {
   }
   # ensure ldflags and lddflags -faddress-sanitizer on ccflags=-faddress-sanitizer
   # XXX this should go into darwin and linux hints somewhen
-  if (grep /-[DA]'ccflags=.*-faddress-sanitizer/, @conf) {
+  if (grep /-[DA]'ccflags=.*-f(sanitize=address|address-sanitizer)/, @conf) {
     my $f = 'ldflags';
-    push @conf, "-A$f=-faddress-sanitizer" if !(grep /-[DA]'$f=.*-faddress-sanitizer/, @conf);
+    push @conf, "-A$f=-fsanitize=address" if !(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf);
     $f = 'lddlflags';
-    push @conf, ("-A$f='-shared\\ -faddress-sanitizer'","-Duseshrplib")
-      if !(grep /-[DA]'$f=.*-faddress-sanitizer/, @conf)
+    push @conf, ("-A$f='-shared\\ -fsanitize=address'","-Duseshrplib")
+      if !(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf)
       and !(grep /-U'?useshrplib/, @conf);
     if ($^O eq 'darwin' and !(grep /-[DA]'ldflags=.*no_pie/, @conf)) {
       push @conf, "-Aldflags=-Wl,no_pie", "-Alddlflags=-Wl,no_pie";
@@ -1456,11 +1460,10 @@ sub _build {
       $new =~ s/'//g;
     }
   }
-  if (($new ne $archname) or $gitsuffix or $debug) {
+  if (($new ne $archname) or $archsuffix or $debug) {
     if ($new eq $archname) {
       $new .= "-debug" if $debug and $archname !~ /-debug/;
-      $new .= $gitsuffix if $gitsuffix and $archname !~ /$gitsuffix$/
-	and $gitsuffix ne '-m';
+      $new .= $archsuffix if $archsuffix and $archname !~ /$archsuffix$/;
       if (!$ithreads and $new =~ /-thread/) {
 	$new =~ s/-thread//;
       } elsif ($ithreads and $new !~ /-thread/) {
@@ -1555,8 +1558,8 @@ sub _build {
   }
   $c->debug("post-configure startperl fixes");
   my $qp = $p; $qp =~ s/([\$\%\@])/\\$1/g;
-  $c->_grep("-i s,bin/perl$ps,bin/perl$qp,; print", qw(config.h config.sh))
-    if $ps and $ps ne $p;
+  # -Uversiononly:
+  $c->_grep("-i s,bin/perl,bin/perl$qp,; print", qw(config.h config.sh));
   # XXX fix config_args also
 
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";

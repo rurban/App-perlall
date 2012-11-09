@@ -1,5 +1,10 @@
 -*- change-log -*-
 
+0.22    2012-11-09
+        * fix archname and startperl suffices. archname with cmdline suffix,
+        startperl was broken since -Uversiononly
+        * use -g -O1 -fsanitize=address for asan, clang 3.2svn required
+
 0.21    2012-11-08
 	* detect magic -clang, -asan and -tsan suffices
 

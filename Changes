@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.23    2012-11-11
+        * fix -asan detection, fix -asan handling on darwin
+
 0.22    2012-11-09
         * fix archname and startperl suffices. archname with cmdline suffix,
         startperl was broken since -Uversiononly

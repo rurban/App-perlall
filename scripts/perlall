@@ -33,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1185,16 +1185,29 @@ sub _build {
   my $multi = $suffix =~ /^d?-m/;
   my $ithreads = $suffix !~ /^d?-nt/;
   my ($archsuffix) = $suffix =~ /d?(?:-nt|-m|thr)(.+)$/;
+  my ($asan, $cc);
   if ($suffix =~ /-(clang|asan|tsan)/) {
-    push @{$c->options->{D}}, "cc=clang" unless grep /-Dcc=/, @{$c->options->{D}};
+    $cc='clang';
+    unless (grep /cc=/, @{$c->options->{D}}) {
+      push @{$c->options->{D}}, "cc=clang";
+    } else {
+      ($cc) = map /cc=(.*)$/, @{$c->options->{D}};
+    }
     if ($suffix =~ /-asan/) {
-      push @{$c->options->{A}}, 'ccflags=-fsanitize=address';
+      # check clang old or new style asan
+      $asan = "-faddress-sanitizer";
+      my $version = `$cc --version`;
+      my $result = `$cc -c $asan /dev/null 2>&1`;
+      if ($result =~ /argument unused during compilation: '-faddress-sanitizer'/) {
+	$asan = "-fsanitize=address";
+      }
+      push @{$c->options->{A}}, "ccflags=$asan";
       push @{$c->options->{D}}, 'optimize=-g\ -O1';
     }
     if ($suffix =~ /-tsan/) {
-      push @{$c->options->{A}}, 'ccflags=-fsanitize=thread\ -fPIE',
-                                'ldflags=-fsanitize=thread\ -pie',
-                                'lddlflags=-fsanitize=thread\ -pie';
+      push @{$c->options->{A}}, "ccflags='-fsanitize=thread\\ -fPIE'",
+                                "ldflags='-fsanitize=thread\\ -pie'",
+                                "lddlflags='-fsanitize=thread\\ -pie'";
     }
   }
   $ithreads = undef if $multi;
@@ -1349,13 +1362,16 @@ sub _build {
   # XXX this should go into darwin and linux hints somewhen
   if (grep /-[DA]'ccflags=.*-f(sanitize=address|address-sanitizer)/, @conf) {
     my $f = 'ldflags';
-    push @conf, "-A$f=-fsanitize=address" if !(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf);
+    if (!(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf)) {
+      push @conf, "-A'$f=$asan" . ($^O eq 'darwin' ? "\\ -Wl,-no_pie'" : "'");
+    }
     $f = 'lddlflags';
-    push @conf, ("-A$f='-shared\\ -fsanitize=address'","-Duseshrplib")
-      if !(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf)
-      and !(grep /-U'?useshrplib/, @conf);
-    if ($^O eq 'darwin' and !(grep /-[DA]'ldflags=.*no_pie/, @conf)) {
-      push @conf, "-Aldflags=-Wl,no_pie", "-Alddlflags=-Wl,no_pie";
+    if (!(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf)
+	and !(grep /-U'?useshrplib/, @conf)) {
+      push @conf,
+        ($^O eq 'darwin' ? "-A'$f=-bundle\\ $asan\\ -Wl,-no_pie'"
+	                 : "-A'$f=-shared\\ $asan'"),
+	"-Duseshrplib";
     }
   }
   $c->_system( $rm, "config.sh") if -f "config.sh";
@@ -1407,12 +1423,12 @@ sub _build {
   # darwin: if -m32 or -m64 use -flat_namespace to avoid 2level
   if ($^O eq 'darwin') {
     my $conf = join(" ",@conf);
+    # XXX change @conf, not add
     push @conf, "-Aldflags=-flat_namespace"
       if $conf =~ /ccflags='?-m64/ or $conf =~ /ccflags='?-m32/;
     # clang: use ld also
     # XXX: done automatically on linux. bother only for darwin
-    push @conf, "-Dld=clang" if join(" ",@conf) =~ /-D'?cc='?clang'?/;
-
+    push @conf, "-Dld=$cc" if $cc =~ /clang/;
     if ($c->_older($p,'5.6.2')) { # need to use 5.6.2 hints/darwin.sh
       #open F,">hints/darwin.sh";
       #close F;
@@ -1421,9 +1437,9 @@ sub _build {
   if ($^O eq 'msys') { # msys: mingw bootstrapping
     push @conf, "-Dlibc=/usr/lib.libmsys-1.0.dll.a", "-Dusenm=no";
   }
-  if (join(" ",@conf) =~ /-D'?cc='?clang'?/) { # our macros are just too bad
+  if ($cc =~ /clang/) { # our macros are just too bad
     #if (grep /^-[DA]ccflags/, @conf) {
-    push @conf, "-Accflags=-Wno-unused-value"; # this belongs into Configure
+    push @conf, "-Accflags=-Wno-unused-value"; # this belongs into Configure and cflags.SH
     #}
   }
 

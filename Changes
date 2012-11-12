@@ -1,5 +1,10 @@
 -*- change-log -*-
 
+0.24    2012-11-12
+        * added lib/Devel/PatchPerl/Plugin/Asan.pm with
+          RT#72700 List::Util Fix off-by-two on string literal length
+          RT#111586 sdbm.c off-by-one access to global .dir
+
 0.23    2012-11-11
         * fix -asan detection, fix -asan handling on darwin
 

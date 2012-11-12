@@ -6,6 +6,7 @@ README
 INSTALL
 .perlall
 lib/App/perlall.pm
+lib/Devel/PatchPerl/Plugin/Asan.pm
 scripts/perlall
 perlall.ppt
 perlall.txt

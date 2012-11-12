@@ -33,7 +33,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1187,7 +1187,7 @@ sub _build {
   my ($archsuffix) = $suffix =~ /d?(?:-nt|-m|thr)(.+)$/;
   my ($asan, $cc);
   if ($suffix =~ /-(clang|asan|tsan)/) {
-    $cc='clang';
+    $cc = 'clang';
     unless (grep /cc=/, @{$c->options->{D}}) {
       push @{$c->options->{D}}, "cc=clang";
     } else {
@@ -1298,6 +1298,9 @@ sub _build {
   # via Devel::PatchPerl
   if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
+    if ($asan) {
+      $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
+    }
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
     if ($ps =~ /^5\.6\.2/) {
       $c->_log('',"patch to use 5.8.0 lib/File/Find.pm");

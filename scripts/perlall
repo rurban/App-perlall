@@ -2570,13 +2570,21 @@ sub initvm
 #ssh win 'cd /cygdrive/c/perl514/perl/site/bin && cmd /C "PATH=c:\perl514\perl\bin;%PATH% & c:\perl514\perl\bin\pl2bat perlall"'
 #rsync -azL /home/rurban/bin/perlall win:/cygdrive/c/perl512/perl/site/bin
 #ssh win 'cd /cygdrive/c/perl512/perl/site/bin && cmd /C "PATH=c:\perl512\perl\bin;%PATH% & c:\perl512\perl\bin\pl2bat perlall"'
-    $c->_system1("rsync","-avzL",$0,"$m:bin/perlall") and next;
+    $c->_system1("rsync","-avzL",$0,"$m:bin/perlall") or next;
     # check .perlall, and cpan deps
     unless (`ssh $m ls .perlall` =~ /.perlall$/m) {
       $c->_system1("rsync","-avzL","$ENV{HOME}/.perlall","$m:.perlall");
     }
     $c->_system1("ssh $m "
 		 ."'perl -MCPAN -e\"install qw/" . join(" ",@extuse). "/\"'");
+    my $patchperlpath = `ssh $m perldoc -l Devel::PatchPerl`;
+    chomp $patchperlpath;
+    $patchperlpath =~ s|PatchPerl\.pm|PatchPerl/Plugin|;
+    my $patchasan = `perldoc -l Devel::PatchPerl::Plugin::Asan`;
+    chomp $patchasan;
+    die "Devel::PatchPerl::Plugin::Asan missing\n" unless $patchasan;
+    $c->_system1("ssh",$m,"mkdir -p $patchperlpath");
+    $c->_system1("rsync","-avz","$patchasan","$m:$patchperlpath/Asan.pm");
   }
   while ($c->stash->{vm} and @{$c->stash->{vm}}) { # restore previous vm state
     my $a = shift @{$c->stash->{vm}};

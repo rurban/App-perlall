@@ -3,6 +3,13 @@ use base 'Devel::PatchPerl';
 # AddressSanitizer dies on buffer-overflows
 # and most perl security releases do not fix them.
 
+=head2 Devel::PatchPerl::Plugin::Asan::patchperl()
+
+Plugin for Devel::PatchPerl to fix several buffer overflows in production perls
+which prevent compilations with clang AddressSanitizer, aka asan.
+
+=cut
+
 sub patchperl {
   my $class = shift;
   my %args = @_;

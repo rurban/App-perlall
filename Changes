@@ -4,6 +4,8 @@
         * added lib/Devel/PatchPerl/Plugin/Asan.pm with
           RT#72700 List::Util Fix off-by-two on string literal length
           RT#111586 sdbm.c off-by-one access to global .dir
+          for 5.10 - 5.14.
+        * initvm installs Devel::PatchPerl::Plugin::Asan remotely
 
 0.23    2012-11-11
         * fix -asan detection, fix -asan handling on darwin

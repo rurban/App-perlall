@@ -30,7 +30,8 @@ sub patchperl {
 }
 
 
-package Devel::PatchPerl;
+package
+  Devel::PatchPerl;
 
 use File::Copy;
 use vars '@patch';

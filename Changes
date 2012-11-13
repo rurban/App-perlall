@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.26    2012-11-13
+        * hide Devel::PatchPerl from pause
+
 0.25    2012-11-13
         * added to lib/Devel/PatchPerl/Plugin/Asan.pm:
           RT#115702 overlapping memcpy in to_utf8_case for 5.15.4-9, 5.17.0-6

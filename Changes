@@ -1,5 +1,12 @@
 -*- change-log -*-
 
+0.25    2012-11-13
+        * added to lib/Devel/PatchPerl/Plugin/Asan.pm:
+          RT#115702 overlapping memcpy in to_utf8_case for 5.15.4-9, 5.17.0-6
+          RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow <5.16.1
+        * simplified patchlevel.h handling in patchperl
+        * keep .git with --debug
+
 0.24    2012-11-12
         * added lib/Devel/PatchPerl/Plugin/Asan.pm with
           RT#72700 List::Util Fix off-by-two on string literal length

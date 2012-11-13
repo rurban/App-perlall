@@ -1,12 +1,18 @@
 package Devel::PatchPerl::Plugin::Asan;
 use base 'Devel::PatchPerl';
-# AddressSanitizer dies on buffer-overflows
-# and most perl security releases do not fix them.
+
+=head1 SECURITY FIXES
+
+AddressSanitizer dies on buffer-overflows
+and most perl security releases do not fix them.
 
 =head2 Devel::PatchPerl::Plugin::Asan::patchperl()
 
 Plugin for Devel::PatchPerl to fix several buffer overflows in production perls
-which prevent compilations with clang AddressSanitizer, aka asan.
+which prevent compilations with C<clang AddressSanitizer>, aka I<asan>.
+
+Note that F<buildperl.pl> from L<Devel::PPPerl> and L<Devel::PatchPerl> do
+not provide such security patches, only configure and make patches.
 
 =cut
 
@@ -26,24 +32,64 @@ sub patchperl {
 
 package Devel::PatchPerl;
 
+use File::Copy;
+use vars '@patch';
+
 push @patch, (
   {
-    perl => [ 
-              qr/^5\.12\.[0-5]$/,
+    perl => [ qr/^5\.1[01]\.\d$/ ],
+    # fixed in 5.16.0
+    subs => [ [ \&_patch_sdbm] ],
+  },
+  {
+    perl => [ qr/^5\.12\.[0-5]$/,
               qr/^5\.1[35]\.\d$/,
               qr/^5\.14\.[0-3]$/,
             ],
-    subs => [ [ \&_patch_listutil_boot ], [ \&_patch_sdbm], [ \&_patch_patchlevel_2 ], ],
+    subs => [ [ \&_patch_listutil_boot ], [ \&_patch_sdbm] ],
   },
   {
     perl => [ qr/^5\.16\.0$/ ],
-    subs => [ [ \&_patch_listutil_boot ], [ \&_patch_patchlevel_1l ], ],
+    # fixed in 5.16.1
+    subs => [ [ \&_patch_listutil_boot ] ],
   },
   {
-    perl => [ qr/^5\.1[01]\.\d$/ ],
-    subs => [ [ \&_patch_sdbm], [ \&_patch_patchlevel_1s ], ],
-  }
+    perl => [ qr/^5\.15\.[4-9]$/,
+              qr/^5\.17\.[0-6]$/ ],
+    # fixed in 5.17.6
+    subs => [ [ \&_patch_to_utf8_case_memcpy ] ],
+  },
+  {
+    perl => [ qr/^5\.[6-9].\d$/,
+	      qr/^5\.1[0-5].\d$/,
+              qr/^5\.16\.0$/ ],
+    # fixed in 5.16.1
+    subs => [ [ \&_patch_socket_un ] ],
+  },
+
 );
+
+sub _add_patchlevel {
+  my $vers = shift;
+  my $line = shift;
+  my $success;
+  File::Copy::cp("patchlevel.h", "patchlevel.h.orig");
+  open my $in, "<", "patchlevel.h.orig" or return;
+  open my $out, ">", "patchlevel.h" or return;
+  $line =~ s/"/\"/g;
+  my $qr = $] > 5.010 ? /^\s+PERL_GIT_UNPUSHED_COMMITS/
+                      : /^\tNULL$/;
+  while (my $s = <$in>) {
+    print $out $s;
+    if ($s =~ $qr) {
+      $success++;
+      print $out "\t,\"".$line."\"\n";
+    }
+  }
+  close $in;
+  close $out;
+  return $success;
+}
 
 sub _patch_listutil_boot
 {
@@ -61,6 +107,8 @@ sub _patch_listutil_boot
  #ifndef SvWEAKREF
      av_push(varav, newSVpv("weaken",6));
 END
+
+  _add_patchlevel(@_, "RT#72700 List::Util boot Fix off-by-two on string literal length");
 }
 
 sub _patch_sdbm
@@ -105,55 +153,71 @@ sub _patch_sdbm
  	db = sdbm_prep(dirname, pagname, flags, mode);
  	free((char *) dirname);
 END
+
+  _add_patchlevel(@_, "RT#111586 sdbm.c off-by-one access to global .dir");
 }
 
-sub _patch_patchlevel_1s
+sub _patch_to_utf8_case_memcpy
 {
   _patch(<<'END');
---- patchlevel.h.orig	2012-11-12 10:53:26.000000000 -0600
-+++ patchlevel.h	2012-11-12 10:56:02.790350262 -0600
-@@ -131,6 +131,7 @@ static const char * const local_patches[] = {
-        ,"uncommitted-changes"
- #endif
-        PERL_GIT_UNPUSHED_COMMITS       /* do not remove this line */
-+       ,"RT#111586 sdbm.c off-by-one access to global .dir"
-        ,NULL
- };
-
-END
-}
-
-sub _patch_patchlevel_1l
-{
-  _patch(<<'END');
---- patchlevel.h.orig	2012-11-12 10:53:26.000000000 -0600
-+++ patchlevel.h	2012-11-12 10:56:02.790350262 -0600
-@@ -131,6 +131,7 @@ static const char * const local_patches[] = {
-        ,"uncommitted-changes"
- #endif
-        PERL_GIT_UNPUSHED_COMMITS       /* do not remove this line */
-+       ,"RT#72700 List::Util boot Fix off-by-two on string literal length"
-        ,NULL
- };
-
-END
-}
-
-sub _patch_patchlevel_2
-{
-  _patch(<<'END');
---- patchlevel.h.orig	2012-11-12 10:53:26.000000000 -0600
-+++ patchlevel.h	2012-11-12 10:56:02.790350262 -0600
-@@ -131,6 +131,8 @@ static const char * const local_patches[] = {
- 	,"uncommitted-changes"
- #endif
- 	PERL_GIT_UNPUSHED_COMMITS    	/* do not remove this line */
-+	,"RT#72700 List::Util boot Fix off-by-two on string literal length"
-+	,"RT#111586 sdbm.c off-by-one access to global .dir"
- 	,NULL
- };
+--- utf8.c
++++ utf8.c
+@@ -2366,7 +2366,9 @@ Perl_to_utf8_case(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp,
+     /* Here, there was no mapping defined, which means that the code point maps
+      * to itself.  Return the inputs */
+     len = UTF8SKIP(p);
+-    Copy(p, ustrp, len, U8);
++    if (p != ustrp) {   /* RT#115702 Don't copy onto itself */
++        Copy(p, ustrp, len, U8);
++    }
  
+     if (lenp)
+         *lenp = len;
 END
+
+  _add_patchlevel(@_, "RT#115702 overlapping memcpy in to_utf8_case");
+}
+
+sub _patch_socket_un
+{
+  my $vers = shift;
+  my $patch = <<'END';
+--- ext/Socket/Socket.xs
++++ ext/Socket/Socket.xs
+@@ -565,10 +565,16 @@ unpack_sockaddr_un(sun_sv)
+ 			"Socket::unpack_sockaddr_un",
+ 			sockaddrlen, sizeof(addr));
+ 	}
++#   else
++	if (sockaddrlen < sizeof(addr)) { /* RT #111594 */
++           Copy(sun_ad, &addr, sockaddrlen, char);
++           Zero(&addr+sockaddrlen, sizeof(addr)-sockaddrlen, char);
++       }
++       else {
++           Copy(sun_ad, &addr, sizeof(addr), char);
++       }
+ #   endif
+ 
+-	Copy( sun_ad, &addr, sizeof addr, char );
+-
+ 	if ( addr.sun_family != AF_UNIX ) {
+ 	    croak("Bad address family for %s, got %d, should be %d",
+ 			"Socket::unpack_sockaddr_un",
+END
+
+  #; )
+  if ($vers =~ /^5\.6\./) {
+    $patch =~ s/@@ -565,10 +565,16 @@/@@ -1016,10 +1016,16 @@/;
+  }
+  if ($vers =~ /^5\.[89]\./ or $vers =~ /^5\.1[0-2]\./) {
+    $patch =~ s/@@ -565,10 +565,16 @@/@@ -363,10 +363,16 @@/;
+  }
+  if ($vers =~ /^5\.16\./ or $vers =~ /^5\.15\.[5-9]\./) {
+    $patch =~ s|ext/Socket/Socket.xs|cpan/Socket/Socket.xs|g;
+  }
+  _patch($patch);
+
+  _add_patchlevel($vers, "RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow");
 }
 
 1;

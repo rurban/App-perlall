@@ -14,10 +14,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 #   get msys compiled, bootstrap a mingw perl without strawberry
 #   build win32 from win32/
 #   -v --help fails on some machines, broken Pod::Usage
-#   check installation of script
 # TEST:
-#   -asan suffix magic
-#   new versiononly logic
 #   init-modules: \ handling and `` expansion
 #   testvm logs back from forks
 #   fix testvm forked and --fork arg
@@ -33,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1103,7 +1100,7 @@ sub build
     }
   } else { # check implicit --as
     # normalize suffix
-    my ($suffix_as) = $suffix =~ /^d?(?:-nt|thr)?(?:-clang|-tsan|-asan)?(?:@.+)?(.*)$/;
+    my ($suffix_as) = $suffix =~ /^d?(?:-nt|thr)?(?:-clang|-tsan|-asan|-mad)?(?:@.+)?(.*)$/;
     if ($suffix_as) { # 5.15.5d-nt-git-clang => -git-clang
       $gitsuffix = $suffix_as;
       $c->debug("implicit --as suffix $gitsuffix");
@@ -1186,6 +1183,9 @@ sub _build {
   my $ithreads = $suffix !~ /^d?-nt/;
   my ($archsuffix) = $suffix =~ /d?(?:-nt|-m|thr)(.+)$/;
   my ($asan, $cc);
+  if ($suffix =~ /-mad/) {
+    push @{$c->options->{D}}, "mad=y";
+  }
   if ($suffix =~ /-(clang|asan|tsan)/) {
     $cc = 'clang';
     unless (grep /cc=/, @{$c->options->{D}}) {
@@ -2631,7 +2631,7 @@ sub selfupgrade
   $c->addopts('latest|l');
   my $branch = $c->options->{latest} ? 'master' : 'release';
   $c->_system("wget","--no-check-certificate","-O","perlall.tmp",
-	      "http://github.com/rurban/App-perlall/raw/$branch/scripts/perlall");
+	      "http://github.com/rurban/App-perlall/raw/$branch/script/perlall");
   if (-s "perlall.tmp" > 5000) {
     $c->_system("chmod","0755","perlall.tmp");
     $c->_system("mv","perlall.tmp",-l $0 ? readlink($0) : $0) or

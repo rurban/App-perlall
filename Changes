@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.27    2012-11-15
+        * mv scripts/perlall script/perlall to make it installable by EUMM
+        * suffix -mad -> -Dmad
+
 0.26    2012-11-13
         * hide Devel::PatchPerl from pause
 

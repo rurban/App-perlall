@@ -7,10 +7,11 @@ use Config;
 my %WriteMakefileArgs =
   (
    "NAME" => "App::perlall",
-   "VERSION_FROM" => "scripts/perlall",
+   "VERSION_FROM" => "script/perlall",
    "ABSTRACT" => "Build, test and do with all perls",
    "AUTHOR" => "Reini Urban <rurban\@cpanel.net>",
    "LICENSE" => "perl",
+   'EXE_FILES'  => ['script/perlall'],
    "PREREQ_PM" =>  {
 		    'App::Rad'     => "1.04",
 		    'Devel::Platform::Info' => '0',

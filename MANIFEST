@@ -7,7 +7,7 @@ INSTALL
 .perlall
 lib/App/perlall.pm
 lib/Devel/PatchPerl/Plugin/Asan.pm
-scripts/perlall
+script/perlall
 perlall.ppt
 perlall.txt
 t/00-compile.t

@@ -1,10 +1,10 @@
 package Devel::PatchPerl::Plugin::Asan;
 use base 'Devel::PatchPerl';
 
-=head1 SECURITY FIXES
+=head1 POINTER FIXES
 
-AddressSanitizer dies on buffer-overflows
-and most perl security releases do not fix them.
+AddressSanitizer dies on buffer-overflows and use-after-free
+and most perl releases do not fix them.
 
 =head2 Devel::PatchPerl::Plugin::Asan::patchperl()
 
@@ -13,6 +13,8 @@ which prevent compilations with C<clang AddressSanitizer>, aka I<asan>.
 
 Note that F<buildperl.pl> from L<Devel::PPPerl> and L<Devel::PatchPerl> do
 not provide such security patches, only configure and make patches.
+
+Most fixes have very low security impact. No known exploits do exist.
 
 =cut
 
@@ -66,6 +68,19 @@ push @patch, (
               qr/^5\.16\.0$/ ],
     # fixed in 5.16.1
     subs => [ [ \&_patch_socket_un ] ],
+  },
+  {
+    perl => [ qr/^5\.8\.\d$/,
+              qr/^5\.1[0123]\.\d$/,
+              qr/^5\.15\.[012]$/,    # fixed in 5.15.3
+	      qr/^5\.14\.[0123]$/ ], # to be fixed in 5.14.4
+    subs => [ [ \&_patch_eval_start] ],
+  },
+  {
+    perl => [ qr/^5\.1[0123]\.\d$/,  # broken since 5.10 (at least)
+              qr/^5\.15\.0$/,        # fixed in 5.15.1
+	      qr/^5\.14\.[0123]$/ ], # to be fixed in 5.14.4
+    subs => [ [ \&_patch_join_exact] ],
   },
 
 );
@@ -220,5 +235,110 @@ END
 
   _add_patchlevel($vers, "RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow");
 }
+
+
+sub _patch_eval_start
+{
+  _patch(<<'END');
+--- pp_ctl.c
++++ pp_ctl.c
+@@ -3088,6 +3088,7 @@ Perl_sv_compile_2op_is_broken(pTHX_ SV *sv, OP **startop, const char *code,
+     CV* runcv = NULL;	/* initialise to avoid compiler warnings */
+     STRLEN len;
+     bool need_catch;
++    OP* ret;
+ 
+     PERL_ARGS_ASSERT_SV_COMPILE_2OP_IS_BROKEN;
+ 
+@@ -3182,7 +3183,9 @@ Perl_sv_compile_2op_is_broken(pTHX_ SV *sv, OP **startop, const char *code,
+     PERL_UNUSED_VAR(newsp);
+     PERL_UNUSED_VAR(optype);
+ 
+-    return PL_eval_start;
++    ret = PL_eval_start;
++    PL_eval_start = NULL;
++    return ret;
+ }
+ 
+ 
+@@ -3903,8 +3906,10 @@ PP(pp_require)
+     encoding = PL_encoding;
+     PL_encoding = NULL;
+ 
+-    if (doeval(gimme, NULL, NULL, PL_curcop->cop_seq))
++    if (doeval(gimme, NULL, NULL, PL_curcop->cop_seq)) {
+ 	op = DOCATCH(PL_eval_start);
++	PL_eval_start = NULL;
++    }
+     else
+ 	op = PL_op->op_next;
+ 
+@@ -4029,6 +4034,7 @@ PP(pp_entereval)
+     PUTBACK;
+ 
+     if (doeval(gimme, NULL, runcv, seq)) {
++	OP *ret;
+ 	if (was != PL_breakable_sub_gen /* Some subs defined here. */
+ 	    ? (PERLDB_LINE || PERLDB_SAVESRC)
+ 	    :  PERLDB_SAVESRC_NOSUBS) {
+@@ -4037,7 +4043,9 @@ PP(pp_entereval)
+ 	    char *const safestr = savepvn(tmpbuf, len);
+ 	    SAVEDELETE(PL_defstash, safestr, len);
+ 	}
+-	return DOCATCH(PL_eval_start);
++	ret = DOCATCH(PL_eval_start);
++	PL_eval_start = NULL;
++	return ret;
+     } else {
+ 	/* We have already left the scope set up earlier thanks to the LEAVE
+ 	   in doeval().  */
+END
+
+  _add_patchlevel(@_, "RT#115992 PL_eval_start use-after-free");
+}
+
+sub _patch_join_exact
+{
+# commit bb789b09de07edfb74477eb1603949c96d60927d
+# Author:     David Mitchell <davem@iabyn.com>
+# AuthorDate: Tue Jul 5 11:35:08 2011 +0100
+# 
+#     fix segv in regcomp.c:S_join_exact()
+#     
+#     This function joins multiple EXACT* nodes into a single node.
+#     At the end, under DEBUGGING, it marks the optimised-out nodes as being
+#     type OPTIMIZED. However, some of the 'nodes' aren't actually nodes;
+#     they're random bits of string at the tail of those nodes. So you
+#     can't peek that the 'node's OP field to decide what type it was.
+#     
+#     Instead, just unconditionally overwrite all the slots with fake
+#     OPTIMIZED nodes.
+  _patch(<<'END');
+--- regcomp.c
++++ regcomp.c
+@@ -2647,13 +2647,13 @@ S_join_exact(pTHX_ RExC_state_t *pRExC_state, regnode *scan, I32 *min, U32 flags
+     }
+     
+ #ifdef DEBUGGING
+-    /* Allow dumping */
++    /* Allow dumping but overwriting the collection of skipped
++     * ops and/or strings with fake optimized ops */
+     n = scan + NODE_SZ_STR(scan);
+     while (n <= stop) {
+-        if (PL_regkind[OP(n)] != NOTHING || OP(n) == NOTHING) {
+-            OP(n) = OPTIMIZED;
+-            NEXT_OFF(n) = 0;
+-        }
++	OP(n) = OPTIMIZED;
++	FLAGS(n) = 0;
++	NEXT_OFF(n) = 0;
+         n++;
+     }
+ #endif
+END
+
+  _add_patchlevel(@_, "RT#115994 S_join_exact global-buffer-overflow");
+}
+
 
 1;

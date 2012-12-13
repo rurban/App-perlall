@@ -1,5 +1,10 @@
 -*- change-log -*-
 
+0.28    2012-12-13
+        * added to lib/Devel/PatchPerl/Plugin/Asan.pm:
+          RT#115992 PL_eval_start use-after-free <5.15.3
+          RT#115994 S_join_exact global-buffer-overflow 5.10-5.15.1
+
 0.27    2012-11-15
         * mv scripts/perlall script/perlall to make it installable by EUMM
         * suffix -mad -> -Dmad

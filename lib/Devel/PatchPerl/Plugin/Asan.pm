@@ -82,6 +82,11 @@ push @patch, (
 	      qr/^5\.14\.[0123]$/ ], # to be fixed in 5.14.4
     subs => [ [ \&_patch_join_exact] ],
   },
+  {
+    perl => [ qr/^5\.17\.[78]$/ ],
+    # broken in 5.17.8, 2.006-2.007
+    subs => [ [ \&_patch_socket_inet_ntop ] ],
+  },
 );
 
 sub _add_patchlevel {
@@ -236,7 +241,6 @@ END
   _add_patchlevel($vers, "RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow");
 }
 
-
 sub _patch_eval_start
 {
   _patch(<<'END');
@@ -338,6 +342,35 @@ sub _patch_join_exact
 END
 
   _add_patchlevel(@_, "RT#115994 S_join_exact global-buffer-overflow");
+}
+
+sub _patch_socket_inet_ntop
+{
+  my $vers = shift;
+  my $patch = <<'END';
+--- cpan/Socket/Socket.xs
++++ cpan/Socket/Socket.xs
+@@ -934,8 +934,13 @@ inet_ntop(af, ip_address_sv)
+ #endif
+ 		      "Socket::inet_ntop", af);
+ 	}
+-
+-	Copy(ip_address, &addr, sizeof addr, char);
++	if (addrlen < sizeof(addr)) {
++	   Copy(ip_address, &addr, addrlen, char);
++           Zero(&addr+addrlen, sizeof(addr)-addrlen, char);
++	}
++	else {
++	  Copy(ip_address, &addr, sizeof addr, char);
++	}
+ 	inet_ntop(af, &addr, str, sizeof str);
+ 
+ 	ST(0) = sv_2mortal(newSVpvn(str, strlen(str)));
+END
+
+  #; )
+  _patch($patch);
+  _add_patchlevel($vers, "RT#82119 Socket::inet_ntop heap-buffer-overflow");
 }
 
 1;

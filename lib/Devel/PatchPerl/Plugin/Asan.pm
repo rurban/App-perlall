@@ -82,7 +82,6 @@ push @patch, (
 	      qr/^5\.14\.[0123]$/ ], # to be fixed in 5.14.4
     subs => [ [ \&_patch_join_exact] ],
   },
-
 );
 
 sub _add_patchlevel {
@@ -104,6 +103,7 @@ sub _add_patchlevel {
   }
   close $in;
   close $out;
+  print STDERR "patched: $line\n";
   return $success;
 }
 
@@ -339,6 +339,5 @@ END
 
   _add_patchlevel(@_, "RT#115994 S_join_exact global-buffer-overflow");
 }
-
 
 1;

@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -166,6 +166,7 @@ build and smoke only:
     --j=n      parallel make
     --link     -Dmksymlinks with blead, otherwise copy
     --install  skip Configure && make, only do make install
+    --allpatches  apply also asan patches
 
 build and makeinstall:
 
@@ -1018,6 +1019,7 @@ sub build
        [ "notest|n", "skip the test suite on build and makeinstall" ],
        [ "force|f",  "force install" ],
        [ 'install',  'only do install' ],
+       [ "allpatches", "apply also asan patches" ],
       );
     $c->addopts( map {$_->[0]} @build_opts );
   }
@@ -1298,7 +1300,8 @@ sub _build {
   # via Devel::PatchPerl
   if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
-    if ($asan) {
+    $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::perlall';
+    if ($asan or $c->options->{allpatches}) {
       $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
     }
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
@@ -2583,8 +2586,12 @@ sub initvm
     my $patchasan = `perldoc -l Devel::PatchPerl::Plugin::Asan`;
     chomp $patchasan;
     die "Devel::PatchPerl::Plugin::Asan missing\n" unless $patchasan;
+    my $patchperlall = `perldoc -l Devel::PatchPerl::Plugin::perlall`;
+    chomp $patchperlall;
+    die "Devel::PatchPerl::Plugin::perlall missing\n" unless $patchperlall;
     $c->_system1("ssh",$m,"mkdir -p $patchperlpath");
-    $c->_system1("rsync","-avz","$patchasan","$m:$patchperlpath/Asan.pm");
+    $c->_system1("rsync","-avz",$patchasan,"$m:$patchperlpath/Asan.pm");
+    $c->_system1("rsync","-avz",$patchperlall,"$m:$patchperlpath/perlall.pm");
   }
   while ($c->stash->{vm} and @{$c->stash->{vm}}) { # restore previous vm state
     my $a = shift @{$c->stash->{vm}};

@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.27';
+our $VERSION = '0.27_20121219';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -950,7 +950,13 @@ More special perl suffix rules:
   d     -DDEBUGGING
   -nt   non-threaded
   -m    multiplicity
+  -clang -Dcc=clang
   -asan clang -fsanitize=address
+  -tsan clang -fsanitize=thread
+  -msan clang -fsanitize=memory
+  -ubsan clang -fsanitize=undefined
+  -cow  -DPERL_NEW_COPY_ON_WRITE
+  -mad  -Dmad
 
 C<-Dmksymlinks> is used for blead, unless the option C<--link> is
 specified.
@@ -1100,7 +1106,8 @@ sub build
     }
   } else { # check implicit --as
     # normalize suffix
-    my ($suffix_as) = $suffix =~ /^d?(?:-nt|thr)?(?:-clang|-tsan|-asan|-mad)?(?:@.+)?(.*)$/;
+    my ($suffix_as) = $suffix =~
+        /^d?(?:-nt|thr)?(?:-clang|-tsan|-asan|-msan|-mad|-cow)?(?:@.+)?(.*)$/;
     if ($suffix_as) { # 5.15.5d-nt-git-clang => -git-clang
       $gitsuffix = $suffix_as;
       $c->debug("implicit --as suffix $gitsuffix");
@@ -1186,7 +1193,10 @@ sub _build {
   if ($suffix =~ /-mad/) {
     push @{$c->options->{D}}, "mad=y";
   }
-  if ($suffix =~ /-(clang|asan|tsan)/) {
+  if ($suffix =~ /-cow/) {
+    push @{$c->options->{A}}, "ccflags=-DPERL_NEW_COPY_ON_WRITE";
+  }
+  if ($suffix =~ /-(clang|asan|tsan|msan|ubsan)/) {
     $cc = 'clang';
     unless (grep /cc=/, @{$c->options->{D}}) {
       push @{$c->options->{D}}, "cc=clang";
@@ -1208,6 +1218,16 @@ sub _build {
       push @{$c->options->{A}}, "ccflags='-fsanitize=thread\\ -fPIE'",
                                 "ldflags='-fsanitize=thread\\ -pie'",
                                 "lddlflags='-fsanitize=thread\\ -pie'";
+    }
+    if ($suffix =~ /-ubsan/) {
+      push @{$c->options->{A}}, "ccflags='-fsanitize=undefined\\ -fPIE'",
+                                "ldflags='-fsanitize=undefined\\ -pie'",
+                                "lddlflags='-fsanitize=undefined\\ -pie'";
+    }
+    if ($suffix =~ /-msan/) {
+      push @{$c->options->{A}}, "ccflags='-fsanitize=memory\\ -fPIE'",
+                                "ldflags='-fsanitize=memory\\ -pie'",
+                                "lddlflags='-fsanitize=memory\\ -pie'";
     }
   }
   $ithreads = undef if $multi;

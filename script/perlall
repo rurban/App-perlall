@@ -1320,7 +1320,8 @@ sub _build {
   # via Devel::PatchPerl
   if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
-    $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::perlall';
+    # common patches, not yet
+    # $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::perlall';
     if ($asan or $c->options->{allpatches}) {
       $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
     }

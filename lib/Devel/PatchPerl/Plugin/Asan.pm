@@ -87,6 +87,12 @@ push @patch, (
     # broken in 5.17.8, 2.006-2.007
     subs => [ [ \&_patch_socket_inet_ntop ] ],
   },
+  {
+    perl => [ qr/^5\.14\.[0123]$/,
+              qr/^5\.15\.[012]$/ ],
+    # regression in 5.14, fixed in v5.15.3-232-g1bac5ec
+    subs => [ [ \&_patch_anonymise_cv_maybe ] ],
+  },
 );
 
 sub _add_patchlevel {
@@ -371,6 +377,50 @@ END
   #; )
   _patch($patch);
   _add_patchlevel($vers, "RT#82119 Socket::inet_ntop heap-buffer-overflow");
+}
+
+sub _patch_anonymise_cv_maybe
+{
+  my $vers = shift;
+  my $patch = <<'END';
+commit 1bac5ecc108e6bb05752e5aef66c6890163aff39
+Author: Brian Fraser <fraserbn@gmail.com>
+Date:   Mon Sep 26 13:48:52 2011 -0700
+
+    sv.c: S_anonymise_cv_maybe UTF8 cleanup.
+
+diff --git a/sv.c b/sv.c
+index d71f901..a3a2c74 100644
+--- sv.c.orig
++++ sv.c
+@@ -5893,7 +5893,6 @@ Perl_sv_replace(pTHX_ register SV *const sv, register SV *const nsv)
+ STATIC void
+ S_anonymise_cv_maybe(pTHX_ GV *gv, CV* cv)
+ {
+-    char *stash;
+     SV *gvname;
+     GV *anongv;
+ 
+@@ -5913,10 +5912,10 @@ S_anonymise_cv_maybe(pTHX_ GV *gv, CV* cv)
+     }
+ 
+     /* if not, anonymise: */
+-    stash  = GvSTASH(gv) && HvNAME(GvSTASH(gv))
+-              ? HvENAME(GvSTASH(gv)) : NULL;
+-    gvname = Perl_newSVpvf(aTHX_ "%s::__ANON__",
+-					stash ? stash : "__ANON__");
++    gvname = (GvSTASH(gv) && HvNAME(GvSTASH(gv)) && HvENAME(GvSTASH(gv)))
++                    ? newSVhek(HvENAME_HEK(GvSTASH(gv)))
++                    : newSVpvn_flags( "__ANON__", 8, 0 );
++    sv_catpvs(gvname, "::__ANON__");
+     anongv = gv_fetchsv(gvname, GV_ADDMULTI, SVt_PVCV);
+     SvREFCNT_dec(gvname);
+ 
+END
+
+  #; )
+  _patch($patch);
+  _add_patchlevel($vers, "RT#91678 S_anonymise_cv_maybe UTF8 cleanup");
 }
 
 1;

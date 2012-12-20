@@ -1,8 +1,9 @@
 -*- change-log -*-
 
 0.29    2012-12-??
-        * added to lib/Devel/PatchPerl/Plugin/Asan.pm,
+        * added to lib/Devel/PatchPerl/Plugin/Asan.pm:
           CPAN #82119 Socket::inet_ntop heap-buffer overflow
+          RT#91678 S_anonymise_cv_maybe UTF8 cleanup
         * cmdline option: --allpatches (apply asan patches without asan)
 
 0.28    2012-12-13

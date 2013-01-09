@@ -113,7 +113,7 @@ perlall - build, test and do with all perls
     perlall cpan My::Module
     perlall cpanm More::Modules
 
-    perlall maketest "5.*.d*" # test with all debugging, version as option
+    perlall -v maketest "5.*.d*" # test verbose with all debugging versions as option
 
     perlall testvm centos4 centos5 solaris10
     perlall initvm --all --max=6
@@ -356,10 +356,13 @@ sub App::Rad::addopts {
   my $c = shift;
   my $savopts = $c->options;
   my @savargv = @ARGV;
-  #if ($c->cmd =~ /^make|do/) {
-  #  $c->debug("pass options verbatim through");
-  #  @ARGV = ();
-  #}
+  if ($c->cmd =~ /^make|do/ and $c->cmd ne 'maketest') {
+    $c->debug("pass some options verbatim through");
+    @ARGV = ();
+    if (grep{$_ eq '-v'} @savargv) {
+      push @ARGV, '-v';
+    }
+  }
   $c->getopt( @_ );
   $c->options->{$_} = $savopts->{$_} for keys %$savopts; # merge with old opts
   @ARGV = @savargv;

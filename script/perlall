@@ -1323,12 +1323,15 @@ sub _build {
   # via Devel::PatchPerl
   if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
-    # common patches, not yet
-    # $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::perlall';
-    if ($asan or $c->options->{allpatches}) {
+    if ($asan or $c->options->{allpatches} or grep /^Asan$/, @{$c->options->{patches}}) {
       $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
     }
     Devel::PatchPerl::patch_source($ps) unless $dryrun;
+    if ($c->options->{allpatches} or grep /^Compiler$/, @{$c->options->{patches}}) {
+      $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Compiler';
+      $c->_log('',"Devel::PatchPerl::patch_source($ps) Compiler");
+      Devel::PatchPerl::patch_source($ps) unless $dryrun;
+    }
     if ($ps =~ /^5\.6\.2/) {
       $c->_log('',"patch to use 5.8.0 lib/File/Find.pm");
       $c->_system("git diff HEAD..perl-5.8.0 lib/File/Find.pm | patch -N -p1")

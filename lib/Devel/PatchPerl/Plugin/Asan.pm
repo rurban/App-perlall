@@ -58,7 +58,7 @@ package
 use File::Copy;
 use vars '@patch';
 
-push @patch, (
+@patch = (
   {
     perl => [ qr/^5\.1[01]\.\d$/ ],
     # fixed in 5.16.0

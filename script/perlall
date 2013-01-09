@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -95,8 +95,9 @@ perlall - build, test and do with all perls
 
     perlall [opts] cmd [ what [ how ]]
 
-    perlall build perl5.15.4
-    perlall build perl5.14.2-nt
+    perlall build perl5.16.2
+    perlall build bleadd-nt
+    perlall build --allpatches perl5.14.2-nt
     perlall -v build -j4 bleadd-nt smoke-me/khw-tk
     perlall build perl5.15.5d-nt-blead-clang blead # or with --as
     perlall build --as perl5.15.5d-nt-blead-clang bleadd-nt
@@ -160,13 +161,14 @@ Specific options after the command I<(see also below)>
 
 build and smoke only:
 
-    --D=s      Configure option
-    --A=s      Configure option
-    --U=s      Configure option
-    --j=n      parallel make
-    --link     -Dmksymlinks with blead, otherwise copy
-    --install  skip Configure && make, only do make install
-    --allpatches  apply also asan patches
+    --D=s           Configure option
+    --A=s           Configure option
+    --U=s           Configure option
+    -jn             parallel make
+    --link          -Dmksymlinks with blead, otherwise copy
+    --install       skip Configure && make, only do make install
+    --allpatches    apply also compiler and asan patches
+    --patches=name  apply Compiler or Asan patches (Devel::PatchPerl::Plugin)
 
 build and makeinstall:
 
@@ -354,10 +356,10 @@ sub App::Rad::addopts {
   my $c = shift;
   my $savopts = $c->options;
   my @savargv = @ARGV;
-  if ($c->cmd =~ /^make|do/) {
-    $c->debug("pass options verbatim through");
-    @ARGV = ();
-  }
+  #if ($c->cmd =~ /^make|do/) {
+  #  $c->debug("pass options verbatim through");
+  #  @ARGV = ();
+  #}
   $c->getopt( @_ );
   $c->options->{$_} = $savopts->{$_} for keys %$savopts; # merge with old opts
   @ARGV = @savargv;
@@ -1024,8 +1026,9 @@ sub build
        [ "link",     "make symlinks (blead only) from git" ],
        [ "notest|n", "skip the test suite on build and makeinstall" ],
        [ "force|f",  "force install" ],
-       [ 'install',  'only do install' ],
-       [ "allpatches", "apply also asan patches" ],
+       [ 'install',  'skip make, only do install' ],
+       [ "allpatches", "apply also Asan and Compiler patches" ],
+       [ "patches=s@", " apply Compiler or Asan patches (Devel::PatchPerl::Plugin)" ],
       );
     $c->addopts( map {$_->[0]} @build_opts );
   }
@@ -2125,19 +2128,20 @@ All other options and arguments are passed through to the perl.
 sub _make {
   my $c = shift;
   my $p = shift;
+  my $verbose = shift;
   my $make = $Config{make};
   # checks MB
   $c->_system( $make, "-s", "clean") if -f "Makefile";
   $c->_lognew(_short($p)) unless $c->stash->{log_fh};
   if (-f "Makefile.PL") {
     $c->_system0( $p, "Makefile.PL");
-    $c->_system1( $make);
+    $verbose ? $c->_system1($make) : $c->_system($make);
   } elsif (-f "Build.PL") {
     # This is broken and needs a realclean
     $c->_system( "./Build", "realclean") if -f "Build";# and $^O ne 'MSWin32';
     $c->_system( "rm", "-rf", "blib", "_Build", "Build" ) if $^O ne 'MSWin32';
     $c->_system0( $p, "Build.PL");
-    $c->_system1( $p, "Build");
+    $verbose ? $c->_system1($p, "Build") : $c->_system($p, "Build");
   }
 }
 
@@ -2154,10 +2158,10 @@ sub make
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
     print $fh $gitshort if $fh and $gitshort;
-    local $c->options->{verbose} = 0;
-    local $c->options->{quiet} = 1;
+    #local $c->options->{verbose} = 0;
+    #local $c->options->{quiet} = 1;
     # undef $c->stash->{log_fh};
-    $c->_make( $p);
+    $c->_make($p,!$c->options->{quiet});
     if ($argv) { # preserves quotes as in -e'my $a;'
       #$c->options->{verbose} = 1 unless $c->options->{quiet};
       local $ENV{p} = $p;
@@ -2201,9 +2205,9 @@ sub maketest
     $c->_lognew(_short($p));
     my $fh = $c->stash->{log_fh};
     print $fh $gitshort if $fh and $gitshort;
-    local $c->options->{verbose} = 0;
-    local $c->options->{quiet} = 1;
-    $c->_make($p);
+    # local $c->options->{verbose} = 0;
+    # local $c->options->{quiet} = $v ? 0 : 1;
+    $c->_make($p,$v);
     my @opts = ("test", $v ? "TEST_VERBOSE=1" : ());
     unshift @opts,"-j".$c->options->{j}
       if $c->options->{j} and !$c->_older( $p,"5.10.0");
@@ -2212,7 +2216,7 @@ sub maketest
     } else {
       $c->_system1( $make, @opts);
     }
-    unless ($v) {
+    if ($c->options->{quiet}) {
       my $log = $c->stash->{log};
       my $result = `grep -a Result: $log`;
       $c->_log(0, $result) if $result;

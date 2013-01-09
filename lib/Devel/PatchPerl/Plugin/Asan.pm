@@ -1,12 +1,7 @@
 package Devel::PatchPerl::Plugin::Asan;
 use base 'Devel::PatchPerl';
 
-=head1 POINTER FIXES
-
-AddressSanitizer dies on buffer-overflows and use-after-free
-and most perl releases do not fix them.
-
-=head2 Devel::PatchPerl::Plugin::Asan::patchperl()
+=head1 DESCRIPTION
 
 Plugin for Devel::PatchPerl to fix several buffer overflows in production perls
 which prevent compilations with C<clang AddressSanitizer>, aka I<asan>.
@@ -15,6 +10,31 @@ Note that F<buildperl.pl> from L<Devel::PPPerl> and L<Devel::PatchPerl> do
 not provide such security patches, only configure and make patches.
 
 Most fixes have very low security impact. No known exploits do exist.
+
+You need to run C<perlall build --allpatches> or C<perlall build --patches=Asan>
+to apply these.
+
+=head1 PATCHES
+
+The list is complete for non-threaded perls. For threaded perls
+some more patches need to be added.
+
+    5.10-5.15.9:  RT#111586 sdbm.c off-by-one access to global .dir
+    5.12-5.16.0:  RT#72700 List::Util boot Fix off-by-two on string literal length
+    5.15.4-9, 5.17.0-6: RT#115702 overlapping memcpy in to_utf8_case
+    5.6-5.16.0:   RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow
+    5.8-5.14.3:   RT#115992 PL_eval_start use-after-free
+    5.10-5.14.3:  RT#115994 S_join_exact global-buffer-overflow
+    5.17.7-8:     RT#82119 Socket::inet_ntop heap-buffer-overflow
+    5.14.0-3:     RT#91678 S_anonymise_cv_maybe UTF8 cleanup
+
+=head2 Devel::PatchPerl::Plugin::Asan::patchperl($class, {version,source,patchexe})
+
+Apply patches in Devel::PatchPerl::Plugin::Asan depending on the
+perl version. See L<Devel::PatchPerl::Plugin>.
+
+Every patch is recorded in patchlevel.h, visible in myconfig.
+If a patch fails the script dies.
 
 =cut
 
@@ -364,7 +384,7 @@ sub _patch_socket_inet_ntop
 -	Copy(ip_address, &addr, sizeof addr, char);
 +	if (addrlen < sizeof(addr)) {
 +	   Copy(ip_address, &addr, addrlen, char);
-+           Zero(&addr+addrlen, sizeof(addr)-addrlen, char);
++           Zero(((char*)&addr)+addrlen, sizeof(addr) - addrlen, char);
 +	}
 +	else {
 +	  Copy(ip_address, &addr, sizeof addr, char);

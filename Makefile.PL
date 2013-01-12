@@ -34,6 +34,10 @@ my %WriteMakefileArgs =
       {
        'File::Slurp' => "9999.13", # with B::C only
       },
+      no_index =>
+      {
+	package     => 'B',
+      },
       resources =>
       {
 	license     => 'http://dev.perl.org/licenses/',

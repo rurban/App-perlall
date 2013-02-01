@@ -1211,6 +1211,7 @@ sub _build {
     } else {
       ($cc) = map /cc=(.*)$/, @{$c->options->{D}};
     }
+    push @{$c->options->{D}}, "optimize='-fno-omit-frame-pointer\\ -gline-tables-only'";
     if ($suffix =~ /-asan/) {
       # check clang old or new style asan
       $asan = "-faddress-sanitizer";
@@ -1220,7 +1221,6 @@ sub _build {
 	$asan = "-fsanitize=address";
       }
       push @{$c->options->{A}}, "ccflags=$asan";
-      push @{$c->options->{D}}, 'optimize=-g\ -O1';
     }
     if ($suffix =~ /-tsan/) {
       push @{$c->options->{A}}, "ccflags='-fsanitize=thread\\ -fPIE'",

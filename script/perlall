@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1324,15 +1324,20 @@ sub _build {
 
   # Backport various Configure and hints patches from blead
   # via Devel::PatchPerl
-  if ($srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
+  if ( $srcdir eq "." or $srcdir eq $root."/perl-$ps" ) {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
+    # TODO: monkeypatch Devel::PatchPerl to allow multiple plugins
     if ($asan or $c->options->{allpatches} or grep /^Asan$/, @{$c->options->{patches}}) {
-      $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
+      $c->_log('',"Devel::PatchPerl::patch_source($ps) Asan");
+      local $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
+      Devel::PatchPerl::patch_source($ps) unless $dryrun;
     }
-    Devel::PatchPerl::patch_source($ps) unless $dryrun;
-    if ($c->options->{allpatches} or grep /^Compiler$/, @{$c->options->{patches}}) {
-      $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Compiler';
+    elsif ($c->options->{allpatches} or grep /^Compiler$/, @{$c->options->{patches}}) {
+      local $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Compiler';
       $c->_log('',"Devel::PatchPerl::patch_source($ps) Compiler");
+      Devel::PatchPerl::patch_source($ps) unless $dryrun;
+    }
+    else {
       Devel::PatchPerl::patch_source($ps) unless $dryrun;
     }
     if ($ps =~ /^5\.6\.2/) {

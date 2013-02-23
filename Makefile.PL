@@ -4,6 +4,13 @@ use warnings;
 use ExtUtils::MakeMaker 6.17; # perl-5.6.2
 use Config;
 
+die "unsupported OS $^O" # fixes welcome
+  if $^O =~ /^vms|dos|bsdos$/;
+die "$^O not yet fully supported\n" # fixes welcome
+  if $^O =~ /^MSWin32|msys/;
+die "Empty SHELL\n" # fail cpantesters
+  unless $ENV{SHELL};
+
 my %WriteMakefileArgs =
   (
    "NAME" => "App::perlall",
@@ -60,6 +67,16 @@ handy 'p', 'pm', 'mt', 'perl-git' and more aliases:
 test -f ~/.perlall && . ~/.perlall
 INSTRUCTION
 }
+
+package MY;
+sub test {
+    my $s = shift->SUPER::test(@_);
+    # root can not run the tests on unix platforms
+    $s =~ s/^(test_dynamic :: pure_all\n\t)(.+)$/$1if test `id -u` -gt 0; then $2; else echo skipped for root; true; fi/m
+      if $^O =~ /^linux|freebsd|darwin|solaris|openbsd$/;
+    $s;
+}
+
 
 # Local Variables:
 #   mode: cperl

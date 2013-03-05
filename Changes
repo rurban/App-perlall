@@ -1,5 +1,10 @@
 -*- change-log -*-
 
+0.34    2013-03-05
+        Asan:
+        * improved RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow
+          See https://rt.cpan.org/Public/Bug/Display.html?id=76067
+
 0.33    2013-03-04
         Asan:
         * added fixes for CVE-2013-1667 hsplit rehash

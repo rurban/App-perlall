@@ -244,6 +244,15 @@ sub _patch_socket_un
 {
   my $vers = shift;
   my $patch = <<'END';
+commit e5086424505dcbfc5e26aeb984b769ecf5ffed01
+Author: David Mitchell <davem@iabyn.com>
+Date:   Sun Feb 24 16:46:19 2013 +0000
+   
+On Linux sockaddrlen on sockets returned by accept, recvfrom,
+getpeername and getsockname is not equal to sizeof(addr).
+A (fairly harmless) read buffer overflow can occur when copying sockaddr
+buffers on linux. Cherry-pick the fix from Socket 2.009 to keep ASAN happy.
+
 --- ext/Socket/Socket.xs~
 +++ ext/Socket/Socket.xs
 @@ -565,10 +565,16 @@ unpack_sockaddr_un(sun_sv)
@@ -253,7 +262,7 @@ sub _patch_socket_un
 +#   else
 +	if (sockaddrlen < sizeof(addr)) { /* RT #111594 */
 +           Copy(sun_ad, &addr, sockaddrlen, char);
-+           Zero(&addr+sockaddrlen, sizeof(addr)-sockaddrlen, char);
++           Zero(((char*)&addr) + sockaddrlen, sizeof(addr) - sockaddrlen, char);
 +       }
 +       else {
 +           Copy(sun_ad, &addr, sizeof(addr), char);

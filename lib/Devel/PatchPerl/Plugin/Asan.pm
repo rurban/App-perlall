@@ -3,8 +3,9 @@ use base 'Devel::PatchPerl';
 
 =head1 DESCRIPTION
 
-Plugin for Devel::PatchPerl to fix several buffer overflows in production perls
-which prevent compilations with C<clang AddressSanitizer>, aka I<asan>.
+Plugin for Devel::PatchPerl to fix several buffer overflows and use-after-free
+bugs in production perls which prevent compilations with C<clang AddressSanitizer>,
+aka I<asan>.
 
 Note that F<buildperl.pl> from L<Devel::PPPerl> and L<Devel::PatchPerl> do
 not provide such security patches, only configure and make patches.
@@ -16,9 +17,10 @@ to apply these.
 
 =head1 PATCHES
 
-The list is complete for non-threaded perls. For threaded perls
-some more patches need to be added.
+The list is complete for non-threaded perls. 
+For threaded perls some more patches need to be added.
 
+    5.8.2-5.16.2: CVE-2013-1667 prevent hsplit DOS attacks
     5.10-5.15.9:  RT#111586 sdbm.c off-by-one access to global .dir
     5.12-5.16.0:  RT#72700 List::Util boot Fix off-by-two on string literal length
     5.15.4-9, 5.17.0-6: RT#115702 overlapping memcpy in to_utf8_case
@@ -90,11 +92,14 @@ use vars '@patch';
     subs => [ [ \&_patch_socket_un ] ],
   },
   {
-    perl => [ qr/^5\.8\.\d$/,
-              qr/^5\.1[0123]\.\d$/,
+    perl => [ qr/^5\.1[0123]\.\d$/,
               qr/^5\.15\.[012]$/,    # fixed in 5.15.3
 	      qr/^5\.14\.[0123]$/ ], # to be fixed in 5.14.4
-    subs => [ [ \&_patch_eval_start] ],
+    subs => [ [ \&_patch_eval_start_510] ],
+  },
+  {
+    perl => [ qr/^5\.8\.\d$/ ],
+    subs => [ [ \&_patch_eval_start_58] ],
   },
   {
     perl => [ qr/^5\.1[0123]\.\d$/,  # broken since 5.10 (at least)
@@ -112,6 +117,16 @@ use vars '@patch';
               qr/^5\.15\.[012]$/ ],
     # regression in 5.14, fixed in v5.15.3-232-g1bac5ec
     subs => [ [ \&_patch_anonymise_cv_maybe ] ],
+  },
+  {
+    perl => [ 
+      qr/^5\.16\.[012]$/,  # to be fixed in 5.16.3
+      qr/^5\.14\.[0123]$/, # to be fixed in 5.14.4
+      qr/^5\.1[01235]\./,  # fixes not backported
+      qr/^5\.8[23456789]\./,
+      ],
+    # d59e31fc729d8a39a774f03bc6bc457029a7aef2 CVE-2013-1667
+    subs => [ [ \&_patch_hsplit_rehash ] ],
   },
 );
 
@@ -207,7 +222,7 @@ END
 sub _patch_to_utf8_case_memcpy
 {
   _patch(<<'END');
---- utf8.c
+--- utf8.c~
 +++ utf8.c
 @@ -2366,7 +2366,9 @@ Perl_to_utf8_case(pTHX_ const U8 *p, U8* ustrp, STRLEN *lenp,
      /* Here, there was no mapping defined, which means that the code point maps
@@ -229,7 +244,7 @@ sub _patch_socket_un
 {
   my $vers = shift;
   my $patch = <<'END';
---- ext/Socket/Socket.xs
+--- ext/Socket/Socket.xs~
 +++ ext/Socket/Socket.xs
 @@ -565,10 +565,16 @@ unpack_sockaddr_un(sun_sv)
  			"Socket::unpack_sockaddr_un",
@@ -267,10 +282,10 @@ END
   _add_patchlevel($vers, "RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow");
 }
 
-sub _patch_eval_start
+sub _patch_eval_start_510
 {
   _patch(<<'END');
---- pp_ctl.c
+--- pp_ctl.c~
 +++ pp_ctl.c
 @@ -3088,6 +3088,7 @@ Perl_sv_compile_2op_is_broken(pTHX_ SV *sv, OP **startop, const char *code,
      CV* runcv = NULL;	/* initialise to avoid compiler warnings */
@@ -327,6 +342,51 @@ END
   _add_patchlevel(@_, "RT#115992 PL_eval_start use-after-free");
 }
 
+sub _patch_eval_start_58
+{
+  _patch(<<'END');
+diff -bu ./pp_ctl.c~ ./pp_ctl.c
+--- ./pp_ctl.c~	2013-03-04 18:45:25.823223519 -0600
++++ ./pp_ctl.c	2013-03-04 18:52:26.691549451 -0600
+@@ -2839,7 +2839,7 @@ STATIC OP *
+ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq)
+ {
+     dSP;
+-    OP * const saveop = PL_op;
++    OP * saveop = PL_op;
+ 
+     PL_in_eval = ((saveop && saveop->op_type == OP_REQUIRE)
+ 		  ? (EVAL_INREQUIRE | (PL_in_eval & EVAL_INEVAL))
+@@ -2985,7 +2985,9 @@ S_doeval(pTHX_ int gimme, OP** startop, CV* outside, U32 seq)
+     MUTEX_UNLOCK(&PL_eval_mutex);
+ #endif /* USE_5005THREADS */
+ 
+-    RETURNOP(PL_eval_start);
++    saveop = PL_eval_start;
++    PL_eval_start = NULL;
++    RETURNOP(saveop);
+ }
+ 
+ STATIC PerlIO *
+@@ -3426,7 +3428,12 @@ PP(pp_require)
+     encoding = PL_encoding;
+     PL_encoding = Nullsv;
+ 
+-    op = DOCATCH(doeval(gimme, NULL, Nullcv, PL_curcop->cop_seq));
++   if (doeval(gimme, NULL, Nullcv, PL_curcop->cop_seq)) {
++ 	op = DOCATCH(PL_eval_start);
++	PL_eval_start = NULL;
++   }
++   else
++       op = PL_op->op_next;
+ 
+     /* Restore encoding. */
+     PL_encoding = encoding;
+END
+
+  _add_patchlevel(@_, "RT#115992 PL_eval_start use-after-free");
+}
+
 sub _patch_join_exact
 {
 # commit bb789b09de07edfb74477eb1603949c96d60927d
@@ -344,7 +404,7 @@ sub _patch_join_exact
 #     Instead, just unconditionally overwrite all the slots with fake
 #     OPTIMIZED nodes.
   _patch(<<'END');
---- regcomp.c
+--- regcomp.c~
 +++ regcomp.c
 @@ -2647,13 +2647,13 @@ S_join_exact(pTHX_ RExC_state_t *pRExC_state, regnode *scan, I32 *min, U32 flags
      }
@@ -374,7 +434,7 @@ sub _patch_socket_inet_ntop
 {
   my $vers = shift;
   my $patch = <<'END';
---- cpan/Socket/Socket.xs
+--- cpan/Socket/Socket.xs~
 +++ cpan/Socket/Socket.xs
 @@ -934,8 +934,13 @@ inet_ntop(af, ip_address_sv)
  #endif
@@ -441,6 +501,185 @@ END
   #; )
   _patch($patch);
   _add_patchlevel($vers, "RT#91678 S_anonymise_cv_maybe UTF8 cleanup");
+}
+
+sub patch_hsplit_rehash
+{
+  my $vers = shift;
+  my $patch = <<'END';
+commit d59e31fc729d8a39a774f03bc6bc457029a7aef2
+Author: Yves Orton <demerphq@gmail.com>
+Date:   Tue Feb 12 10:53:05 2013 +0100
+
+    Prevent premature hsplit() calls, and only trigger REHASH after hsplit()
+    
+    Triggering a hsplit due to long chain length allows an attacker
+    to create a carefully chosen set of keys which can cause the hash
+    to use 2 * (2**32) * sizeof(void *) bytes ram. AKA a DOS via memory
+    exhaustion. Doing so also takes non trivial time.
+    
+    Eliminating this check, and only inspecting chain length after a
+    normal hsplit() (triggered when keys>buckets) prevents the attack
+    entirely, and makes such attacks relatively benign.
+    
+    (cherry picked from commit f1220d61455253b170e81427c9d0357831ca0fac)
+
+diff --git a/ext/Hash-Util-FieldHash/t/10_hash.t b/ext/Hash-Util-FieldHash/t/10_hash.t
+index 2cfb4e8..d58f053 100644
+--- ext/Hash-Util-FieldHash/t/10_hash.t~
++++ ext/Hash-Util-FieldHash/t/10_hash.t
+@@ -38,15 +38,29 @@ use constant START     => "a";
+ 
+ # some initial hash data
+ fieldhash my %h2;
+-%h2 = map {$_ => 1} 'a'..'cc';
++my $counter= "a";
++$h2{$counter++}++ while $counter ne 'cd';
+ 
+ ok (!Internals::HvREHASH(%h2), 
+     "starting with pre-populated non-pathological hash (rehash flag if off)");
+ 
+ my @keys = get_keys(\%h2);
++my $buckets= buckets(\%h2);
+ $h2{$_}++ for @keys;
++$h2{$counter++}++ while buckets(\%h2) == $buckets; # force a split
+ ok (Internals::HvREHASH(%h2), 
+-    scalar(@keys) . " colliding into the same bucket keys are triggering rehash");
++    scalar(@keys) . " colliding into the same bucket keys are triggering rehash after split");
++
++# returns the number of buckets in a hash
++sub buckets {
++    my $hr = shift;
++    my $keys_buckets= scalar(%$hr);
++    if ($keys_buckets=~m!/([0-9]+)\z!) {
++        return 0+$1;
++    } else {
++        return 8;
++    }
++}
+ 
+ sub get_keys {
+     my $hr = shift;
+diff --git a/hv.c b/hv.c
+index 2be1feb..abb9d76 100644
+--- hv.c~
++++ hv.c
+@@ -35,7 +35,8 @@ holds the key and hash value.
+ #define PERL_HASH_INTERNAL_ACCESS
+ #include "perl.h"
+ 
+-#define HV_MAX_LENGTH_BEFORE_SPLIT 14
++#define HV_MAX_LENGTH_BEFORE_REHASH 14
++#define SHOULD_DO_HSPLIT(xhv) ((xhv)->xhv_keys > (xhv)->xhv_max) /* HvTOTALKEYS(hv) > HvMAX(hv) */
+ 
+ static const char S_strtab_error[]
+     = "Cannot modify shared string table in hv_%s";
+@@ -794,29 +795,9 @@ Perl_hv_common(pTHX_ HV *hv, SV *keysv, const char *key, STRLEN klen,
+     if (masked_flags & HVhek_ENABLEHVKFLAGS)
+ 	HvHASKFLAGS_on(hv);
+ 
+-    {
+-	const HE *counter = HeNEXT(entry);
+-
+-	xhv->xhv_keys++; /* HvTOTALKEYS(hv)++ */
+-	if (!counter) {				/* initial entry? */
+-	} else if (xhv->xhv_keys > xhv->xhv_max) {
+-		/* Use only the old HvKEYS(hv) > HvMAX(hv) condition to limit
+-		   bucket splits on a rehashed hash, as we're not going to
+-		   split it again, and if someone is lucky (evil) enough to
+-		   get all the keys in one list they could exhaust our memory
+-		   as we repeatedly double the number of buckets on every
+-		   entry. Linear search feels a less worse thing to do.  */
+-	    hsplit(hv);
+-	} else if(!HvREHASH(hv)) {
+-	    U32 n_links = 1;
+-
+-	    while ((counter = HeNEXT(counter)))
+-		n_links++;
+-
+-	    if (n_links > HV_MAX_LENGTH_BEFORE_SPLIT) {
+-		hsplit(hv);
+-	    }
+-	}
++    xhv->xhv_keys++; /* HvTOTALKEYS(hv)++ */
++    if ( SHOULD_DO_HSPLIT(xhv) ) {
++        hsplit(hv);
+     }
+ 
+     if (return_svp) {
+@@ -1192,7 +1173,7 @@ S_hsplit(pTHX_ HV *hv)
+ 
+ 
+     /* Pick your policy for "hashing isn't working" here:  */
+-    if (longest_chain <= HV_MAX_LENGTH_BEFORE_SPLIT /* split worked?  */
++    if (longest_chain <= HV_MAX_LENGTH_BEFORE_REHASH /* split worked?  */
+ 	|| HvREHASH(hv)) {
+ 	return;
+     }
+@@ -2831,8 +2812,8 @@ S_share_hek_flags(pTHX_ const char *str, I32 len, register U32 hash, int flags)
+ 
+ 	xhv->xhv_keys++; /* HvTOTALKEYS(hv)++ */
+ 	if (!next) {			/* initial entry? */
+-	} else if (xhv->xhv_keys > xhv->xhv_max /* HvKEYS(hv) > HvMAX(hv) */) {
+-		hsplit(PL_strtab);
++	} else if ( SHOULD_DO_HSPLIT(xhv) ) {
++            hsplit(PL_strtab);
+ 	}
+     }
+ 
+diff --git a/t/op/hash.t b/t/op/hash.t
+index 278bea7..201260a 100644
+--- t/op/hash.t~
++++ t/op/hash.t
+@@ -39,22 +39,36 @@ use constant THRESHOLD => 14;
+ use constant START     => "a";
+ 
+ # some initial hash data
+-my %h2 = map {$_ => 1} 'a'..'cc';
++my %h2;
++my $counter= "a";
++$h2{$counter++}++ while $counter ne 'cd';
+ 
+ ok (!Internals::HvREHASH(%h2), 
+     "starting with pre-populated non-pathological hash (rehash flag if off)");
+ 
+ my @keys = get_keys(\%h2);
++my $buckets= buckets(\%h2);
+ $h2{$_}++ for @keys;
++$h2{$counter++}++ while buckets(\%h2) == $buckets; # force a split
+ ok (Internals::HvREHASH(%h2), 
+-    scalar(@keys) . " colliding into the same bucket keys are triggering rehash");
++    scalar(@keys) . " colliding into the same bucket keys are triggering rehash after split");
++
++# returns the number of buckets in a hash
++sub buckets {
++    my $hr = shift;
++    my $keys_buckets= scalar(%$hr);
++    if ($keys_buckets=~m!/([0-9]+)\z!) {
++        return 0+$1;
++    } else {
++        return 8;
++    }
++}
+ 
+ sub get_keys {
+     my $hr = shift;
+ 
+     # the minimum of bits required to mount the attack on a hash
+     my $min_bits = log(THRESHOLD)/log(2);
+-
+     # if the hash has already been populated with a significant amount
+     # of entries the number of mask bits can be higher
+     my $keys = scalar keys %$hr;
+END
+
+  # "
+  if ($vers =~ /^5\.8\.[2345678]$/) {
+    $patch =~ s{diff --git a/ext/Hash-Util-FieldHash.+diff --git a/hv.c b/hv.c}
+               {diff --git a/hv.c b/hv.c}gm;
+  }
+  _patch($patch);
+  _add_patchlevel($vers, "CVE-2013-1667 hsplit rehash");
 }
 
 1;

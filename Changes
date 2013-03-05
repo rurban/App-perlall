@@ -1,5 +1,10 @@
 -*- change-log -*-
 
+0.33    2013-03-04
+        Asan:
+        * added fixes for CVE-2013-1667 hsplit rehash
+        * fixed RT#115992 PL_eval_start use-after-free patch for 5.8.x
+
 0.32    2013-02-23
         * skip installation on unsupported systems
         * skip tests as root

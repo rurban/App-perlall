@@ -512,7 +512,7 @@ END
   _add_patchlevel($vers, "RT#91678 S_anonymise_cv_maybe UTF8 cleanup");
 }
 
-sub patch_hsplit_rehash
+sub _patch_hsplit_rehash
 {
   my $vers = shift;
   my $patch = <<'END';

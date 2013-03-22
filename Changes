@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.35    2013-03-22
+        Asan:
+        * fix typo _patch_hsplit_rehash (#issue 6, Tokihiro Matsuno)
+
 0.34    2013-03-05
         Asan:
         * improved RT#111594 Socket::unpack_sockaddr_un heap-buffer-overflow

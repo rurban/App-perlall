@@ -1,5 +1,9 @@
 -*- change-log -*-
 
+0.36    2013-07-11
+        Asan:
+        * add RT#118525 B::CV::GV crash on lexsubs for 5.17-5.19
+
 0.35    2013-03-22
         Asan:
         * fix typo _patch_hsplit_rehash (#issue 6, Tokihiro Matsuno)

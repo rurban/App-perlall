@@ -29,6 +29,7 @@ For threaded perls some more patches need to be added.
     5.10-5.14.3:  RT#115994 S_join_exact global-buffer-overflow
     5.17.7-8:     RT#82119 Socket::inet_ntop heap-buffer-overflow
     5.14.0-3:     RT#91678 S_anonymise_cv_maybe UTF8 cleanup
+    5.17-19:      RT#118525 B::CV::GV crash on lexsubs
 
 =head2 Devel::PatchPerl::Plugin::Asan::patchperl($class, {version,source,patchexe})
 
@@ -127,6 +128,12 @@ use vars '@patch';
       ],
     # d59e31fc729d8a39a774f03bc6bc457029a7aef2 CVE-2013-1667
     subs => [ [ \&_patch_hsplit_rehash ] ],
+  },
+  {
+    perl => [
+      qr/^5\.1[789]/,  # RT #118525
+      ],
+    subs => [ [ \&_patch_cvgv_lexsub ] ],
   },
 );
 
@@ -512,7 +519,46 @@ END
   _add_patchlevel($vers, "RT#91678 S_anonymise_cv_maybe UTF8 cleanup");
 }
 
-sub _patch_hsplit_rehash
+sub _patch_cvgv_lexsub
+{
+  my $vers = shift;
+  my $patch = <<'END';
+From d9601932ab176efaf28dd3d4bfe59b19dcc55106 Mon Sep 17 00:00:00 2001
+From: Reini Urban <rurban@x-ray.at>
+Date: Thu, 11 Jul 2013 12:09:15 -0500
+Subject: [PATCH] [perl #118525] Do not access a GV of a lexical sub in
+ B::CV::GV
+
+A lexsub has a hek instead of a gv, return a fresh NULL instead.
+Avoid accessing SvFLAGS of the HEK.
+---
+ ext/B/B.xs |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff ext/B/B.xs~ ext/B/B.xs
+index fbe6be6..a6b9ee1 100644
+--- ext/B/B.xs~
++++ ext/B/B.xs
+@@ -1390,7 +1390,9 @@ IVX(sv)
+ 	ptr = (ix & 0xFFFF) + (char *)SvANY(sv);
+ 	switch ((U8)(ix >> 16)) {
+ 	case (U8)(sv_SVp >> 16):
+-	    ret = make_sv_object(aTHX_ *((SV **)ptr));
++	    ret = (ix == PVCV_gv_ix && SvPADMY(sv)) /* lexsub has a HEK instead of GV */
++	        ? sv_setref_iv(sv_newmortal(), "B::NULL", PTR2IV(sv))
++	        : make_sv_object(aTHX_ *((SV **)ptr));
+ 	    break;
+ 	case (U8)(sv_IVp >> 16):
+ 	    ret = sv_2mortal(newSViv(*((IV *)ptr)));
+-- 
+END
+
+  #; )
+  _patch($patch);
+  _add_patchlevel($vers, "RT#118525 B::CV::GV crash on lexsubs");
+}
+
+sub patch_hsplit_rehash
 {
   my $vers = shift;
   my $patch = <<'END';

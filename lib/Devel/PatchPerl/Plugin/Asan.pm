@@ -29,7 +29,7 @@ For threaded perls some more patches need to be added.
     5.10-5.14.3:  RT#115994 S_join_exact global-buffer-overflow
     5.17.7-8:     RT#82119 Socket::inet_ntop heap-buffer-overflow
     5.14.0-3:     RT#91678 S_anonymise_cv_maybe UTF8 cleanup
-    5.17-19:      RT#118525 B::CV::GV crash on lexsubs
+    5.17-19:      RT#118525 Return B::HEK for B::CV::GV of lexical subs
 
 =head2 Devel::PatchPerl::Plugin::Asan::patchperl($class, {version,source,patchexe})
 
@@ -523,39 +523,172 @@ sub _patch_cvgv_lexsub
 {
   my $vers = shift;
   my $patch = <<'END';
-From d9601932ab176efaf28dd3d4bfe59b19dcc55106 Mon Sep 17 00:00:00 2001
+From 5e135b6d655cf605ed3d659b94eef847e7d5d29c Mon Sep 17 00:00:00 2001
 From: Reini Urban <rurban@x-ray.at>
 Date: Thu, 11 Jul 2013 12:09:15 -0500
-Subject: [PATCH] [perl #118525] Do not access a GV of a lexical sub in
- B::CV::GV
+Subject: [PATCH] [perl #118525] Return B::HEK for B::CV::GV of lexical subs
 
-A lexsub has a hek instead of a gv, return a fresh NULL instead.
-Avoid accessing SvFLAGS of the HEK.
+A lexsub has a hek instead of a gv.
+Provide a ref to a PV for the name in the new B::HEK class.
+This crashed previously accessing the not existing SvFLAGS of the hek.
 ---
- ext/B/B.xs |    4 +++-
- 1 file changed, 3 insertions(+), 1 deletion(-)
+ ext/B/B.pm    |   27 ++++++++++++++++++++++++++-
+ ext/B/B.xs    |   42 +++++++++++++++++++++++++++++++++++++++++-
+ ext/B/typemap |   12 ++++++++++++
+ 3 files changed, 79 insertions(+), 2 deletions(-)
 
+diff ext/B/B.pm~ ext/B/B.pm
+index 8b13dea..c153899 100644
+--- ext/B/B.pm~
++++ ext/B/B.pm
+@@ -1265,6 +1267,29 @@ rather than a list of all of them.
+ 
+ =back
+ 
++=head2 B::HEK Methods
++
++A B::HEK is returned by B::CV->GV for a lexical sub, defining its name.
++Using the dereferenced scalar value of the object returns the string value,
++which is usually enough; the other methods are rarely needed.
++
++    use B;
++    use feature 'lexical_subs';
++    my sub p {1};
++    $cv = B::svref_2object(\&p);
++    $hek = $cv->GV;
++    print $$hek, "==", $hek->KEY;
++
++=over 4
++
++=item KEY
++
++=item LEN
++
++=item FLAGS
++
++=back
++
+ =head2 $B::overlay
+ 
+ Although the optree is read-only, there is an overlay facility that allows
 diff ext/B/B.xs~ ext/B/B.xs
-index fbe6be6..a6b9ee1 100644
+index fbe6be6..444d2fe 100644
 --- ext/B/B.xs~
 +++ ext/B/B.xs
-@@ -1390,7 +1390,9 @@ IVX(sv)
+@@ -296,6 +296,17 @@ make_sv_object(pTHX_ SV *sv)
+ }
+ 
+ static SV *
++make_hek_object(pTHX_ HEK *hek)
++{
++  SV *ret = sv_setref_pvn(sv_newmortal(), "B::HEK", HEK_KEY(hek), HEK_LEN(hek));
++  SV *rv = SvRV(ret);
++  SvIOKp_on(rv);
++  SvIV_set(rv, PTR2IV(hek));
++  SvREADONLY_on(rv);
++  return ret;
++}
++
++static SV *
+ make_temp_object(pTHX_ SV *temp)
+ {
+     SV *target;
+@@ -602,6 +613,7 @@ typedef IO	*B__IO;
+ 
+ typedef MAGIC	*B__MAGIC;
+ typedef HE      *B__HE;
++typedef HEK     *B__HEK;
+ typedef struct refcounted_he	*B__RHE;
+ #ifdef PadlistARRAY
+ typedef PADLIST	*B__PADLIST;
+@@ -1390,7 +1402,10 @@ IVX(sv)
  	ptr = (ix & 0xFFFF) + (char *)SvANY(sv);
  	switch ((U8)(ix >> 16)) {
  	case (U8)(sv_SVp >> 16):
 -	    ret = make_sv_object(aTHX_ *((SV **)ptr));
-+	    ret = (ix == PVCV_gv_ix && SvPADMY(sv)) /* lexsub has a HEK instead of GV */
-+	        ? sv_setref_iv(sv_newmortal(), "B::NULL", PTR2IV(sv))
-+	        : make_sv_object(aTHX_ *((SV **)ptr));
++            if ((ix == (PVCV_gv_ix)) && CvNAMED(sv))
++                ret = make_hek_object(aTHX_ CvNAME_HEK((CV*)sv));
++            else
++	        ret = make_sv_object(aTHX_ *((SV **)ptr));
  	    break;
  	case (U8)(sv_IVp >> 16):
  	    ret = sv_2mortal(newSViv(*((IV *)ptr)));
+@@ -1588,6 +1603,31 @@ PV(sv)
+         }
+ 	ST(0) = newSVpvn_flags(p, len, SVs_TEMP | utf8);
+ 
++MODULE = B	PACKAGE = B::HEK
++
++void
++KEY(hek)
++        B::HEK   hek
++    ALIAS:
++	LEN = 1
++	FLAGS = 2
++    PPCODE:
++        SV *pv;
++	switch (ix) {
++	case 0:
++            pv = newSVpvn(HEK_KEY(hek), HEK_LEN(hek));
++            if (HEK_UTF8(hek)) SvUTF8_on(pv);
++            SvREADONLY_on(pv);
++            PUSHs(pv);
++            break;
++        case 1:
++            mPUSHu(HEK_LEN(hek));
++            break;
++        case 2:
++            mPUSHu(HEK_FLAGS(hek));
++            break;
++        }
++
+ MODULE = B	PACKAGE = B::PVMG
+ 
+ void
+diff ext/B/typemap~ ext/B/typemap
+index e97fb76..88de4da 100644
+--- ext/B/typemap~
++++ ext/B/typemap
+@@ -35,6 +35,7 @@ PADOFFSET	T_UV
+ 
+ B::HE		T_HE_OBJ
+ B::RHE		T_RHE_OBJ
++B::HEK		T_HEK_OBJ
+ 
+ B::PADLIST	T_PL_OBJ
+ 
+@@ -79,6 +80,14 @@ T_RHE_OBJ
+ 	else
+ 	    croak(\"$var is not a reference\")
+ 
++T_HEK_OBJ
++	if (SvROK($arg)) {
++	    IV tmp = SvIV((SV*)SvRV($arg));
++	    $var = INT2PTR($type,tmp);
++	}
++	else
++	    croak(\"$var is not a reference\")
++
+ T_PL_OBJ
+ 	if (SvROK($arg)) {
+ 	    IV tmp = SvIV((SV*)SvRV($arg));
+@@ -94,6 +103,9 @@ T_MG_OBJ
+ T_HE_OBJ
+ 	sv_setiv(newSVrv($arg, "B::HE"), PTR2IV($var));
+ 
++T_HEK_OBJ
++	sv_setiv(newSVrv($arg, "B::HEK"), PTR2IV($var));
++
+ T_RHE_OBJ
+ 	sv_setiv(newSVrv($arg, "B::RHE"), PTR2IV($var));
+ 
 -- 
+1.7.10.4
 END
 
   #; )
   _patch($patch);
-  _add_patchlevel($vers, "RT#118525 B::CV::GV crash on lexsubs");
+  _add_patchlevel($vers, "RT#118525 Return B::HEK for B::CV::GV of lexical subs");
 }
 
 sub patch_hsplit_rehash

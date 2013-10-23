@@ -29,7 +29,7 @@ For threaded perls some more patches need to be added.
     5.10-5.14.3:  RT#115994 S_join_exact global-buffer-overflow
     5.17.7-8:     RT#82119 Socket::inet_ntop heap-buffer-overflow
     5.14.0-3:     RT#91678 S_anonymise_cv_maybe UTF8 cleanup
-    5.17-19:      RT#118525 Return B::HEK for B::CV::GV of lexical subs
+    5.17,18.0,19  RT#118525 Return B::HEK for B::CV::GV of lexical subs
 
 =head2 Devel::PatchPerl::Plugin::Asan::patchperl($class, {version,source,patchexe})
 
@@ -121,20 +121,28 @@ use vars '@patch';
   },
   {
     perl => [ 
-      qr/^5\.16\.[012]$/,  # to be fixed in 5.16.3
-      qr/^5\.14\.[0123]$/, # to be fixed in 5.14.4
-      qr/^5\.1[01235]\./,  # fixes not backported
-      qr/^5\.8[23456789]\./,
+      qr/^5\.16\.[012]$/,  # fixed in 5.16.3
+      qr/^5\.14\.[0123]$/, # fixed in 5.14.4
+      qr/^5\.1[01235]\./,  # TODO fixes not backported
+      qr/^5\.8[23456789]\./, # TODO
       ],
     # d59e31fc729d8a39a774f03bc6bc457029a7aef2 CVE-2013-1667
     subs => [ [ \&_patch_hsplit_rehash ] ],
   },
   {
-    perl => [
-      qr/^5\.1[789]/,  # RT #118525
+    perl => [ 
+      qr/^5\.16\.[012]$/,  # fixed in 5.16.3
+      qr/^5\.14\.[0123]$/, # fixed in 5.14.4
+      qr/^5\.1[01235]\./,  # 
       ],
-    subs => [ [ \&_patch_cvgv_lexsub ] ],
+    subs => [ [ \&_patch_regcomp_nothing ] ],
   },
+  #{
+  #  perl => [
+  #    qr/^5\.1[789]/,  # RT #118525
+  #    ],
+  #  subs => [ [ \&_patch_cvgv_lexsub ] ],
+  #},
 );
 
 sub _add_patchlevel {
@@ -422,7 +430,7 @@ sub _patch_join_exact
   _patch(<<'END');
 --- regcomp.c~
 +++ regcomp.c
-@@ -2647,13 +2647,13 @@ S_join_exact(pTHX_ RExC_state_t *pRExC_state, regnode *scan, I32 *min, U32 flags
+@@ -2647,13 +2647,17 @@ S_join_exact(pTHX_ RExC_state_t *pRExC_state, regnode *scan, I32 *min, U32 flags
      }
      
  #ifdef DEBUGGING
@@ -436,7 +444,11 @@ sub _patch_join_exact
 -            NEXT_OFF(n) = 0;
 -        }
 +	OP(n) = OPTIMIZED;
++#ifdef FLAGS
 +	FLAGS(n) = 0;
++#else
++	n->flags = 0;
++#endif
 +	NEXT_OFF(n) = 0;
          n++;
      }
@@ -691,7 +703,7 @@ END
   _add_patchlevel($vers, "RT#118525 Return B::HEK for B::CV::GV of lexical subs");
 }
 
-sub patch_hsplit_rehash
+sub _patch_hsplit_rehash
 {
   my $vers = shift;
   my $patch = <<'END';
@@ -866,7 +878,7 @@ END
     $patch =~ s{diff --git a/ext/Hash-Util-FieldHash.+diff --git a/hv.c b/hv.c}
                {diff --git a/hv.c b/hv.c}gm;
   }
-  _patch($patch);
+  _patch($patch); #TODO 5.10, 5.12
   _add_patchlevel($vers, "CVE-2013-1667 hsplit rehash");
 }
 

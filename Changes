@@ -1,5 +1,15 @@
 -*- change-log -*-
 
+0.39    2013-10-23
+        * added new Devel::PatchPerl::Plugin::General for yet unpatched
+          CPAN #88936 Compress-Raw-Zlib -g3: final link failed: Memory exhausted
+          needed for debugging builds
+        * Asan: fixed _patch_hsplit_rehash
+        * fix typo in t/release-pod-syntax.t
+
+0.38    2013-09-10
+        * improved -asan detection with newer clang (> 3.2)
+
 0.37    2013-07-13
         Asan:
         * improved RT#118525 patch "Return B::HEK for B::CV::GV of lexical subs"

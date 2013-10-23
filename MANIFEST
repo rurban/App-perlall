@@ -8,6 +8,7 @@ INSTALL
 lib/App/perlall.pm
 lib/Devel/PatchPerl/Plugin/Asan.pm
 lib/Devel/PatchPerl/Plugin/Compiler.pm
+lib/Devel/PatchPerl/Plugin/General.pm
 script/perlall
 perlall.ppt
 perlall.txt

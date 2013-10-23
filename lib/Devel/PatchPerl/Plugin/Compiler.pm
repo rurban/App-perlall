@@ -67,7 +67,7 @@ use vars '@patch';
   },
 );
 
-sub _add_patchlevel {
+sub _add_patchlevel1 {
   my $vers = shift;
   my $line = shift;
   my $success;
@@ -173,7 +173,7 @@ END
   }
   _patch($patch);
 
-  _add_patchlevel($vers, "RT#81332 revert 744aaba0 bloats the B compilers");
+  _add_patchlevel1($vers, "RT#81332 revert 744aaba0 bloats the B compilers");
 }
 
 sub _patch_B_BEGIN_517
@@ -251,7 +251,7 @@ END
   }
   _patch($patch);
 
-  _add_patchlevel($vers, "RT#81332 revert 744aaba0 bloats the B compilers");
+  _add_patchlevel1($vers, "RT#81332 revert 744aaba0 bloats the B compilers");
 }
 
 sub _patch_store_cop_label
@@ -341,10 +341,10 @@ index a230c16..11c5565 100644
  		     U32 flags)
 END
 
-  _add_patchlevel(@_, "a70c7e2f Export store_cop_label for the perl compiler");
+  _add_patchlevel1(@_, "a70c7e2f Export store_cop_label for the perl compiler");
 }
 
-sub _patch_store_cop_label
+sub _patch_dl_export
 {
   # 5.15.2-3:    4497a11a Export DynaLoader symbols from libperl again
   _patch(<<'END');
@@ -362,8 +362,7 @@ index 1ba9a61..574ccad 100644
  #   include "perl.h"
 END
 
-  _add_patchlevel(@_, "4497a11a Export DynaLoader symbols from libperl again");
+  _add_patchlevel1(@_, "4497a11a Export DynaLoader symbols from libperl again");
 }
-
 
 1;

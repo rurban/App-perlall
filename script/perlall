@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.39';
+our $VERSION = '0.40';
 use Config;
 use Cwd ();
 use File::Spec ();

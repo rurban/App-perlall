@@ -10,7 +10,7 @@ be provided by Devel::PatchPerl, but are not yet.
 
 This list is complete:
 
-    5.19.3-: Compress::Raw::Zlib -g3 final link failed: Memory exhausted
+    5.19.3-5: Compress::Raw::Zlib -g3 final link failed: Memory exhausted
 
 =head2 Devel::PatchPerl::Plugin::General::patchperl($class, {version,source,patchexe})
 
@@ -44,7 +44,7 @@ use vars '@patch';
 
 @patch = (
   {
-    perl => [ qr/^5\.19\.[3456789]$/ ],
+    perl => [ qr/^5\.19\.[345]$/ ],
     subs => [ [ \&_patch_CompressRawZlib] ],
   },
 );

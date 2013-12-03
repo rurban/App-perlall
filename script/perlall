@@ -30,7 +30,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1523,6 +1523,9 @@ sub _build {
   }
   if (($new ne $archname) or $archsuffix or $debug) {
     if ($new eq $archname) {
+      if ($archname =~ /-thread-multi/ and !$c->_older($ps,"5.10.0")) {
+        $new =~ s/-thread-multi/-thread/;
+      }
       $new .= "-debug" if $debug and $archname !~ /-debug/;
       $new .= $archsuffix if $archsuffix and $archname !~ /$archsuffix$/;
       if (!$ithreads and $new =~ /-thread/) {

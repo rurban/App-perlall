@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.41    2013-12-03
+        * build: Collapse -thread-multi to -thread when only ithreads are available
+
 0.40    2013-11-18
         * Devel::PatchPerl::Plugin::General: CPAN #88936 fixed with 5.19.6
 

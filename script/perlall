@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1299,7 +1299,7 @@ sub _build {
 	if -f 'Configure' and !-l "Configure";
     } else { # cp anew
       $c->debug("copy git tree for $from");
-      @cmd = ($cp, "-r", "$srcdir/.git", "$builddir/");
+      @cmd = ($cp, "-rf", "$srcdir/.git", "$builddir/");
       # unshift @cmd, $sudo if $sudo; # cannot trust !-w "$builddir/.git";
       if ($^O eq 'MSWin32') {
 	$c->_system1( "rm -rf \"$builddir\\.git\"") if -d "$builddir/.git";
@@ -1771,7 +1771,7 @@ EOP
       }
     }
 
-    @c = ($cp, "-r", "$root/inst-$p$prefix/lib", "$prefix/");
+    @c = ($cp, "-rf", "$root/inst-$p$prefix/lib", "$prefix/");
     unshift @c, $sudo if $sudo and !-w "$prefix/lib/perl5/$ps";
     $c->_system1( @c );
 

@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.43    2013-12-09
+        * build: cp -rf usr/local/lib. libs are now installed readonly
+
 0.42    2013-12-06
         * build: -m vs -mempool. do not build multi with 5.12.5d-mempool -Accflags=-DPERL_TRACK_MEMPOOL
 

@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.43';
+our $VERSION = '0.44';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1192,9 +1192,9 @@ sub _build {
   my $srcdir = $c->config->{'perl-git'};
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   my $debug = substr($suffix,0,1) eq 'd';
-  my $multi = $suffix =~ /^d?-m[^a-z]/;
-  my $ithreads = $suffix !~ /^d?-nt[^a-z]/;
-  my ($archsuffix) = $suffix =~ /d?(?:-nt|-m[^a-z]|thr)(.+)$/;
+  my $multi = $suffix =~ /^d?-m[^a-z]?/;
+  my $ithreads = $suffix !~ /^d?-nt[^a-z]?/;
+  my ($archsuffix) = $suffix =~ /d?(?:-nt|-m[^a-z]?|thr)(.+)$/;
   my ($asan, $cc);
   if ($suffix =~ /-mad/) {
     push @{$c->options->{D}}, "mad=y";

@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.44    2014-01-11
+        * build: fix -Uuseithreads with -nt suffix. it compiled to a threaded version since 0.42
+
 0.43    2013-12-09
         * build: cp -rf usr/local/lib. libs are now installed readonly
 

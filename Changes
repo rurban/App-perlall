@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.45    2014-07-25
+        * use nice _gitoneliner via git describe --long --tags --dirty --always
+
 0.44    2014-01-11
         * build: fix -Uuseithreads with -nt suffix. it compiled to a threaded version since 0.42
 

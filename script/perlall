@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.44';
+our $VERSION = '0.45';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -63,7 +63,7 @@ BEGIN { # check platform support: perldoc perlport
 }
 # 5.8.4: solaris, 5.8.5: centos4, 5.8.8: centos5
 # below dynamically parsed from git tags
-our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.5 5.14.4 5.16.3 5.18.1);
+our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.5 5.14.4 5.16.3 5.18.2 5.20.0);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -2116,8 +2116,16 @@ sub cpanm
 sub _gitoneliner {
   my $c = shift;
   return $c->options->{gittag} if $c->options->{gittag};
-  -d '.svn' ? `svn info t | grep Revision`
-    : (-d '.git' ? `git log --oneline -1` : '');
+  if (-d '.svn') {
+    return `svn info t | grep Revision`;
+  } elsif (-d '.git') {
+    my $s = `git describe --long --tags --dirty --always`;
+    chomp $s;
+    $s .= `git log --oneline -1`;
+    return $s;
+  } else {
+    return '';
+  }
 }
 
 =item B<make> [commands...]

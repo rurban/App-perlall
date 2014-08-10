@@ -62,6 +62,7 @@ alias ppan='p -S cpan'
 alias jpan='ppan -j ~/.cpan/CPAN/nosqlite.pm'
 alias mt='make -j4 test'
 alias mtv='mt TEST_VERBOSE=1'
+alias mtee='mt 2>&1|tee log.test'
 alias smi='sudo make install'
 alias mi='mt && smi'
 #alias perldoc=cpandoc

@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.45';
+our $VERSION = '0.46';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -959,6 +959,7 @@ More special perl suffix rules:
   -tsan clang -fsanitize=thread
   -msan clang -fsanitize=memory
   -ubsan clang -fsanitize=undefined
+  -isan clang -fsanitize=integer
   -cow  -DPERL_NEW_COPY_ON_WRITE
   -mad  -Dmad
 
@@ -1221,19 +1222,24 @@ sub _build {
       push @{$c->options->{A}}, "ccflags=$asan";
     }
     if ($suffix =~ /-tsan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=thread\\ -fPIE'",
-                                "ldflags='-fsanitize=thread\\ -pie'",
-                                "lddlflags='-fsanitize=thread\\ -pie'";
+      push @{$c->options->{A}}, "ccflags='-fsanitize=thread -fPIE'",
+                                "ldflags='-fsanitize=thread -pie'",
+                                "lddlflags='-fsanitize=thread -pie'";
     }
     if ($suffix =~ /-ubsan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=undefined\\ -fPIE'",
-                                "ldflags='-fsanitize=undefined\\ -pie'",
-                                "lddlflags='-fsanitize=undefined\\ -pie'";
+      push @{$c->options->{A}}, "ccflags='-fsanitize=undefined -fPIE'",
+                                "ldflags='-fsanitize=undefined -pie'",
+                                "lddlflags='-fsanitize=undefined -pie'";
     }
     if ($suffix =~ /-msan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=memory\\ -fPIE'",
-                                "ldflags='-fsanitize=memory\\ -pie'",
-                                "lddlflags='-fsanitize=memory\\ -pie'";
+      push @{$c->options->{A}}, "ccflags='-fsanitize=memory -fPIE'",
+                                "ldflags='-fsanitize=memory -pie'",
+                                "lddlflags='-fsanitize=memory -pie'";
+    }
+    if ($suffix =~ /-isan/) {
+      push @{$c->options->{A}}, "ccflags='-fsanitize=integer -fPIE'",
+                                "ldflags='-fsanitize=integer -pie'",
+                                "lddlflags='-fsanitize=integer -pie'";
     }
   }
   $ithreads = undef if $multi;

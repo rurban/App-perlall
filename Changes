@@ -1,5 +1,11 @@
 -*- change-log -*-
 
+0.47    2015-07-08
+	* fix -strong bug with clang, leave now -fstack-protector and
+          -fstack-protector-strong.
+        * add -ddflow, -sstack, -cps, -cpi suffix support for clang
+        * remove support for old -faddress-sanitizer syntax
+
 0.46    2014-08-09
 	* fix -*san sanitizer cmdline quoting, add -isan support
 

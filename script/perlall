@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.46';
+our $VERSION = '0.47';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -955,11 +955,15 @@ More special perl suffix rules:
   -nt   non-threaded
   -m    multiplicity
   -clang -Dcc=clang
-  -asan clang -fsanitize=address
-  -tsan clang -fsanitize=thread
-  -msan clang -fsanitize=memory
+  -asan  clang -fsanitize=address
+  -tsan  clang -fsanitize=thread
+  -msan  clang -fsanitize=memory
   -ubsan clang -fsanitize=undefined
-  -isan clang -fsanitize=integer
+  -isan  clang -fsanitize=integer
+  -dflow clang -fsanitize=dataflow
+  -sstack clang -fsanitize=safestack
+  -cps   clang-cps -fcps
+  -cpi   clang-cps -fcpi
   -cow  -DPERL_NEW_COPY_ON_WRITE
   -mad  -Dmad
 
@@ -1203,7 +1207,7 @@ sub _build {
   if ($suffix =~ /-cow/) {
     push @{$c->options->{A}}, "ccflags=-DPERL_NEW_COPY_ON_WRITE";
   }
-  if ($suffix =~ /-(clang|asan|tsan|msan|ubsan)/) {
+  if ($suffix =~ /-(clang|asan|tsan|msan|ubsan|isan|dflow|sstack|cps|cpi)/) {
     $cc = 'clang';
     unless (grep /cc=/, @{$c->options->{D}}) {
       push @{$c->options->{D}}, "cc=clang";
@@ -1212,34 +1216,30 @@ sub _build {
     }
     push @{$c->options->{D}}, "optimize='-fno-omit-frame-pointer -gline-tables-only'";
     if ($suffix =~ /-asan/) {
-      # check clang old or new style asan
-      $asan = "-faddress-sanitizer";
-      #my $version = `$cc --version`;
-      my $result = `$cc -c $asan /dev/null 2>&1`;
-      if ($result =~ /(argument unused during compilation: '-faddress-sanitizer'|'-faddress-sanitizer' is deprecated)/) {
-	$asan = "-fsanitize=address";
-      }
+      $asan = "-fsanitize=address";
       push @{$c->options->{A}}, "ccflags=$asan";
     }
-    if ($suffix =~ /-tsan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=thread -fPIE'",
-                                "ldflags='-fsanitize=thread -pie'",
-                                "lddlflags='-fsanitize=thread -pie'";
+    if ($suffix =~ /-(cps|cpi)/) { # only with a levee clang yet
+      my $san = $1;
+      push @{$c->options->{D}}, "cc=clang-cps", "ld=clang-cps";
+      push @{$c->options->{A}}, "ccflags='-f$san'",
+                                "ldflags='-f$san'",
+                                "lddlflags='-f$san'";
     }
-    if ($suffix =~ /-ubsan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=undefined -fPIE'",
-                                "ldflags='-fsanitize=undefined -pie'",
-                                "lddlflags='-fsanitize=undefined -pie'";
-    }
-    if ($suffix =~ /-msan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=memory -fPIE'",
-                                "ldflags='-fsanitize=memory -pie'",
-                                "lddlflags='-fsanitize=memory -pie'";
-    }
-    if ($suffix =~ /-isan/) {
-      push @{$c->options->{A}}, "ccflags='-fsanitize=integer -fPIE'",
-                                "ldflags='-fsanitize=integer -pie'",
-                                "lddlflags='-fsanitize=integer -pie'";
+    if ($suffix =~ /-(tsan|ubsan|msan|isan|dflow)/) {
+      my %sanmap = (tsan => 'thread',
+                    ubsan => 'undefined',
+                    msan => 'memory',
+                    isan => 'integer',
+                    dflow => 'dataflow',
+                    sstack => 'safestack',
+                    # cps  => 'cps',
+                    # cpi  => 'cpi'
+      );
+      my $san = $sanmap{$1};
+      push @{$c->options->{A}}, "ccflags='-fsanitize=$san -fPIE'",
+                                "ldflags='-fsanitize=$san -pie'",
+                                "lddlflags='-fsanitize=$san -pie'";
     }
   }
   $ithreads = undef if $multi;
@@ -1410,13 +1410,13 @@ sub _build {
   }
   # ensure ldflags and lddflags -faddress-sanitizer on ccflags=-faddress-sanitizer
   # XXX this should go into darwin and linux hints somewhen
-  if (grep /-[DA]'ccflags=.*-f(sanitize=address|address-sanitizer)/, @conf) {
+  if (grep /-[DA]'ccflags=.*-fsanitize=address/, @conf) {
     my $f = 'ldflags';
-    if (!(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf)) {
+    if (!(grep /-[DA]'$f=.*-fsanitize=address/, @conf)) {
       push @conf, "-A'$f=$asan" . ($^O eq 'darwin' ? "\\ -Wl,-no_pie'" : "'");
     }
     $f = 'lddlflags';
-    if (!(grep /-[DA]'$f=.*-f(sanitize=address|address-sanitizer)/, @conf)
+    if (!(grep /-[DA]'$f=.*-fsanitize=address/, @conf)
 	and !(grep /-U'?useshrplib/, @conf)) {
       push @conf,
         ($^O eq 'darwin' ? "-A'$f=-bundle\\ $asan\\ -Wl,-no_pie'"
@@ -1632,10 +1632,11 @@ sub _build {
   # XXX fix config_args also
 
   my $makefile = -f "GNUmakefile" ? "GNUmakefile" : "makefile";
-  $c->debug("post-configure clang fixes");
-  if (join(" ",@conf) =~ /-D'?cc='?clang'?/) {
-      $c->_grep("-i s/-fstack-protector//; print", "config.sh", "myconfig", $makefile);
-  }
+  #$c->debug("post-configure clang fixes");
+  #if (join(" ",@conf) =~ /-D'?cc='?clang'?/) {
+  #    $c->_grep("-i s/-fstack-protector-strong//; print", "config.sh", "myconfig", $makefile);
+  #    $c->_grep("-i s/-fstack-protector//; print", "config.sh", "myconfig", $makefile);
+  #}
 
   if (!$dryrun and `grep '<command-line>' $makefile`) { # <5.8.8?
     $c->debug("post-configure old-perl Makefile <command-line> fixes");

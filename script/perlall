@@ -56,6 +56,7 @@ BEGIN { # check platform support: perldoc perlport
     for (@_) { push @m, $_ unless eval "require $_;" }
     if (@m) { # Checked the API back to 1.76_01 (v5.8.4)
       require CPAN; CPAN->import;
+      # TODO: skip core modules, perl-5
       warn "CPAN::Shell->install(qw(@m))\n"; CPAN::Shell->install(@m); }
     $_->import for @m;
   }

@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.47';
+our $VERSION = '0.48';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1435,9 +1435,9 @@ sub _build {
       for my $f (qw(cc ld ccflags ldflags libpth incpth pager
 		    cf_email perladmin useshrplib))
       {
-	next if grep /^$f[= ]/, @{$c->options->{D}}
-	     or grep /^$f[= ]/, @{$c->options->{A}}
-	     or grep /^$f[= ]/, @{$c->options->{U}};
+	next if grep /^[AUD]$f[= ]/, @{$c->options->{D}}
+	     or grep /^[AUD]$f[= ]/, @{$c->options->{A}}
+	     or grep /^[AUD]$f[= ]/, @{$c->options->{U}};
 	# -Dlibpth=/usr/local/lib64 /lib64 /usr/lib64 -D
 	my ($d,$v) = $tryargs =~ m/-([AUD])$f=(.+?) (?:-[ADU]|;)/; # Not until -L
 	# check the

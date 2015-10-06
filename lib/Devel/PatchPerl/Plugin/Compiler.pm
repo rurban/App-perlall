@@ -55,7 +55,7 @@ use vars '@patch';
   { perl => [ qr/^5\.1[456]\.\d$/ ],
     subs => [ [ \&_patch_B_BEGIN ] ],
   },
-  { perl => [ qr/^5\.17\.\d$/ ],
+  { perl => [ qr/^5\.17\.\d$/ ], # TODO: 5.18,20,22
     subs => [ [ \&_patch_B_BEGIN_517 ] ],
   },
   { perl => [ qr/^5\.1[0-4]\.\d$/,
@@ -153,23 +153,11 @@ END
   # 5.14.0-3 B-1.29
   # 5.16.0   B-1.34
   # 5.16.1-2 B-1.35
-  # 5.17.5 B-1.39
-  # 5.17.6 B-1.40
-  # 5.17.8 B-1.41
   if ($vers =~ /^5\.14\./) {
       $patch =~ s/B::VERSION = '1.34/B::VERSION = '1.29/g;
   }
   elsif ($vers =~ /^5\.16\.[12]/) {
       $patch =~ s/B::VERSION = '1.34/B::VERSION = '1.35/g;
-  }
-  elsif ($vers =~ /^5\.17\.5/) {
-      $patch =~ s/B::VERSION = '1.34/B::VERSION = '1.39/g;
-  }
-  elsif ($vers =~ /^5\.17\.6/) {
-      $patch =~ s/B::VERSION = '1.34/B::VERSION = '1.40/g;
-  }
-  elsif ($vers =~ /^5\.17\.[789]/) {
-      $patch =~ s/B::VERSION = '1.34/B::VERSION = '1.41/g;
   }
   _patch($patch);
 
@@ -248,6 +236,21 @@ END
   }
   elsif ($vers =~ /^5\.17\.[789]/) {
       $patch =~ s/B::VERSION = '1.41/B::VERSION = '1.41/g;
+  }
+  elsif ($vers =~ /^5\.18\.0/) {
+      $patch =~ s/B::VERSION = '1.41/B::VERSION = '1.42/g;
+  }
+  elsif ($vers =~ /^5\.18\.1/) {
+      $patch =~ s/B::VERSION = '1.41/B::VERSION = '1.42_01/g;
+  }
+  elsif ($vers =~ /^5\.18\.2/) {
+      $patch =~ s/B::VERSION = '1.41/B::VERSION = '1.42_02/g;
+  }
+  elsif ($vers =~ /^5\.20\./) {
+      $patch =~ s/B::VERSION = '1.41/B::VERSION = '1.48/g;
+  }
+  elsif ($vers =~ /^5\.22\./) {
+      $patch =~ s/B::VERSION = '1.41/B::VERSION = '1.58/g;
   }
   _patch($patch);
 

@@ -1,8 +1,11 @@
 -*- change-log -*-
 
-0.48    2015-10-02
+0.48    2015-10-06
         * Devel::PatchPerl::Plugin::Compiler: updated RT#81332 (B) for 5.18,5.20,5.22
-        * fixed detection of cmdline options -DAU
+        * build: fixed detection of cmdline options -DAU
+        * build: run TEST_JOBS=4 make test_harness with build
+        * build: default to -Uuseshrplib on darwin with DEBUGGING
+        * build: do not derive $Config{useshrplib} from default perl anymore
 
 0.47    2015-07-08
 	* fix -strong bug with clang, leave now -fstack-protector and

@@ -1391,6 +1391,8 @@ sub _build {
   } else {
     push @conf, ($ithreads ? "-D" :"-U") . "useithreads";
   }
+  push @conf, "-Uuseshrplib" # darwin cannot gdb step into shared libs, only lldb
+    if $^O eq 'darwin' and $debug;
   push @conf, "-D'".$_."'" for @{$c->options->{D}};
   push @conf, "-A'".$_."'" for @{$c->options->{A}};
   push @conf, "-U'".$_."'" for @{$c->options->{U}};
@@ -1425,6 +1427,7 @@ sub _build {
 	"-Duseshrplib";
     }
   }
+  
   $c->_system( $rm, "config.sh") if -f "config.sh";
   $c->debug("config_args: ".join(" ",@conf));
   for my $tryperl ("$bindir/perl", "/usr/local/bin/perl", "/usr/bin/perl") {
@@ -1433,7 +1436,7 @@ sub _build {
       my $tryargs = `$tryperl -V:config_args`;
       $c->debug("old args: $tryargs");
       for my $f (qw(cc ld ccflags ldflags libpth incpth pager
-		    cf_email perladmin useshrplib))
+		    cf_email perladmin))
       {
 	next if grep /^[AUD]$f[= ]/, @{$c->options->{D}}
 	     or grep /^[AUD]$f[= ]/, @{$c->options->{A}}
@@ -1666,13 +1669,14 @@ sub _build {
   }
 
   unless ($c->options->{notest}) {
+    local $ENV{TEST_JOBS} = 4;
     if ($dryrun) {
-      $c->_system1(join(" ",$make, @j, "test"));
+      $c->_system1(join(" ",$make, @j, "test_harness"));
     } else {
       if ($^O eq 'MSWin32') {
-	$c->_system1(join(" ",$make, @j, "test", "> log.test"));
+	$c->_system1(join(" ",$make, @j, "test_harness", "> log.test"));
       } else {
-	$c->_system1(join(" ",$make, @j, "test", "2>&1 |tee log.test"));
+	$c->_system1(join(" ",$make, @j, "test_harness", "2>&1 |tee log.test"));
       }
       system("tail -30 log.test") unless $dryrun or $c->options->{quiet};
       # XXX system is not giving me back the errcode??

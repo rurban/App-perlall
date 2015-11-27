@@ -14,12 +14,13 @@ to apply these.
 
 =head1 PATCHES
 
-This list is complete for all perl versions 5.6 - 5.17.8, for all three threaded,
+This list is complete for all perl versions 5.6 - 5.22.0, for all three threaded,
 non-threaded and multiplicity variants.
 
     5.13.7-now:  RT#81332 revert 744aaba0 bloats the B compilers
     5.10-5.15.1: 8375c93e Export store_cop_label for the perl compiler
     5.15.2-3:    4497a11a Export DynaLoader symbols from libperl again
+    5.22-        5.22 newPROG broke ByteLoader
 
 =head2 Devel::PatchPerl::Plugin::Compiler::patchperl($class, {version,source,patchexe})
 
@@ -64,6 +65,9 @@ use vars '@patch';
   },
   { perl => [ qr/^5\.15\.[23]$/ ],
     subs => [ [ \&_patch_dl_export] ],
+  },
+  { perl => [ qr/^5\.2[23]/ ], # not yet fixed
+    subs => [ [ \&_patch_522_ByteLoader] ],
   },
 );
 
@@ -366,6 +370,41 @@ index 1ba9a61..574ccad 100644
 END
 
   _add_patchlevel1(@_, "4497a11a Export DynaLoader symbols from libperl again");
+}
+
+sub _patch_522_ByteLoader
+{
+  # 5.22 broke ByteLoader
+  _patch(<<'END');
+index cab214a..a879e81 100644
+--- op.c
++++ op.c
+@@ -4058,7 +4058,9 @@ Perl_newPROG(pTHX_ OP *o)
+ 	PL_savestack_ix = i;
+     }
+     else {
+-	if (o->op_type == OP_STUB) {
++	if (o->op_type == OP_STUB
++        || (o->op_type == OP_LINESEQ && OP_TYPE_IS(cUNOPo->op_first, OP_STUB)))
++        {
+             /* This block is entered if nothing is compiled for the main
+                program. This will be the case for an genuinely empty main
+                program, or one which only has BEGIN blocks etc, so already
+@@ -4069,9 +4071,8 @@ Perl_newPROG(pTHX_ OP *o)
+                c71fccf11fde0068, changed perly.y so that newPROG() is now
+                called with the output of block_end(), which returns a new
+                OP_STUB for the case of an empty optree. ByteLoader (and
+-               maybe other things) also take this path, because they set up
+-               PL_main_start and PL_main_root directly, without generating an
+-               optree.
++               PL_main_start and PL_main_root directly which should not be
++               overwritten by this empty PL_compcv.
+ 
+                If the parsing the main program aborts (due to parse errors,
+                or due to BEGIN or similar calling exit), then newPROG()
+END
+
+  _add_patchlevel1(@_, "5.22 newPROG broke ByteLoader");
 }
 
 1;

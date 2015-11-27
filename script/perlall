@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.48';
+our $VERSION = '0.49';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1333,14 +1333,24 @@ sub _build {
     $c->_log('',"Devel::PatchPerl::patch_source($ps)");
     # TODO: monkeypatch Devel::PatchPerl to allow multiple plugins
     if ($asan or $c->options->{allpatches} or grep /^Asan$/, @{$c->options->{patches}}) {
+      #require Devel::PatchPerl;
+      #require Devel::PatchPerl::Plugin::General;
+      #Devel::PatchPerl::General->patch_source($ps) unless $dryrun;
       $c->_log('',"Devel::PatchPerl::patch_source($ps) Asan");
       local $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Asan';
       Devel::PatchPerl::patch_source($ps) unless $dryrun;
+      #require Devel::PatchPerl::Plugin::Asan;
+      #Devel::PatchPerl::Plugin::Asan->patch_source($ps) unless $dryrun;
     }
     elsif ($c->options->{allpatches} or grep /^Compiler$/, @{$c->options->{patches}}) {
+      #require Devel::PatchPerl;
+      #require Devel::PatchPerl::Plugin::General;
+      #Devel::PatchPerl::Plugin::General->patch_source($ps) unless $dryrun;
       local $ENV{PERL5_PATCHPERL_PLUGIN} = 'Devel::PatchPerl::Plugin::Compiler';
       $c->_log('',"Devel::PatchPerl::patch_source($ps) Compiler");
       Devel::PatchPerl::patch_source($ps) unless $dryrun;
+      #require Devel::PatchPerl::Plugin::Compiler;
+      #Devel::PatchPerl::Plugin::Compiler->patch_source($ps) unless $dryrun;
     }
     else {
       Devel::PatchPerl::patch_source($ps) unless $dryrun;

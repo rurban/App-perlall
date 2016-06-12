@@ -1,5 +1,5 @@
-#!/usr/bin/env perl
-eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
+#!/usr/local/bin/perl5.18.2-nt
+eval 'exec /usr/local/bin/perl5.18.2-nt -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 #BEGIN {$DB::single=1} # debug into attribute handling
@@ -29,7 +29,7 @@ eval 'exec /usr/bin/env perl  -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.49';
+our $VERSION = '0.50';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -1448,9 +1448,9 @@ sub _build {
       for my $f (qw(cc ld ccflags ldflags libpth incpth pager
 		    cf_email perladmin))
       {
-	next if grep /^[AUD]$f[= ]/, @{$c->options->{D}}
-	     or grep /^[AUD]$f[= ]/, @{$c->options->{A}}
-	     or grep /^[AUD]$f[= ]/, @{$c->options->{U}};
+	next if grep /^$f[= ]/, @{$c->options->{D}}
+	     or grep /^$f[= ]/, @{$c->options->{A}}
+	     or grep /^$f[= ]/, @{$c->options->{U}};
 	# -Dlibpth=/usr/local/lib64 /lib64 /usr/lib64 -D
 	my ($d,$v) = $tryargs =~ m/-([AUD])$f=(.+?) (?:-[ADU]|;)/; # Not until -L
 	# check the
@@ -1467,12 +1467,25 @@ sub _build {
 	      $v =~ s/([^\\]) /$1\\ /g;
 	      push @conf, "-$d$f='$v'";
 	    }
-	  } else {
+	  } else { 
             # avoid the BSDPAN ports hack, we do not want to register our modules with ports
 	    next if $^O =~ /bsd/ and $f eq "ccflags" and $v =~ /APPLLIB_EXP.*BSDPAN/;
-	    $c->debug("-$d$f=$v");
-	    $v =~ s/([^\\]) /$1\ /g;
-	    push @conf, "-$d$f='$v'";
+            # config options override default options
+            if (grep /^$f[= ](.*)/, @{$c->options->{D}}) {
+              $d = 'D';
+              $v = $1;
+              $c->debug("-A$f");
+              $v =~ s/([^\\]) /$1\ /g;
+              push @conf, "-D$f='$v'";
+            } elsif (grep /^$f[= ]/, @{$c->options->{U}}) {
+              $d = 'U';
+              $v = '';
+              $c->debug("-U$f");
+            } else {
+              $c->debug("-$d$f=$v");
+              $v =~ s/([^\\]) /$1\ /g;
+              push @conf, "-$d$f='$v'";
+            }
 	  }
 	}
       }

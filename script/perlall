@@ -2,6 +2,8 @@
 eval 'exec /usr/local/bin/perl5.18.2-nt -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
+# XXX 5.20-24 do not work with App::Rad
+
 #BEGIN {$DB::single=1} # debug into attribute handling
 # TODO:
 #   tee make test with -v (unbuffered IPC::Run or via fork-like callback?)
@@ -335,10 +337,10 @@ sub pre_process {
   # expand versions from $ENV{perlall} or version from first argument
   if ($cmd =~ /^do|make.*|init|cpanm?|list|uninstall$/) {
     my @p;
-    if ( $c->argv->[0] =~ /^(perl)?5\./ ) {
+    if ( $c->argv->[0] =~ /^(c?perl)?5\./ ) {
       @p = (shift @{$c->argv});
       if ($p[0] =~ /[\*\?\[]/) { # only glob if necessary
-	$p[0] =~ s/^perl//;
+	$p[0] =~ s/^c?perl//;
 	@p = $c->_get_perlall($p[0]);
       } else {
 	$p[0] =~ s/^5\./perl5\./;
@@ -425,8 +427,17 @@ sub App::Rad::_get_input {
 # from cmdline arg or ENV perlall
 sub _get_perlall {
   my ($c, $glob) = @_;
+  my $cperl;
   unless ($glob) {
     $glob = $ENV{perlall} ? $ENV{perlall} : "5.*";
+  }
+  if ($glob =~ /^cperl/) {
+    $glob =~ s/^cperl//;
+    $cperl = 1;
+  }
+  elsif ($glob =~ /^perl/) {
+    $glob =~ s/^perl//;
+    $cperl = -1;
   }
   die "invalid version $glob" if $glob !~ /^5\./ or $glob =~ /[!"';,\(\)]/;
   my $prefix = $c->config->{PERLALL_BINDIR};
@@ -437,9 +448,16 @@ sub _get_perlall {
   if ($c->options->{dryrun} and $ENV{HARNESS_ACTIVE}) { # testing only
     @p = map{"/usr/local/bin/perl$_"} qw(5.8.9d 5.12.1-nt 5.14.2 5.15.4@ababab);
   } else {
-    @p = glob "$perl$glob";
+    if ($cperl) {
+      @p = $cperl == 1
+        ? glob("$prefix$pathsep"."cperl$glob")
+        : glob("$prefix$pathsep"."perl$glob");
+    } else {
+      @p = (glob("$prefix$pathsep"."cperl$glob"), glob("$perl$glob"));
+    }
   }
   # do the filtering
+  @p = grep !/\.dSYM$/,@p if $^O eq 'darwin';
   my %skip;
   if ($c->options->{skip} or $c->options->{main}) {
     if ($c->options->{main} or $c->options->{skip} eq 'outdated') {
@@ -504,7 +522,7 @@ sub _get_perlall {
   #  } @p;
   #}
   @p = grep {
-    (-l $_ and (readlink($_) =~ m|$prefix/perl5\..*|)) ? 0 : $_
+    (-l $_ and (readlink($_) =~ m|$prefix/c?perl5\..*|)) ? 0 : $_
   } @p;
   if ($c->options->{reverse}) { # oldest first
     sort { _strip2float($a) <=> _strip2float($b) } @p;
@@ -1041,7 +1059,7 @@ sub build
   }
   my @args = @{$c->argv};
   my $p = $args[0];
-  if ($p =~ /^(perl)?5\./ ) {
+  if ($p =~ /^(c?perl)?5\./ ) {
     shift @args;
   } elsif ($p =~ /^blead/ ) {
     my $srcdir = $c->config->{'perl-git'} or $c->_fail("blead needs perl-git");
@@ -1106,7 +1124,7 @@ sub build
   # 2. any other name (or bleadperl-test): no suffix to extract
   if ($c->options->{as}) {
     my $p_as = $c->options->{as};
-    $p_as =~ s/^perl//;
+    $p_as =~ s/^c?perl//;
     $p_as =~ s/^-//;
     my $suffix_as = $p_as =~ /5\.\d\d?\.\d\d?(.+)$/;
     if ($suffix_as) {
@@ -1193,6 +1211,7 @@ sub _build {
   # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
   my ($testerr, $archname);
+  my $is_cperl = $p =~ /^cperl/ ? 1 : undef; # FIXME
 
   my $dryrun = $c->options->{dryrun};
   my $srcdir = $c->config->{'perl-git'};
@@ -1807,7 +1826,8 @@ EOP
     }
 
     @c = ($cp, "-rf", "$root/inst-$p$prefix/lib", "$prefix/");
-    unshift @c, $sudo if $sudo and !-w "$prefix/lib/perl5/$ps";
+    my $lib = $is_cperl ? 'cperl' : 'perl5';
+    unshift @c, $sudo if $sudo and !-w "$prefix/lib/$lib/$ps";
     $c->_system1( @c );
 
     if (!$testerr and $srcdir eq "." and -d '.git') {

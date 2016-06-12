@@ -1,7 +1,8 @@
 -*- change-log -*-
 
-0.50    2015-12-04
+0.50    2016-06-12
         * build: cmdline options -D or -U override now default settings.
+        * list: support cperl and perl
 
 0.49    2015-11-27
         * Devel::PatchPerl::Plugin::Compiler: mandatory fix for 5.22

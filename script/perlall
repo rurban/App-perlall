@@ -66,7 +66,8 @@ BEGIN { # check platform support: perldoc perlport
 }
 # 5.8.4: solaris, 5.8.5: centos4, 5.8.8: centos5
 # below dynamically parsed from git tags
-our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.5 5.14.4 5.16.3 5.18.2 5.20.0);
+our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.5 5.14.4 5.16.3
+  5.18.2 5.20.3 5.22.3 5.24.1 5.26.0);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -478,6 +479,11 @@ sub _get_perlall {
 	    push @main_releases, "5.$mj.$max";
 	  }
 	}
+      }
+      if ($cperl) {
+          push @main_releases, ("5.26.0", "5.24.2", "5.22.4");
+          $skip{'5.24.1'}++;
+          $skip{'5.22.3'}++;
       }
       my @np;
       for my $p (grep !/(\@|-asan|-nt-)/, @p) {

@@ -482,8 +482,9 @@ sub _get_perlall {
 	}
       }
       if ($cperl) {
-          push @main_releases, ("5.26.1", "5.24.2", "5.22.4");
-          $skip{'5.24.3'}++;
+          push @main_releases, ("5.28.2", "5.26.5", "5.24.4", "5.22.5");
+          #$skip{'5.26.2'}++;
+          #$skip{'5.24.4'}++;
           $skip{'5.22.4'}++;
       }
       my @np;

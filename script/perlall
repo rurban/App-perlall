@@ -1,5 +1,5 @@
-#!/usr/local/bin/perl5.18.2-nt
-eval 'exec /usr/local/bin/perl5.18.2-nt -S $0 ${1+"$@"}'
+#!/usr/local/bin/perl
+eval 'exec /usr/local/bin/perl -S $0 ${1+"$@"}'
     if 0; # not running under some shell
 
 # XXX 5.20-24 do not work with App::Rad
@@ -265,7 +265,8 @@ sub pre_process {
   $c->config->{PERLALL_BUILDROOT} = '/usr/src/perl';
   if ($cmd eq 'init') {
     $c->config->{cpan} = 'cpan';
-    $c->config->{'init-modules'} = 'YAML DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info'
+    # DBD::Gofer on linux needs Clone but does not check for it
+    $c->config->{'init-modules'} = 'YAML Clone DBI DBD::SQLite CPAN::SQLite Devel::Platform::Info'
       .' Params::Util Bundle::CPANReporter2 Math::Round Params::Classify Bundle::CygwinVendor'
       .' YAML::XS List::MoreUtils DBIx::Class SQL::Abstract Module::Find Mouse MouseX::Types Modern::Perl'
       .' Task::Kensho';

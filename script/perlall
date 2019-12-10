@@ -31,7 +31,7 @@ eval 'exec /usr/local/bin/perl -S $0 ${1+"$@"}'
 
 use strict;
 use 5.006;
-our $VERSION = '0.50';
+our $VERSION = '0.51';
 use Config;
 use Cwd ();
 use File::Spec ();
@@ -67,7 +67,7 @@ BEGIN { # check platform support: perldoc perlport
 # 5.8.4: solaris, 5.8.5: centos4, 5.8.8: centos5
 # below dynamically parsed from git tags
 our @main_releases = qw(5.6.2 5.8.4 5.8.5 5.8.8 5.8.9 5.10.1 5.12.5 5.14.4 5.16.3
-  5.18.4 5.20.3 5.22.4 5.24.3 5.26.1);
+  5.18.4 5.20.3 5.22.4 5.24.4 5.26.3 5.28.2 5.30.0);
 
 push @App::Rad::ISA, 'main';
 our @opts = (
@@ -303,6 +303,8 @@ sub pre_process {
       unless $c->config->{PERLALL_BUILDROOT};
     $c->config->{'perl-git'} = $c->config->{PERLALL_BUILDROOT}.'/blead/perl-git'
       unless $c->config->{'perl-git'};
+    $c->config->{'cdcperl'} = $c->config->{PERLALL_BUILDROOT}.'/blead/cperl'
+      unless $c->config->{'cdcperl'};
     $c->config->{'perlall_timeout'} = 0 unless $c->config->{'perlall_timeout'};
 
     if ($c->is_command($cmd) and $cmd !~ /^list/) {
@@ -482,10 +484,28 @@ sub _get_perlall {
 	}
       }
       if ($cperl) {
-          push @main_releases, ("5.28.2", "5.26.5", "5.24.4", "5.22.5");
-          #$skip{'5.26.2'}++;
-          #$skip{'5.24.4'}++;
-          $skip{'5.22.4'}++;
+	  my $srcdir = $c->config->{'cdcperl'};
+	  if ($srcdir and -d $srcdir and -d "$srcdir/.git" ) {
+	      my $major;
+	      for (split(/\n/,`git --git-dir="$srcdir/.git" tag -l`)) {
+		  my ($mj, $mi) = $_ =~ m/^cperl-5\.(\d+)\.(\d+)$/;
+		  push @{$major->{$mj}}, $mi if $mj and $mj % 2 == 0;
+	      }
+	      for my $mj (keys %$major) {
+		  my $max = 0;
+		  for (@{$major->{$mj}}) { $max = $_ if $_ > $max; }
+		  unless (grep {"5.$mj.$max" eq $_} @main_releases) {
+		      @main_releases = grep !/^5\.$mj\.\d+/, @main_releases;
+		      push @main_releases, "5.$mj.$max";
+		  }
+	      }
+	  }
+	  else {
+	      push @main_releases, ("5.28.2", "5.26.5", "5.24.4", "5.22.5");
+	      $skip{'5.26.3'}++;
+	      #$skip{'5.24.4'}++;
+	      $skip{'5.22.4'}++;
+	  }
       }
       my @np;
       for my $p (grep !/(\@|-asan|-nt-)/, @p) {
@@ -619,6 +639,10 @@ sub _dot_perlall {
        ) {
       my ($k,$v) = ($1, $2);
       if ($k eq 'perl-git') {
+	$v =~ s/^cd //;
+	$c->config->{$k} = $v;
+	$v = "cd ".$v;
+      } elsif ($k eq 'cdcperl') {
 	$v =~ s/^cd //;
 	$c->config->{$k} = $v;
 	$v = "cd ".$v;
@@ -1047,6 +1071,7 @@ sub build
   :Help('build [opts] perl<version><suffix> [ branch|from ]')
 {
   my $c = shift;
+  my $cperl;
   # special build options (after the cmd)
   if (@{$c->argv}) {
     my @build_opts =
@@ -1083,7 +1108,8 @@ sub build
     $c->output("perlall build missing perlversion argument\n");
     $c->execute('help') and return undef;
   }
-  $p =~ s/^perl//;
+  $cperl = 1 if $p =~ /^cperl/;
+  $p =~ s/^c?perl//;
   $p =~ s/^-//;
   if ($p =~ /[\*\?\[]/ or $p !~ /^5\.\d/) {
     $c->output("perlall build invalid perlversion argument $p\n");
@@ -1111,7 +1137,9 @@ sub build
   my $gitsuffix;
 
   unless ($from) { # XXX git only at first
-    if ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
+    if ($cperl and $ps =~ /^5\./ and -d $c->config->{'cdcperl'}) {
+      $from = "cperl-$ps";
+    } elsif ($ps =~ /^5\./ and -d $c->config->{'perl-git'}) {
       $from = $c->_older($ps,"5.11.0") ? "perl-$ps" : "v$ps";
     } elsif ($c->options->{install}) {
       ;
@@ -1160,7 +1188,7 @@ sub build
   # XXX build perl5.15.5d-nt-blead-clang blead
   # => gitsuffix=d-nt-blead-clang
   # p as --as
-  if (!$gitsuffix and $from and $from !~ /^(perl-|v)5\./) {
+  if (!$gitsuffix and $from and $from !~ /^(c?perl-|v)5\./) {
     $gitsuffix = $from if !$gitsuffix and $from !~ /^(perl-|v)5\./;
     if ($gitsuffix =~ /^[a-f0-9]{5,24}$/) {
       $gitsuffix = "@".substr($gitsuffix,0,6);
@@ -1181,7 +1209,7 @@ sub build
 	}
 	return $result;
       }
-      my $srcdir = $c->config->{'perl-git'};
+      my $srcdir = $cperl ? $c->config->{'cdcperl'} : $c->config->{'perl-git'};
       if ($gitsuffix =~ /^blead/ and !$dryrun and -d "$srcdir/.git") {
 	$gitsuffix = substr(`GIT_DIR=$srcdir/.git git rev-parse $gitsuffix`,0,8);
       }
@@ -1219,10 +1247,10 @@ sub _build {
   # since when was make test parallel safe?
   my @j = ("-j".$c->options->{j}) if $c->options->{j} and !$c->_older( $ps, "5.10.0");
   my ($testerr, $archname);
-  my $is_cperl = $p =~ /^cperl/ ? 1 : undef; # FIXME
+  my $is_cperl = $from =~ /^cperl/;
 
   my $dryrun = $c->options->{dryrun};
-  my $srcdir = $c->config->{'perl-git'};
+  my $srcdir = $is_cperl ? $c->config->{'cdcperl'} : $c->config->{'perl-git'};
   my ($suffix) = $p =~ /5\.\d\d?\.\d\d?(.+)$/;
   my $debug = substr($suffix,0,1) eq 'd';
   my $multi = $suffix =~ /^d?-m[^a-z]?/;
@@ -1266,8 +1294,8 @@ sub _build {
       );
       my $san = $sanmap{$1};
       push @{$c->options->{A}}, "ccflags='-fsanitize=$san -fPIE'",
-                                "ldflags='-fsanitize=$san -pie'",
-                                "lddlflags='-fsanitize=$san -pie'";
+                                "ldflags='-fsanitize=$san -fpie'",
+                                "lddlflags='-shared -fsanitize=$san -fpie'";
     }
   }
   $ithreads = undef if $multi;
@@ -2820,6 +2848,11 @@ Directory with a perl5 git repo to avoid downloading perl-*.tar.gz from CPAN,
 in shell alias form.
 
 C<perl-git> stores the perl git workdir, and is also a handy alias to cd into it.
+=item alias cdcperl="cd /usr/src/perl/blead/cdcperl"
+
+Directory with a cperl git repo in shell alias form.
+
+C<cdcperl> stores the cperl git workdir, and is also a handy alias to cd into it
 
 =item PERLALL_PREFIX
 

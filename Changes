@@ -1,5 +1,8 @@
 -*- change-log -*-
 
+0.51    2019-12-10
+        * build: cperl support
+
 0.50    2016-06-12
         * build: cmdline options -D or -U override now default settings.
         * list: support cperl and perl

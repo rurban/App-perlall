@@ -754,15 +754,18 @@ sub __system {
 	eval "$cmd('$what')";
       }
     } else {
+      my @args = @_;
       my $fh = $c->stash->{log_fh};
       if ($^O eq 'MSWin32') {
 	# Need to replace ' with " otherwise we would need to write
         # perlall do -e"""print $^O""". Now we only need to do
         # perlall do '-e"print $^O"'
-	map { s/\'/"/g } @_;
+	map { s/\'/"/g } @args;
+      #} else {
+      #  map { if (/ /) {s/\'/"/g} else {$_} } @args;
       }
       my ($success, $error_message, $full_buf, $stdout_buf, $stderr_buf) =
-	IPC::Cmd::run('command' => [ @_ ],
+	IPC::Cmd::run('command' => [ @args ],
 		      ($c->options->{verbose}
 		       ? ('verbose' => 1) : ()),
 		      (defined $c->options->{timeout}
@@ -1407,7 +1410,7 @@ sub _build {
       #require Devel::PatchPerl::Plugin::Compiler;
       #Devel::PatchPerl::Plugin::Compiler->patch_source($ps) unless $dryrun;
     }
-    else {
+    elsif (!$is_cperl) {
       Devel::PatchPerl::patch_source($ps) unless $dryrun;
     }
     if ($ps =~ /^5\.19\.[3456789]/ and $debug) {
@@ -1436,7 +1439,7 @@ sub _build {
   $c->_system( $rm, "-rf", ".config") if -d ".config";
 
   # prepare configure options, dependent on options and $p
-  my @conf = ("sh","$srcdir/Configure","-de","-Dusedevel",
+  my @conf = ("$srcdir/Configure","-de","-Dusedevel",
 	      "-Uversiononly",
 	      "-Dinstallman1dir=none","-Dinstallman3dir=none",
 	      "-Dinstallsiteman1dir=none","-Dinstallsiteman3dir=none");
@@ -1514,12 +1517,13 @@ sub _build {
 	  $c->debug("-$u$f") if $u;
 	  push @conf, "-$u$f" if $u;
 	} elsif ($v and $d) {
-	  $v =~ s/([^\\]) /$1\\ /g;
+	  #$v =~ s/([^\\]) /$1\\ /g;
 	  # There can be multiple -A$f=$v
 	  if ($d eq 'A') {
 	    for my $v ($tryargs =~ m/-A$f=(.+?) /g) {
+	      $v =~ s/\\ / /g;
 	      $c->debug("-$d$f=$v") if $v;
-	      $v =~ s/([^\\]) /$1\\ /g;
+	      #$v =~ s/([^\\]) /$1\\ /g;
 	      push @conf, "-$d$f='$v'";
 	    }
 	  } else { 
@@ -1529,16 +1533,18 @@ sub _build {
             if (grep /^$f[= ](.*)/, @{$c->options->{D}}) {
               $d = 'D';
               $v = $1;
-              $c->debug("-A$f");
-              $v =~ s/([^\\]) /$1\ /g;
+	      $v =~ s/\\ / /g;
+              $c->debug("$f='$v'");
+              #$v =~ s/([^\\]) /$1\ /g;
               push @conf, "-D$f='$v'";
             } elsif (grep /^$f[= ]/, @{$c->options->{U}}) {
               $d = 'U';
               $v = '';
               $c->debug("-U$f");
             } else {
+	      $v =~ s/\\ / /g;
               $c->debug("-$d$f=$v");
-              $v =~ s/([^\\]) /$1\ /g;
+              #$v =~ s/([^\\]) /$1\ /g;
               push @conf, "-$d$f='$v'";
             }
 	  }
@@ -1576,7 +1582,11 @@ sub _build {
   }
 
   if ($^O ne 'MSWin32') {
-    $c->_system1( @conf);
+    my $sh = $Config{sh};
+    $sh = "sh" unless -e $sh;
+    $c->_log(1,$sh,"-c","\"@conf\"");
+    `$sh -c "@conf"` unless $dryrun;
+    #$c->_system1($sh,"-c","\"@conf\"");
     $c->_fail("Configure failed") unless -f 'config.sh' or $dryrun;
   } else {
     my ($w64, $config);
